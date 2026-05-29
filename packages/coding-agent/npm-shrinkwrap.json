@@ -1,17 +1,17 @@
 {
-	"name": "@earendil-works/pi-coding-agent",
+	"name": "@earendil-works/flame-coding-agent",
 	"version": "0.75.4",
 	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
-			"name": "@earendil-works/pi-coding-agent",
+			"name": "@earendil-works/flame-coding-agent",
 			"version": "0.75.4",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/pi-agent-core": "^0.75.4",
-				"@earendil-works/pi-ai": "^0.75.4",
-				"@earendil-works/pi-tui": "^0.75.4",
+				"@earendil-works/flame-agent-core": "^0.75.4",
+				"@earendil-works/flame-ai": "^0.75.4",
+				"@earendil-works/flame-tui": "^0.75.4",
 				"@silvia-odwyer/photon-node": "0.3.4",
 				"chalk": "5.6.2",
 				"cross-spawn": "7.0.6",
@@ -31,7 +31,7 @@
 				"@mariozechner/clipboard": "0.3.6"
 			},
 			"bin": {
-				"pi": "dist/cli.js"
+				"flame": "dist/cli.js"
 			},
 			"engines": {
 				"node": ">=22.19.0"
@@ -472,12 +472,12 @@
 				"node": ">=6.9.0"
 			}
 		},
-		"node_modules/@earendil-works/pi-agent-core": {
+		"node_modules/@earendil-works/flame-agent-core": {
 			"version": "0.75.4",
-			"resolved": "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.75.4.tgz",
+			"resolved": "https://registry.npmjs.org/@earendil-works/flame-agent-core/-/flame-agent-core-0.75.4.tgz",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/pi-ai": "^0.75.4",
+				"@earendil-works/flame-ai": "^0.75.4",
 				"ignore": "7.0.5",
 				"typebox": "1.1.38",
 				"yaml": "2.9.0"
@@ -486,9 +486,9 @@
 				"node": ">=22.19.0"
 			}
 		},
-		"node_modules/@earendil-works/pi-ai": {
+		"node_modules/@earendil-works/flame-ai": {
 			"version": "0.75.4",
-			"resolved": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-0.75.4.tgz",
+			"resolved": "https://registry.npmjs.org/@earendil-works/flame-ai/-/flame-ai-0.75.4.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"@anthropic-ai/sdk": "0.91.1",
@@ -503,15 +503,15 @@
 				"typebox": "1.1.38"
 			},
 			"bin": {
-				"pi-ai": "./dist/cli.js"
+				"flame-ai": "./dist/cli.js"
 			},
 			"engines": {
 				"node": ">=22.19.0"
 			}
 		},
-		"node_modules/@earendil-works/pi-tui": {
+		"node_modules/@earendil-works/flame-tui": {
 			"version": "0.75.4",
-			"resolved": "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-0.75.4.tgz",
+			"resolved": "https://registry.npmjs.org/@earendil-works/flame-tui/-/flame-tui-0.75.4.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"get-east-asian-width": "1.6.0",

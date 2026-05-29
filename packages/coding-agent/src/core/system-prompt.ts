@@ -4,6 +4,7 @@
 
 import { getDocsPath, getExamplesPath, getReadmePath } from "../config.ts";
 import { formatSkillsForPrompt, type Skill } from "./skills.ts";
+import { DEFAULT_ACTIVE_TOOL_NAMES } from "./tools/index.ts";
 
 export interface BuildSystemPromptOptions {
 	/** Custom system prompt (replaces default). */
@@ -22,6 +23,14 @@ export interface BuildSystemPromptOptions {
 	contextFiles?: Array<{ path: string; content: string }>;
 	/** Pre-loaded skills. */
 	skills?: Skill[];
+	/** SOUL.md content — replaces the default identity paragraph when set. */
+	identity?: string;
+	/** Hermes-style skills index (stable tier). When set, replaces formatSkillsForPrompt. */
+	skillsIndexBlock?: string;
+	/** SKILLS_GUIDANCE prose when skill_manage is active (stable tier). */
+	skillsGuidanceBlock?: string;
+	/** Volatile blocks (MEMORY/USER snapshots) injected after skills, before date/cwd. */
+	volatileBlocks?: string[];
 }
 
 /** Build the system prompt with tools, guidelines, and context */
@@ -35,6 +44,10 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 		cwd,
 		contextFiles: providedContextFiles,
 		skills: providedSkills,
+		identity,
+		skillsIndexBlock,
+		skillsGuidanceBlock,
+		volatileBlocks,
 	} = options;
 	const resolvedCwd = cwd;
 	const promptCwd = resolvedCwd.replace(/\\/g, "/");
@@ -57,6 +70,17 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 			prompt += appendSection;
 		}
 
+		// Skills: hermes index when skill tools are loaded, else legacy XML catalog via read tool.
+		const customPromptHasRead = !selectedTools || selectedTools.includes("read");
+		if (skillsGuidanceBlock?.trim()) {
+			prompt += `\n\n${skillsGuidanceBlock.trim()}`;
+		}
+		if (skillsIndexBlock?.trim()) {
+			prompt += `\n\n${skillsIndexBlock.trim()}`;
+		} else if (customPromptHasRead && skills.length > 0) {
+			prompt += formatSkillsForPrompt(skills);
+		}
+
 		// Append project context files
 		if (contextFiles.length > 0) {
 			prompt += "\n\n<project_context>\n\n";
@@ -67,10 +91,12 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 			prompt += "</project_context>\n";
 		}
 
-		// Append skills section (only if read tool is available)
-		const customPromptHasRead = !selectedTools || selectedTools.includes("read");
-		if (customPromptHasRead && skills.length > 0) {
-			prompt += formatSkillsForPrompt(skills);
+		// Volatile blocks (memory + user profile snapshots) — injected before date/cwd.
+		if (volatileBlocks && volatileBlocks.length > 0) {
+			const nonEmpty = volatileBlocks.filter((b) => b && b.trim().length > 0);
+			if (nonEmpty.length > 0) {
+				prompt += `\n\n${nonEmpty.join("\n\n")}`;
+			}
 		}
 
 		// Add date and working directory last
@@ -87,7 +113,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 
 	// Build tools list based on selected tools.
 	// A tool appears in Available tools only when the caller provides a one-line snippet.
-	const tools = selectedTools || ["read", "bash", "edit", "write"];
+	const tools = selectedTools || DEFAULT_ACTIVE_TOOL_NAMES;
 	const visibleTools = tools.filter((name) => !!toolSnippets?.[name]);
 	const toolsList =
 		visibleTools.length > 0 ? visibleTools.map((name) => `- ${name}: ${toolSnippets![name]}`).join("\n") : "(none)";
@@ -108,12 +134,19 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 	const hasFind = tools.includes("find");
 	const hasLs = tools.includes("ls");
 	const hasRead = tools.includes("read");
+	const hasDownload = tools.includes("download");
 
 	// File exploration guidelines
 	if (hasBash && !hasGrep && !hasFind && !hasLs) {
 		addGuideline("Use bash for file operations like ls, rg, find");
 	} else if (hasBash && (hasGrep || hasFind || hasLs)) {
 		addGuideline("Prefer grep/find/ls tools over bash for file exploration (faster, respects .gitignore)");
+	}
+
+	if (hasDownload && hasBash) {
+		addGuideline(
+			"After download completes, run post-download shell commands with bash using the returned savePath; do not embed shell commands in download",
+		);
 	}
 
 	for (const guideline of promptGuidelines ?? []) {
@@ -129,7 +162,12 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 
 	const guidelines = guidelinesList.map((g) => `- ${g}`).join("\n");
 
-	let prompt = `You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.
+	const identityParagraph =
+		identity && identity.trim().length > 0
+			? identity.trim()
+			: "You are Flame, an expert coding assistant. You help users by reading files, executing commands, editing code, and writing new files.";
+
+	let prompt = `${identityParagraph}
 
 Available tools:
 ${toolsList}
@@ -139,17 +177,27 @@ In addition to the tools above, you may have access to other custom tools depend
 Guidelines:
 ${guidelines}
 
-Pi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):
+Flame documentation (read only when the user asks about Flame itself, its SDK, extensions, themes, skills, or TUI):
 - Main documentation: ${readmePath}
 - Additional docs: ${docsPath}
 - Examples: ${examplesPath} (extensions, custom tools, SDK)
-- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory
-- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md)
-- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing
-- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)`;
+- When reading Flame docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory
+- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), Flame packages (docs/packages.md)
+- When working on Flame topics, read the docs and examples, and follow .md cross-references before implementing
+- Always read Flame .md files completely and follow links to related docs (e.g., tui.md for TUI API details)`;
 
 	if (appendSection) {
 		prompt += appendSection;
+	}
+
+	// Skills index + guidance in stable tier (after Flame documentation, before project_context).
+	if (skillsGuidanceBlock?.trim()) {
+		prompt += `\n\n${skillsGuidanceBlock.trim()}`;
+	}
+	if (skillsIndexBlock?.trim()) {
+		prompt += `\n\n${skillsIndexBlock.trim()}`;
+	} else if (hasRead && skills.length > 0) {
+		prompt += formatSkillsForPrompt(skills);
 	}
 
 	// Append project context files
@@ -162,9 +210,12 @@ Pi documentation (read only when the user asks about pi itself, its SDK, extensi
 		prompt += "</project_context>\n";
 	}
 
-	// Append skills section (only if read tool is available)
-	if (hasRead && skills.length > 0) {
-		prompt += formatSkillsForPrompt(skills);
+	// Volatile blocks (memory + user profile snapshots) — injected before date/cwd.
+	if (volatileBlocks && volatileBlocks.length > 0) {
+		const nonEmpty = volatileBlocks.filter((b) => b && b.trim().length > 0);
+		if (nonEmpty.length > 0) {
+			prompt += `\n\n${nonEmpty.join("\n\n")}`;
+		}
 	}
 
 	// Add date and working directory last

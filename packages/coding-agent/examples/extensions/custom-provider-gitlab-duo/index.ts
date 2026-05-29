@@ -20,8 +20,8 @@ import {
 	type SimpleStreamOptions,
 	streamSimpleAnthropic,
 	streamSimpleOpenAIResponses,
-} from "@earendil-works/pi-ai";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+} from "@earendil-works/flame-ai";
+import type { ExtensionAPI } from "@earendil-works/flame-coding-agent";
 
 // =============================================================================
 // Constants

@@ -1,13 +1,14 @@
 {
-	"name": "@earendil-works/pi-coding-agent",
+	"name": "@earendil-works/flame-coding-agent",
 	"version": "0.75.4",
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
-	"piConfig": {
-		"configDir": ".pi"
+	"flameConfig": {
+		"name": "flame",
+		"configDir": ".flame"
 	},
 	"bin": {
-		"pi": "dist/cli.js"
+		"flame": "dist/cli.js"
 	},
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
@@ -39,9 +40,9 @@
 		"prepublishOnly": "npm run clean && npm run build && npm run shrinkwrap"
 	},
 	"dependencies": {
-		"@earendil-works/pi-agent-core": "^0.75.4",
-		"@earendil-works/pi-ai": "^0.75.4",
-		"@earendil-works/pi-tui": "^0.75.4",
+		"@earendil-works/flame-agent-core": "^0.75.4",
+		"@earendil-works/flame-ai": "^0.75.4",
+		"@earendil-works/flame-tui": "^0.75.4",
 		"@silvia-odwyer/photon-node": "0.3.4",
 		"chalk": "5.6.2",
 		"cross-spawn": "7.0.6",
@@ -89,7 +90,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/earendil-works/pi-mono.git",
+		"url": "git+https://github.com/earendil-works/flame-mono.git",
 		"directory": "packages/coding-agent"
 	},
 	"engines": {

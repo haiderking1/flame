@@ -4,7 +4,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, parseFrontmatter } from "@earendil-works/flame-coding-agent";
 
 export type AgentScope = "user" | "project" | "both";
 
@@ -12,10 +12,57 @@ export interface AgentConfig {
 	name: string;
 	description: string;
 	tools?: string[];
+	provider?: string;
 	model?: string;
 	systemPrompt: string;
 	source: "user" | "project";
 	filePath: string;
+}
+
+export interface ResolvedSubagentModel {
+	provider?: string;
+	model?: string;
+}
+
+function normalizeEnvModel(value: string | undefined): string | undefined {
+	const trimmed = value?.trim();
+	return trimmed ? trimmed : undefined;
+}
+
+/** Resolve provider/model for a subagent spawn, with env overrides for Ollama or other local setups. */
+export function resolveSubagentModel(
+	agent: AgentConfig,
+	parentModel?: { provider: string; id: string },
+): ResolvedSubagentModel {
+	const roleEnv = `FLAME_SUBAGENT_${agent.name.toUpperCase().replace(/-/g, "_")}_MODEL`;
+	const modelRef =
+		normalizeEnvModel(process.env[roleEnv]) ||
+		normalizeEnvModel(process.env.FLAME_SUBAGENT_MODEL) ||
+		normalizeEnvModel(agent.model);
+
+	if (!modelRef) {
+		const provider =
+			normalizeEnvModel(process.env.FLAME_SUBAGENT_PROVIDER) ||
+			normalizeEnvModel(agent.provider) ||
+			parentModel?.provider;
+		const model = parentModel?.id;
+		if (provider && model) {
+			return { provider, model };
+		}
+		return provider ? { provider } : {};
+	}
+
+	const slashIndex = modelRef.indexOf("/");
+	if (slashIndex > 0) {
+		return {
+			provider: modelRef.slice(0, slashIndex),
+			model: modelRef.slice(slashIndex + 1),
+		};
+	}
+
+	const provider =
+		normalizeEnvModel(process.env.FLAME_SUBAGENT_PROVIDER) || normalizeEnvModel(agent.provider) || undefined;
+	return provider ? { provider, model: modelRef } : { model: modelRef };
 }
 
 export interface AgentDiscoveryResult {
@@ -64,6 +111,7 @@ function loadAgentsFromDir(dir: string, source: "user" | "project"): AgentConfig
 			name: frontmatter.name,
 			description: frontmatter.description,
 			tools: tools && tools.length > 0 ? tools : undefined,
+			provider: frontmatter.provider,
 			model: frontmatter.model,
 			systemPrompt: body,
 			source,
@@ -85,7 +133,7 @@ function isDirectory(p: string): boolean {
 function findNearestProjectAgentsDir(cwd: string): string | null {
 	let currentDir = cwd;
 	while (true) {
-		const candidate = path.join(currentDir, ".pi", "agents");
+		const candidate = path.join(currentDir, ".flame", "agents");
 		if (isDirectory(candidate)) return candidate;
 
 		const parentDir = path.dirname(currentDir);

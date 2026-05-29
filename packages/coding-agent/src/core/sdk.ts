@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { Agent, type AgentMessage, type ThinkingLevel } from "@earendil-works/pi-agent-core";
-import { clampThinkingLevel, type Message, type Model, streamSimple } from "@earendil-works/pi-ai";
+import { Agent, type AgentMessage, type ThinkingLevel } from "@earendil-works/flame-agent-core";
+import { clampThinkingLevel, type Message, type Model, streamSimple } from "@earendil-works/flame-ai";
 import { getAgentDir } from "../config.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { AgentSession } from "./agent-session.ts";
@@ -26,15 +26,16 @@ import {
 	createLsTool,
 	createReadOnlyTools,
 	createReadTool,
+	createWebSearchTool,
 	createWriteTool,
-	type ToolName,
+	DEFAULT_ACTIVE_TOOL_NAMES,
 	withFileMutationQueue,
 } from "./tools/index.ts";
 
 export interface CreateAgentSessionOptions {
 	/** Working directory for project-local discovery. Default: process.cwd() */
 	cwd?: string;
-	/** Global config directory. Default: ~/.pi/agent */
+	/** Global config directory. Default: ~/.flame/agent */
 	agentDir?: string;
 
 	/** Auth storage for credentials. Default: AuthStorage.create(agentDir/auth.json) */
@@ -118,6 +119,7 @@ export {
 	createGrepTool,
 	createFindTool,
 	createLsTool,
+	createWebSearchTool,
 };
 
 // Helper Functions
@@ -135,7 +137,7 @@ function getAttributionHeaders(
 		sessionId &&
 		(model.provider === "opencode" || model.provider === "opencode-go" || model.baseUrl.includes("opencode.ai"))
 	) {
-		return { "x-opencode-session": sessionId, "x-opencode-client": "pi" };
+		return { "x-opencode-session": sessionId, "x-opencode-client": "flame" };
 	}
 
 	if (!isInstallTelemetryEnabled(settingsManager)) {
@@ -145,7 +147,7 @@ function getAttributionHeaders(
 	if (model.provider === "openrouter" || model.baseUrl.includes("openrouter.ai")) {
 		return {
 			"HTTP-Referer": "https://pi.dev",
-			"X-OpenRouter-Title": "pi",
+			"X-OpenRouter-Title": "flame",
 			"X-OpenRouter-Categories": "cli-agent",
 		};
 	}
@@ -173,7 +175,7 @@ function getAttributionHeaders(
  * const { session } = await createAgentSession();
  *
  * // With explicit model
- * import { getModel } from '@earendil-works/pi-ai';
+ * import { getModel } from '@earendil-works/flame-ai';
  * const { session } = await createAgentSession({
  *   model: getModel('anthropic', 'claude-opus-4-5'),
  *   thinkingLevel: 'high',
@@ -277,7 +279,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		thinkingLevel = clampThinkingLevel(model, thinkingLevel) as ThinkingLevel;
 	}
 
-	const defaultActiveToolNames: ToolName[] = ["read", "bash", "edit", "write"];
+	const defaultActiveToolNames = DEFAULT_ACTIVE_TOOL_NAMES;
 	const allowedToolNames = options.tools ?? (options.noTools === "all" ? [] : undefined);
 	const initialActiveToolNames: string[] = options.tools
 		? [...options.tools]

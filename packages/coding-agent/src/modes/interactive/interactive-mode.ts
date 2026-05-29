@@ -7,7 +7,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/flame-agent-core";
 import {
 	type AssistantMessage,
 	getProviders,
@@ -16,7 +16,7 @@ import {
 	type Model,
 	type OAuthProviderId,
 	type OAuthSelectPrompt,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/flame-ai";
 import type {
 	AutocompleteItem,
 	AutocompleteProvider,
@@ -27,7 +27,7 @@ import type {
 	OverlayHandle,
 	OverlayOptions,
 	SlashCommand,
-} from "@earendil-works/pi-tui";
+} from "@earendil-works/flame-tui";
 import {
 	CombinedAutocompleteProvider,
 	type Component,
@@ -46,11 +46,12 @@ import {
 	TruncatedText,
 	TUI,
 	visibleWidth,
-} from "@earendil-works/pi-tui";
+} from "@earendil-works/flame-tui";
 import { spawn, spawnSync } from "child_process";
 import {
 	APP_NAME,
 	APP_TITLE,
+	detectInstallMethod,
 	getAgentDir,
 	getAuthPath,
 	getDebugLogPath,
@@ -87,9 +88,9 @@ import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { getChangelogPath, getNewEntries, parseChangelog } from "../../utils/changelog.ts";
 import { copyToClipboard } from "../../utils/clipboard.ts";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.ts";
+import { getPiUserAgent } from "../../utils/flame-user-agent.ts";
 import { parseGitUrl } from "../../utils/git.ts";
 import { getCwdRelativePath } from "../../utils/paths.ts";
-import { getPiUserAgent } from "../../utils/pi-user-agent.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
 import { checkForNewPiVersion, type LatestPiRelease } from "../../utils/version-check.ts";
@@ -199,6 +200,7 @@ function hasDefaultModelProvider(providerId: string): providerId is keyof typeof
 }
 
 const BEDROCK_PROVIDER_ID = "amazon-bedrock";
+const OLLAMA_PROVIDER_ID = "ollama";
 
 const BUILT_IN_MODEL_PROVIDERS = new Set<string>(getProviders());
 
@@ -716,12 +718,16 @@ export class InteractiveMode {
 	async run(): Promise<void> {
 		await this.init();
 
-		// Start version check asynchronously
-		checkForNewPiVersion(this.version).then((newRelease) => {
-			if (newRelease) {
-				this.showNewVersionNotification(newRelease);
-			}
-		});
+		// Start version check asynchronously. Suppress the banner for installs
+		// we can't auto-update (e.g. git checkouts) since "Run flame update"
+		// would just error out for those users.
+		if (detectInstallMethod() !== "unknown") {
+			checkForNewPiVersion(this.version).then((newRelease) => {
+				if (newRelease) {
+					this.showNewVersionNotification(newRelease);
+				}
+			});
+		}
 
 		// Start package update check asynchronously
 		this.checkForPackageUpdates().then((updates) => {
@@ -789,7 +795,7 @@ export class InteractiveMode {
 	}
 
 	private async checkForPackageUpdates(): Promise<string[]> {
-		if (process.env.PI_OFFLINE) {
+		if (process.env.FLAME_OFFLINE) {
 			return [];
 		}
 
@@ -885,7 +891,7 @@ export class InteractiveMode {
 	}
 
 	private reportInstallTelemetry(version: string): void {
-		if (process.env.PI_OFFLINE) {
+		if (process.env.FLAME_OFFLINE) {
 			return;
 		}
 
@@ -4546,6 +4552,8 @@ export class InteractiveMode {
 						await this.showLoginDialog(providerOption.id, providerOption.name);
 					} else if (providerOption.id === BEDROCK_PROVIDER_ID) {
 						this.showBedrockSetupDialog(providerOption.id, providerOption.name);
+					} else if (providerOption.id === OLLAMA_PROVIDER_ID) {
+						await this.showOllamaSetupDialog(providerOption.id, providerOption.name);
 					} else {
 						await this.showApiKeyLoginDialog(providerOption.id, providerOption.name);
 					}
@@ -4688,6 +4696,58 @@ export class InteractiveMode {
 		this.editorContainer.addChild(dialog);
 		this.ui.setFocus(dialog);
 		this.ui.requestRender();
+	}
+
+	private async showOllamaSetupDialog(providerId: string, providerName: string): Promise<void> {
+		const previousModel = this.session.model;
+
+		const restoreEditor = () => {
+			this.editorContainer.clear();
+			this.editorContainer.addChild(this.editor);
+			this.ui.setFocus(this.editor);
+			this.ui.requestRender();
+		};
+
+		const dialog = new LoginDialogComponent(
+			this.ui,
+			providerId,
+			(_success, _message) => {
+				// Completion handled below
+			},
+			providerName,
+			"Ollama setup",
+		);
+
+		dialog.showInfo([
+			theme.fg("text", "Ollama supports both local and cloud models."),
+			theme.fg("text", ""),
+			theme.fg("text", "Local: no key needed. Any models running on localhost:11434 are detected automatically."),
+			theme.fg("text", "Cloud: enter your Ollama API key to access cloud models (ollama.com)."),
+			theme.fg("muted", ""),
+			theme.fg("muted", "Press Escape to skip (local only)."),
+			theme.fg("muted", "Enter an API key for Ollama Cloud, or leave empty for local."),
+		]);
+
+		this.editorContainer.clear();
+		this.editorContainer.addChild(dialog);
+		this.ui.setFocus(dialog);
+		this.ui.requestRender();
+
+		try {
+			const apiKey = await dialog.showPrompt("Ollama API key (leave empty for local):");
+
+			if (apiKey.trim()) {
+				this.session.modelRegistry.authStorage.set(providerId, { type: "api_key", key: apiKey.trim() });
+			}
+			// Discover local Ollama models regardless of cloud auth
+			await this.session.modelRegistry.discoverLocalModels();
+
+			restoreEditor();
+			await this.completeProviderAuthentication(providerId, providerName, "api_key", previousModel);
+		} catch (_error: unknown) {
+			restoreEditor();
+			// User pressed Escape — local Ollama works without auth
+		}
 	}
 
 	private async showApiKeyLoginDialog(providerId: string, providerName: string): Promise<void> {

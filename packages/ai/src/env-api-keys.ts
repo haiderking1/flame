@@ -107,6 +107,7 @@ function getApiKeyEnvVars(provider: string): readonly string[] | undefined {
 		groq: "GROQ_API_KEY",
 		cerebras: "CEREBRAS_API_KEY",
 		xai: "XAI_API_KEY",
+		ollama: "OLLAMA_API_KEY",
 		openrouter: "OPENROUTER_API_KEY",
 		"vercel-ai-gateway": "AI_GATEWAY_API_KEY",
 		zai: "ZAI_API_KEY",
@@ -161,6 +162,15 @@ export function getEnvApiKey(provider: string): string | undefined {
 	const envKeys = findEnvKeys(provider);
 	if (envKeys?.[0]) {
 		return process.env[envKeys[0]] || getProcEnv(envKeys[0]);
+	}
+
+	// Ollama local (localhost:11434) doesn't require an API key. Auth availability
+	// for Ollama is determined by checking connection to the local server, not by
+	// a key. Cloud models (ollama.com) require OLLAMA_API_KEY which is handled by the
+	// env var lookup above. Do NOT return a dummy key here — the model registry
+	// handles local Ollama availability separately.
+	if (provider === "ollama") {
+		return undefined;
 	}
 
 	// Vertex AI supports either an explicit API key or Application Default Credentials.

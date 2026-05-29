@@ -185,6 +185,7 @@ export {
 	createLsTool,
 	createReadOnlyTools,
 	createReadTool,
+	createWebSearchTool,
 	createWriteTool,
 	type PromptTemplate,
 } from "./core/sdk.ts";
@@ -347,7 +348,7 @@ export {
 	type ThemeColor,
 } from "./modes/interactive/theme/theme.ts";
 // Clipboard utilities
-export { copyToClipboard } from "./utils/clipboard.ts";
+export { copyToClipboard, readFromClipboard } from "./utils/clipboard.ts";
 export { parseFrontmatter, stripFrontmatter } from "./utils/frontmatter.ts";
 export { formatDimensionNote, type ResizedImage, resizeImage } from "./utils/image-resize.ts";
 // Shell utilities

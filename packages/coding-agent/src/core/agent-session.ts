@@ -22,8 +22,8 @@ import type {
 	AgentState,
 	AgentTool,
 	ThinkingLevel,
-} from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai";
+} from "@earendil-works/flame-agent-core";
+import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/flame-ai";
 import {
 	clampThinkingLevel,
 	cleanupSessionResources,
@@ -32,9 +32,9 @@ import {
 	modelsAreEqual,
 	resetApiProviders,
 	streamSimple,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/flame-ai";
 import { theme } from "../modes/interactive/theme/theme.ts";
-import { stripFrontmatter } from "../utils/frontmatter.ts";
+import { buildSkillsSystemPromptSync, expandSkillSlashCommand, SKILLS_GUIDANCE } from "./skills/index.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { sleep } from "../utils/sleep.ts";
 import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.ts";
@@ -80,8 +80,14 @@ import {
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import type { ModelRegistry } from "./model-registry.ts";
+import {
+	formatProcessTaskCompletionMessage,
+	type ProcessTaskCompletion,
+	setProcessTaskCompletionHandler,
+} from "./process-tasks.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
+import { loadSoulMd, MEMORY_GUIDANCE, MemoryStore } from "./memory/index.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionManager } from "./session-manager.ts";
 import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.ts";
 import type { SettingsManager } from "./settings-manager.ts";
@@ -89,7 +95,7 @@ import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
-import { createAllToolDefinitions } from "./tools/index.ts";
+import { createAllToolDefinitions, DEFAULT_ACTIVE_TOOL_NAMES } from "./tools/index.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
 
 // ============================================================================
@@ -311,10 +317,16 @@ export class AgentSession {
 	private _toolDefinitions: Map<string, ToolDefinitionEntry> = new Map();
 	private _toolPromptSnippets: Map<string, string> = new Map();
 	private _toolPromptGuidelines: Map<string, string[]> = new Map();
+	private _processTaskNotificationToken: object = {};
 
 	// Base system prompt (without extension appends) - used to apply fresh appends each turn
 	private _baseSystemPrompt = "";
 	private _baseSystemPromptOptions!: BuildSystemPromptOptions;
+
+	// Persistent memory + soul (Pillar 1+2)
+	private _memoryStore: MemoryStore = new MemoryStore();
+	private _soulContent: string | undefined;
+	private _memoryReady: Promise<void>;
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
@@ -331,6 +343,27 @@ export class AgentSession {
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 
+		// Kick off persistent-memory + soul load. The synchronous _buildRuntime
+		// below will rebuild the system prompt with an empty snapshot; when
+		// the async load completes we rebuild again so subsequent turns see
+		// the loaded MEMORY / USER / SOUL state. Callers who need this to
+		// happen before their first turn can `await session.ready()`.
+		this._memoryReady = Promise.all([
+			this._memoryStore.loadFromDisk(),
+			loadSoulMd().then((soul) => {
+				this._soulContent = soul;
+			}),
+		])
+			.then(() => {
+				this._baseSystemPrompt = this._rebuildSystemPrompt(this.getActiveToolNames());
+				this.agent.state.systemPrompt = this._baseSystemPrompt;
+			})
+			.catch(() => {
+				// Best-effort: a memory/soul load failure must not crash the
+				// session. The system prompt simply stays at its empty-snapshot
+				// state until something else triggers a rebuild.
+			});
+
 		// Always subscribe to agent events for internal handling
 		// (session persistence, extensions, auto-compaction, retry logic)
 		this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
@@ -340,6 +373,12 @@ export class AgentSession {
 			activeToolNames: this._initialActiveToolNames,
 			includeAllExtensionTools: true,
 		});
+		this._bindProcessTaskNotifications();
+	}
+
+	/** Resolve when persistent memory + soul have finished loading from disk. */
+	async ready(): Promise<void> {
+		await this._memoryReady;
 	}
 
 	/** Model registry for API key resolution and model discovery */
@@ -708,6 +747,7 @@ export class AgentSession {
 	 * Call this when completely done with the session.
 	 */
 	dispose(): void {
+		this._processTaskNotificationToken = {};
 		this._extensionRunner.invalidate(
 			"This extension ctx is stale after session replacement or reload. Do not use a captured pi or command ctx after ctx.newSession(), ctx.fork(), ctx.switchSession(), or ctx.reload(). For newSession, fork, and switchSession, move post-replacement work into withSession and use the ctx passed to withSession. For reload, do not use the old ctx after await ctx.reload().",
 		);
@@ -898,6 +938,35 @@ export class AgentSession {
 		const loadedSkills = this._resourceLoader.getSkills().skills;
 		const loadedContextFiles = this._resourceLoader.getAgentsFiles().agentsFiles;
 
+		// Memory guidance is appended only when the memory tool is active.
+		if (validToolNames.includes("memory")) {
+			promptGuidelines.push(MEMORY_GUIDANCE);
+		}
+
+		const hasSkillTools =
+			validToolNames.includes("skills_list") ||
+			validToolNames.includes("skill_view") ||
+			validToolNames.includes("skill_manage");
+
+		let skillsIndexBlock: string | undefined;
+		let skillsGuidanceBlock: string | undefined;
+		if (hasSkillTools) {
+			const toolSet = new Set(validToolNames);
+			skillsIndexBlock = buildSkillsSystemPromptSync({ availableTools: toolSet });
+			if (validToolNames.includes("skill_manage")) {
+				skillsGuidanceBlock = SKILLS_GUIDANCE;
+			}
+		}
+
+		// Volatile blocks: MEMORY + USER snapshots. formatForSystemPrompt
+		// returns undefined when the snapshot is empty, so the array filter
+		// keeps them out of the prompt entirely until something is saved.
+		const memorySnapshot = this._memoryStore.formatForSystemPrompt("memory");
+		const userSnapshot = this._memoryStore.formatForSystemPrompt("user");
+		const volatileBlocks = [memorySnapshot, userSnapshot].filter(
+			(b): b is string => typeof b === "string" && b.length > 0,
+		);
+
 		this._baseSystemPromptOptions = {
 			cwd: this._cwd,
 			skills: loadedSkills,
@@ -907,8 +976,24 @@ export class AgentSession {
 			selectedTools: validToolNames,
 			toolSnippets,
 			promptGuidelines,
+			identity: this._soulContent,
+			skillsIndexBlock,
+			skillsGuidanceBlock,
+			volatileBlocks,
 		};
 		return buildSystemPrompt(this._baseSystemPromptOptions);
+	}
+
+	/** Refresh frozen memory snapshot + soul after compaction (prompt is rebuilt anyway). */
+	private async _refreshMemoryAfterCompaction(): Promise<void> {
+		try {
+			await this._memoryStore.loadFromDisk();
+			this._soulContent = await loadSoulMd();
+			this._baseSystemPrompt = this._rebuildSystemPrompt(this.getActiveToolNames());
+			this.agent.state.systemPrompt = this._baseSystemPrompt;
+		} catch {
+			// Best-effort: never crash the session on a memory reload failure.
+		}
 	}
 
 	// =========================================================================
@@ -1152,23 +1237,24 @@ export class AgentSession {
 		const skillName = spaceIndex === -1 ? text.slice(7) : text.slice(7, spaceIndex);
 		const args = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
 
-		const skill = this.resourceLoader.getSkills().skills.find((s) => s.name === skillName);
-		if (!skill) return text; // Unknown skill, pass through
-
 		try {
-			const content = readFileSync(skill.filePath, "utf-8");
-			const body = stripFrontmatter(content).trim();
-			const skillBlock = `<skill name="${skill.name}" location="${skill.filePath}">\nReferences are relative to ${skill.baseDir}.\n\n${body}\n</skill>`;
-			return args ? `${skillBlock}\n\n${args}` : skillBlock;
+			const expanded = expandSkillSlashCommand(skillName, args, {
+				sessionId: this.sessionManager.getSessionId(),
+			});
+			if (expanded) {
+				return expanded;
+			}
 		} catch (err) {
-			// Emit error like extension commands do
+			const skill = this.resourceLoader.getSkills().skills.find((s) => s.name === skillName);
 			this._extensionRunner.emitError({
-				extensionPath: skill.filePath,
+				extensionPath: skill?.filePath ?? `skill:${skillName}`,
 				event: "skill_expansion",
 				error: err instanceof Error ? err.message : String(err),
 			});
-			return text; // Return original on error
+			return text;
 		}
+
+		return text;
 	}
 
 	/**
@@ -1319,7 +1405,6 @@ export class AgentSession {
 		content: string | (TextContent | ImageContent)[],
 		options?: { deliverAs?: "steer" | "followUp" },
 	): Promise<void> {
-		// Normalize content to text string + optional images
 		let text: string;
 		let images: ImageContent[] | undefined;
 
@@ -1707,6 +1792,8 @@ export class AgentSession {
 				});
 			}
 
+			await this._refreshMemoryAfterCompaction();
+
 			const compactionResult = {
 				summary,
 				firstKeptEntryId,
@@ -1986,6 +2073,8 @@ export class AgentSession {
 					fromExtension,
 				});
 			}
+
+			await this._refreshMemoryAfterCompaction();
 
 			const result: CompactionResult = {
 				summary,
@@ -2359,6 +2448,9 @@ export class AgentSession {
 			: createAllToolDefinitions(this._cwd, {
 					read: { autoResizeImages },
 					bash: { commandPrefix: shellCommandPrefix, shellPath },
+					process: { commandPrefix: shellCommandPrefix, shellPath },
+					memory: { store: this._memoryStore },
+					skill_manage: { guardAgentCreated: this.settingsManager.getSkillsGuardAgentCreated() },
 				});
 
 		this._baseToolDefinitions = new Map(
@@ -2387,7 +2479,7 @@ export class AgentSession {
 
 		const defaultActiveToolNames = this._baseToolsOverride
 			? Object.keys(this._baseToolsOverride)
-			: ["read", "bash", "edit", "write"];
+			: DEFAULT_ACTIVE_TOOL_NAMES;
 		const baseActiveToolNames = options.activeToolNames ?? defaultActiveToolNames;
 		this._refreshToolRegistry({
 			activeToolNames: baseActiveToolNames,
@@ -2823,6 +2915,10 @@ export class AgentSession {
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.state.messages = sessionContext.messages;
 
+			if (options.summarize) {
+				await this._refreshMemoryAfterCompaction();
+			}
+
 			// Emit session_tree event
 			await this._extensionRunner.emit({
 				type: "session_tree",
@@ -3062,6 +3158,25 @@ export class AgentSession {
 	// =========================================================================
 	// Extension System
 	// =========================================================================
+
+	private _bindProcessTaskNotifications(): void {
+		const token = this._processTaskNotificationToken;
+		setProcessTaskCompletionHandler((completion) => {
+			if (token !== this._processTaskNotificationToken) {
+				return;
+			}
+			void this._handleProcessTaskCompletion(completion);
+		});
+	}
+
+	private async _handleProcessTaskCompletion(completion: ProcessTaskCompletion): Promise<void> {
+		const message = formatProcessTaskCompletionMessage(completion);
+		if (this.isStreaming) {
+			await this.sendUserMessage(message, { deliverAs: "followUp" });
+			return;
+		}
+		await this.sendUserMessage(message);
+	}
 
 	createReplacedSessionContext(): ReplacedSessionContext {
 		const context = Object.defineProperties(

@@ -63,6 +63,84 @@ const KIMI_STATIC_HEADERS = {
 	"User-Agent": "KimiCLI/1.5",
 } as const;
 
+interface OllamaV1Model {
+	id: string;
+	object?: string;
+	created?: number;
+	owned_by?: string;
+}
+
+interface OllamaV1ModelsResponse {
+	object: string;
+	data: OllamaV1Model[];
+}
+
+interface OllamaShowDetails {
+	parent_model?: string;
+	format?: string;
+	family?: string;
+	families?: string[];
+	parameter_size?: string;
+	quantization_level?: string;
+	context_length?: number;
+}
+
+interface OllamaShowResponse {
+	model_info?: Record<string, unknown>;
+	details?: OllamaShowDetails;
+	capabilities?: string[];
+	modified_at?: string;
+}
+
+const OLLAMA_CLOUD_MODEL_LIMITS: Record<string, { context: number; output: number }> = {
+	"cogito-2.1:671b": { context: 163840, output: 65536 },
+	"deepseek-v3.1:671b": { context: 163840, output: 163840 },
+	"deepseek-v3.2": { context: 163840, output: 65536 },
+	"deepseek-v4-flash": { context: 1048576, output: 65536 },
+	"deepseek-v4-pro": { context: 1048576, output: 65536 },
+	"devstral-2:123b": { context: 131072, output: 65536 },
+	"devstral-small-2": { context: 131072, output: 65536 },
+	"devstral-small-2:24b": { context: 131072, output: 65536 },
+	"gemma4:31b": { context: 262144, output: 131072 },
+	"gemma3": { context: 131072, output: 8192 },
+	"gemma3:4b": { context: 131072, output: 8192 },
+	"gemma3:12b": { context: 131072, output: 8192 },
+	"gemma3:27b": { context: 131072, output: 8192 },
+	"gemini-3-flash-preview": { context: 1048576, output: 65536 },
+	"glm-4.6": { context: 202752, output: 131072 },
+	"glm-4.7": { context: 202752, output: 131072 },
+	"glm-5": { context: 202752, output: 131072 },
+	"glm-5.1": { context: 202752, output: 131072 },
+	"gpt-oss:120b": { context: 131072, output: 131072 },
+	"gpt-oss:20b": { context: 131072, output: 131072 },
+	"kimi-k2-thinking": { context: 262144, output: 262144 },
+	"kimi-k2:1t": { context: 262144, output: 262144 },
+	"kimi-k2.5": { context: 262144, output: 262144 },
+	"kimi-k2.6": { context: 262144, output: 262144 },
+	"minimax-m2": { context: 204800, output: 128000 },
+	"minimax-m2.1": { context: 204800, output: 128000 },
+	"minimax-m2.5": { context: 204800, output: 128000 },
+	"minimax-m2.7": { context: 204800, output: 128000 },
+	"ministral-3": { context: 131072, output: 4096 },
+	"ministral-3:3b": { context: 131072, output: 4096 },
+	"ministral-3:8b": { context: 131072, output: 4096 },
+	"ministral-3:14b": { context: 131072, output: 4096 },
+	"mistral-large-3": { context: 131072, output: 65536 },
+	"mistral-large-3:675b": { context: 131072, output: 65536 },
+	"nemotron-3-nano:30b": { context: 1048576, output: 131072 },
+	"nemotron-3-super": { context: 262144, output: 65536 },
+	"nemotron-3-super:120b": { context: 262144, output: 65536 },
+	"qwen3-coder-next": { context: 262144, output: 32768 },
+	"qwen3-coder:480b": { context: 262144, output: 65536 },
+	"qwen3-next:80b": { context: 262144, output: 32768 },
+	"qwen3-vl": { context: 262144, output: 32768 },
+	"qwen3-vl:235b": { context: 262144, output: 32768 },
+	"qwen3-vl:235b-instruct": { context: 262144, output: 32768 },
+	"qwen3.5": { context: 262144, output: 32768 },
+	"qwen3.5:397b": { context: 262144, output: 32768 },
+	"rnj-1:8b": { context: 131072, output: 8192 },
+};
+
 const TOGETHER_BASE_URL = "https://api.together.ai/v1";
 const TOGETHER_BASE_COMPAT: OpenAICompletionsCompat = {
 	supportsStore: false,
@@ -253,11 +331,14 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 		mergeThinkingLevelMap(model, { minimal: "low" });
 	}
 	if (model.provider === "openrouter" && model.id.startsWith("inception/mercury-2")) {
-		// Mercury 2 in instant mode (reasoning_effort: "none") disables tool calling.
-		// Mark "off" unsupported so the openai-completions provider omits the reasoning param
-		// instead of defaulting to {reasoning:{effort:"none"}} (see openai-completions.ts:575).
-		// Pi's low/medium/high pass through verbatim; OpenRouter normalizes to Mercury's vocabulary.
 		mergeThinkingLevelMap(model, { off: null });
+	}
+	if (model.provider === "ollama" && model.reasoning) {
+		if (model.id.startsWith("gpt-oss")) {
+			mergeThinkingLevelMap(model, { off: null, low: "low", medium: "medium", high: "high" });
+		} else {
+			mergeThinkingLevelMap(model, { off: "none" });
+		}
 	}
 }
 
@@ -386,6 +467,174 @@ async function fetchAiGatewayModels(): Promise<Model<any>[]> {
 	} catch (error) {
 		console.error("Failed to fetch Vercel AI Gateway models:", error);
 		return [];
+	}
+}
+
+function formatOllamaCloudModelName(id: string): string {
+	const colonIdx = id.indexOf(":");
+	const base = colonIdx >= 0 ? id.slice(0, colonIdx) : id;
+	const sizeTag = colonIdx >= 0 ? id.slice(colonIdx + 1) : "";
+
+	const knownNames: Record<string, string> = {
+		"gpt-oss": "GPT-OSS",
+		"qwen3-coder": "Qwen3 Coder",
+		"qwen3.5": "Qwen 3.5",
+		"qwen3-next": "Qwen3 Next",
+		"glm-5.1": "GLM-5.1",
+		"glm-5": "GLM-5",
+		"glm-4.7": "GLM-4.7",
+		"glm-4.6": "GLM-4.6",
+		"minimax-m2.7": "MiniMax M2.7",
+		"minimax-m2.5": "MiniMax M2.5",
+		"minimax-m2.1": "MiniMax M2.1",
+		"deepseek-v4-flash": "DeepSeek V4 Flash",
+		"deepseek-v4-pro": "DeepSeek V4 Pro",
+		"deepseek-v3.2": "DeepSeek V3.2",
+		"deepseek-v3.1": "DeepSeek V3.1",
+		"kimi-k2.6": "Kimi K2.6",
+		"kimi-k2.5": "Kimi K2.5",
+		"kimi-k2-thinking": "Kimi K2 Thinking",
+		"gemma4": "Gemma 4",
+		"gemini-3-flash-preview": "Gemini 3 Flash Preview",
+		"gemini-3-flash": "Gemini 3 Flash",
+		"nemotron-3-super": "Nemotron 3 Super",
+		"nemotron-3-nano": "Nemotron 3 Nano",
+		"cogito-2.1": "Cogito 2.1",
+		"devstral-small": "Devstral Small",
+		"ministral-3": "Ministral 3",
+		"rnj-1": "RNJ-1",
+		"qwen3-coder-next": "Qwen3 Coder Next",
+	};
+
+	let name = knownNames[base];
+	if (!name) {
+		const parts = base.split("-");
+		if (parts.length >= 2 && /^\d/.test(parts[parts.length - 1])) {
+			name = parts.slice(0, -1).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") + " " + parts[parts.length - 1];
+		} else {
+			name = parts.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+		}
+	}
+
+	if (sizeTag) {
+		name += ` ${sizeTag}`;
+	}
+
+	return name;
+}
+
+async function fetchOllamaCloudModels(): Promise<Model<"openai-completions">[]> {
+	const OLLAMA_CLOUD_BASE_URL = "https://ollama.com/v1";
+	const OLLAMA_CLOUD_SHOW_URL = "https://ollama.com/api/show";
+	const OLLAMA_CLOUD_LIST_URL = "https://ollama.com/v1/models";
+	const TIMEOUT_MS = 10000;
+
+	const headers: Record<string, string> = { "Content-Type": "application/json" };
+	const apiKey = process.env.OLLAMA_API_KEY;
+	if (apiKey) {
+		headers["Authorization"] = `Bearer ${apiKey}`;
+	}
+
+	const models: Model<"openai-completions">[] = [];
+
+	try {
+		console.log("Fetching models from Ollama Cloud API...");
+
+		const listResponse = await fetch(OLLAMA_CLOUD_LIST_URL, {
+			method: "GET",
+			headers,
+			signal: AbortSignal.timeout(TIMEOUT_MS),
+		});
+
+		if (!listResponse.ok) {
+			throw new Error(`Ollama Cloud list API returned ${listResponse.status}`);
+		}
+
+		const listData = (await listResponse.json()) as OllamaV1ModelsResponse;
+		const modelIds = (listData.data ?? []).map(m => m.id);
+
+		const showResults = await Promise.allSettled(
+			modelIds.map(async (modelId) => {
+				const res = await fetch(OLLAMA_CLOUD_SHOW_URL, {
+					method: "POST",
+					headers,
+					body: JSON.stringify({ model: modelId }),
+					signal: AbortSignal.timeout(TIMEOUT_MS),
+				});
+				if (!res.ok) throw new Error(`Show API returned ${res.status} for ${modelId}`);
+				return { id: modelId, data: (await res.json()) as OllamaShowResponse };
+			}),
+		);
+
+		for (const result of showResults) {
+			if (result.status !== "fulfilled") continue;
+			const { id, data } = result.value;
+
+			const capabilities = data.capabilities ?? [];
+			const hasTools = capabilities.includes("tools");
+			const isKnownModel = id in OLLAMA_CLOUD_MODEL_LIMITS;
+			if (!hasTools && !isKnownModel) continue;
+
+			const hasVision = capabilities.includes("vision");
+			const hasThinking = capabilities.includes("thinking");
+			const limits = OLLAMA_CLOUD_MODEL_LIMITS[id];
+			const contextLength = data.details?.context_length ?? limits?.context ?? 4096;
+
+			const formattedName = formatOllamaCloudModelName(id);
+			const modelEntry: Model<"openai-completions"> = {
+				id,
+				name: formattedName + " (Ollama Cloud)",
+				api: "openai-completions",
+				provider: "ollama",
+				baseUrl: OLLAMA_CLOUD_BASE_URL,
+				reasoning: hasThinking,
+				input: hasVision ? ["text", "image"] : ["text"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: contextLength,
+				maxTokens: limits?.output ?? contextLength,
+			};
+
+			if (modelEntry.reasoning) {
+				if (id.startsWith("gpt-oss")) {
+					modelEntry.thinkingLevelMap = { off: null, low: "low", medium: "medium", high: "high" };
+				} else {
+					modelEntry.thinkingLevelMap = { off: "none" };
+				}
+			}
+
+			models.push(modelEntry);
+		}
+
+		console.log(`Fetched ${models.length} tool-capable models from Ollama Cloud`);
+		return models;
+	} catch (error) {
+		console.error("Failed to fetch Ollama Cloud models:", error);
+
+		for (const [id, limits] of Object.entries(OLLAMA_CLOUD_MODEL_LIMITS)) {
+			const modelEntry: Model<"openai-completions"> = {
+				id,
+				name: formatOllamaCloudModelName(id) + " (Ollama Cloud)",
+				api: "openai-completions",
+				provider: "ollama",
+				baseUrl: OLLAMA_CLOUD_BASE_URL,
+				reasoning: true,
+				input: ["text"],
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+				contextWindow: limits.context,
+				maxTokens: limits.output,
+			};
+
+			if (id.startsWith("gpt-oss")) {
+				modelEntry.thinkingLevelMap = { off: null, low: "low", medium: "medium", high: "high" };
+			} else {
+				modelEntry.thinkingLevelMap = { off: "none" };
+			}
+
+			models.push(modelEntry);
+		}
+
+		console.log(`Using ${models.length} static Ollama Cloud models as fallback`);
+		return models;
 	}
 }
 
@@ -1588,6 +1837,14 @@ async function generateModels() {
 		},
 	];
 	allModels.push(...codexModels);
+
+	// Ollama cloud models (fetched dynamically from ollama.com API)
+	const ollamaCloudModels = await fetchOllamaCloudModels();
+	for (const m of ollamaCloudModels) {
+		if (!allModels.some((existing) => existing.provider === "ollama" && existing.id === m.id)) {
+			allModels.push(m);
+		}
+	}
 
 	// Add missing Grok models
 	const missingGrokModels: Model<"openai-completions">[] = [

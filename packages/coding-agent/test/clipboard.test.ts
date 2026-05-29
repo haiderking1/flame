@@ -1,12 +1,14 @@
 import { execSync, spawn } from "child_process";
 import { platform } from "os";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { copyToClipboard } from "../src/utils/clipboard.ts";
+import { copyToClipboard, readFromClipboard } from "../src/utils/clipboard.ts";
 
 const mocks = vi.hoisted(() => {
 	return {
 		clipboard: {
 			setText: vi.fn<(text: string) => Promise<void>>(),
+			getText: vi.fn<() => Promise<string>>(),
+			hasText: vi.fn<() => boolean>(),
 		},
 		execSync: vi.fn(),
 		spawn: vi.fn(),
@@ -60,6 +62,8 @@ beforeEach(() => {
 	stdoutWrites = [];
 	nativeResolved = false;
 	mocks.clipboard.setText.mockReset();
+	mocks.clipboard.getText.mockReset();
+	mocks.clipboard.hasText.mockReset();
 	mocks.execSync.mockReset();
 	mocks.spawn.mockReset();
 	mocks.platform.mockReset();
@@ -70,6 +74,8 @@ beforeEach(() => {
 		await new Promise((resolve) => setTimeout(resolve, 1));
 		nativeResolved = true;
 	});
+	mocks.clipboard.getText.mockResolvedValue("hello");
+	mocks.clipboard.hasText.mockReturnValue(true);
 	originalWrite = process.stdout.write.bind(process.stdout);
 	process.stdout.write = ((...args: Parameters<typeof process.stdout.write>) => {
 		const [chunk] = args;
@@ -144,5 +150,34 @@ describe("copyToClipboard", () => {
 
 		await expect(copyToClipboard("x".repeat(80_000))).rejects.toThrow("Failed to copy to clipboard");
 		expect(osc52Writes()).toHaveLength(0);
+	});
+});
+
+describe("readFromClipboard", () => {
+	test("local native read returns clipboard text", async () => {
+		mocks.clipboard.hasText.mockReturnValue(true);
+		mocks.clipboard.getText.mockResolvedValue("hello");
+
+		await expect(readFromClipboard()).resolves.toBe("hello");
+		expect(mockedExecSync).not.toHaveBeenCalled();
+	});
+
+	test("local native empty clipboard returns empty string", async () => {
+		mocks.clipboard.hasText.mockReturnValue(false);
+
+		await expect(readFromClipboard()).resolves.toBe("");
+		expect(mocks.clipboard.getText).not.toHaveBeenCalled();
+	});
+
+	test("uses shell fallback when native read fails", async () => {
+		mocks.clipboard.getText.mockRejectedValue(new Error("native failed"));
+		mockedExecSync.mockReturnValue("from-shell");
+
+		await expect(readFromClipboard()).resolves.toBe("from-shell");
+		expect(mockedExecSync).toHaveBeenCalledWith("pbpaste", {
+			encoding: "utf8",
+			timeout: 5000,
+			maxBuffer: 10 * 1024 * 1024,
+		});
 	});
 });

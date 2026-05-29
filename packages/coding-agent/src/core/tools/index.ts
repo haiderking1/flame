@@ -10,6 +10,25 @@ export {
 	createLocalBashOperations,
 } from "./bash.ts";
 export {
+	type BrowserToolDetails,
+	type BrowserToolInput,
+	type BrowserToolOptions,
+	createBrowserTool,
+	createBrowserToolDefinition,
+} from "./browser.ts";
+export {
+	type ClipboardToolDetails,
+	type ClipboardToolInput,
+	createClipboardTool,
+	createClipboardToolDefinition,
+} from "./clipboard.ts";
+export {
+	createDownloadTool,
+	createDownloadToolDefinition,
+	type DownloadToolDetails,
+	type DownloadToolInput,
+} from "./download.ts";
+export {
 	createEditTool,
 	createEditToolDefinition,
 	type EditOperations,
@@ -43,6 +62,19 @@ export {
 	type LsToolOptions,
 } from "./ls.ts";
 export {
+	createMemoryTool,
+	createMemoryToolDefinition,
+	type MemoryToolDetails,
+	type MemoryToolInput,
+} from "../memory/memory-tool.ts";
+export {
+	createProcessTool,
+	createProcessToolDefinition,
+	type ProcessToolDetails,
+	type ProcessToolInput,
+	type ProcessToolOptions,
+} from "./process.ts";
+export {
 	createReadTool,
 	createReadToolDefinition,
 	type ReadOperations,
@@ -61,6 +93,14 @@ export {
 	truncateTail,
 } from "./truncate.ts";
 export {
+	createWebSearchTool,
+	createWebSearchToolDefinition,
+	type WebSearchResult,
+	type WebSearchToolDetails,
+	type WebSearchToolInput,
+	type WebSearchToolOptions,
+} from "./web-search.ts";
+export {
 	createWriteTool,
 	createWriteToolDefinition,
 	type WriteOperations,
@@ -68,20 +108,82 @@ export {
 	type WriteToolOptions,
 } from "./write.ts";
 
-import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentTool } from "@earendil-works/flame-agent-core";
 import type { ToolDefinition } from "../extensions/types.ts";
 import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
+import { type BrowserToolOptions, createBrowserTool, createBrowserToolDefinition } from "./browser.ts";
+import { createClipboardTool, createClipboardToolDefinition } from "./clipboard.ts";
+import { createDownloadTool, createDownloadToolDefinition } from "./download.ts";
 import { createEditTool, createEditToolDefinition, type EditToolOptions } from "./edit.ts";
 import { createFindTool, createFindToolDefinition, type FindToolOptions } from "./find.ts";
 import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "./grep.ts";
 import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.ts";
+import { MemoryStore } from "../memory/memory-store.ts";
+import { createMemoryTool, createMemoryToolDefinition } from "../memory/memory-tool.ts";
+import {
+	createSkillManageTool,
+	createSkillManageToolDefinition,
+	type SkillManageToolOptions,
+} from "../skills/skill-manage-tool.ts";
+import { createSkillViewToolDefinition } from "../skills/skill-view-tool.ts";
+import { createSkillsListToolDefinition } from "../skills/skills-list-tool.ts";
+import { createProcessTool, createProcessToolDefinition, type ProcessToolOptions } from "./process.ts";
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.ts";
+import { createWebSearchTool, createWebSearchToolDefinition, type WebSearchToolOptions } from "./web-search.ts";
 import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } from "./write.ts";
 
 export type Tool = AgentTool<any>;
 export type ToolDef = ToolDefinition<any, any>;
-export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls";
-export const allToolNames: Set<ToolName> = new Set(["read", "bash", "edit", "write", "grep", "find", "ls"]);
+export type ToolName =
+	| "read"
+	| "bash"
+	| "edit"
+	| "write"
+	| "grep"
+	| "find"
+	| "ls"
+	| "web_search"
+	| "download"
+	| "browser"
+	| "clipboard"
+	| "process"
+	| "memory"
+	| "skills_list"
+	| "skill_view"
+	| "skill_manage";
+export const allToolNames: Set<ToolName> = new Set([
+	"read",
+	"bash",
+	"edit",
+	"write",
+	"grep",
+	"find",
+	"ls",
+	"web_search",
+	"download",
+	"browser",
+	"clipboard",
+	"process",
+	"memory",
+	"skills_list",
+	"skill_view",
+	"skill_manage",
+]);
+export const DEFAULT_ACTIVE_TOOL_NAMES: ToolName[] = [
+	"read",
+	"bash",
+	"edit",
+	"write",
+	"web_search",
+	"download",
+	"browser",
+	"clipboard",
+	"process",
+	"memory",
+	"skills_list",
+	"skill_view",
+	"skill_manage",
+];
 
 export interface ToolsOptions {
 	read?: ReadToolOptions;
@@ -91,6 +193,15 @@ export interface ToolsOptions {
 	grep?: GrepToolOptions;
 	find?: FindToolOptions;
 	ls?: LsToolOptions;
+	web_search?: WebSearchToolOptions;
+	download?: unknown;
+	browser?: BrowserToolOptions;
+	clipboard?: unknown;
+	process?: ProcessToolOptions;
+	memory?: { store: MemoryStore };
+	skills_list?: Record<string, never>;
+	skill_view?: { sessionId?: string };
+	skill_manage?: SkillManageToolOptions;
 }
 
 export function createToolDefinition(toolName: ToolName, cwd: string, options?: ToolsOptions): ToolDef {
@@ -109,6 +220,24 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 			return createFindToolDefinition(cwd, options?.find);
 		case "ls":
 			return createLsToolDefinition(cwd, options?.ls);
+		case "web_search":
+			return createWebSearchToolDefinition(cwd, options?.web_search);
+		case "download":
+			return createDownloadToolDefinition(cwd, options?.download);
+		case "browser":
+			return createBrowserToolDefinition(cwd, options?.browser);
+		case "clipboard":
+			return createClipboardToolDefinition();
+		case "process":
+			return createProcessToolDefinition(cwd, options?.process);
+		case "memory":
+			return createMemoryToolDefinition(options?.memory?.store ?? new MemoryStore());
+		case "skills_list":
+			return createSkillsListToolDefinition();
+		case "skill_view":
+			return createSkillViewToolDefinition({ sessionId: options?.skill_view?.sessionId });
+		case "skill_manage":
+			return createSkillManageToolDefinition(options?.skill_manage ?? {});
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -130,6 +259,24 @@ export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptio
 			return createFindTool(cwd, options?.find);
 		case "ls":
 			return createLsTool(cwd, options?.ls);
+		case "web_search":
+			return createWebSearchTool(cwd, options?.web_search);
+		case "download":
+			return createDownloadTool(cwd, options?.download);
+		case "browser":
+			return createBrowserTool(cwd, options?.browser);
+		case "clipboard":
+			return createClipboardTool();
+		case "process":
+			return createProcessTool(cwd, options?.process);
+		case "memory":
+			return createMemoryTool(options?.memory?.store ?? new MemoryStore());
+		case "skills_list":
+			return createSkillsListToolDefinition() as Tool;
+		case "skill_view":
+			return createSkillViewToolDefinition({ sessionId: options?.skill_view?.sessionId }) as Tool;
+		case "skill_manage":
+			return createSkillManageTool(options?.skill_manage ?? {}) as Tool;
 		default:
 			throw new Error(`Unknown tool name: ${toolName}`);
 	}
@@ -162,6 +309,15 @@ export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): R
 		grep: createGrepToolDefinition(cwd, options?.grep),
 		find: createFindToolDefinition(cwd, options?.find),
 		ls: createLsToolDefinition(cwd, options?.ls),
+		web_search: createWebSearchToolDefinition(cwd, options?.web_search),
+		download: createDownloadToolDefinition(cwd, options?.download),
+		browser: createBrowserToolDefinition(cwd, options?.browser),
+		clipboard: createClipboardToolDefinition(),
+		process: createProcessToolDefinition(cwd, options?.process),
+		memory: createMemoryToolDefinition(options?.memory?.store ?? new MemoryStore()),
+		skills_list: createSkillsListToolDefinition(),
+		skill_view: createSkillViewToolDefinition({ sessionId: options?.skill_view?.sessionId }),
+		skill_manage: createSkillManageToolDefinition(options?.skill_manage ?? {}),
 	};
 }
 
@@ -192,5 +348,14 @@ export function createAllTools(cwd: string, options?: ToolsOptions): Record<Tool
 		grep: createGrepTool(cwd, options?.grep),
 		find: createFindTool(cwd, options?.find),
 		ls: createLsTool(cwd, options?.ls),
+		web_search: createWebSearchTool(cwd, options?.web_search),
+		download: createDownloadTool(cwd, options?.download),
+		browser: createBrowserTool(cwd, options?.browser),
+		clipboard: createClipboardTool(),
+		process: createProcessTool(cwd, options?.process),
+		memory: createMemoryTool(options?.memory?.store ?? new MemoryStore()),
+		skills_list: createSkillsListToolDefinition() as Tool,
+		skill_view: createSkillViewToolDefinition({ sessionId: options?.skill_view?.sessionId }) as Tool,
+		skill_manage: createSkillManageTool(options?.skill_manage ?? {}) as Tool,
 	};
 }

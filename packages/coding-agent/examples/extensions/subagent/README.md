@@ -35,20 +35,20 @@ From the repository root, symlink the files:
 
 ```bash
 # Symlink the extension (must be in a subdirectory with index.ts)
-mkdir -p ~/.pi/agent/extensions/subagent
-ln -sf "$(pwd)/packages/coding-agent/examples/extensions/subagent/index.ts" ~/.pi/agent/extensions/subagent/index.ts
-ln -sf "$(pwd)/packages/coding-agent/examples/extensions/subagent/agents.ts" ~/.pi/agent/extensions/subagent/agents.ts
+mkdir -p ~/.flame/agent/extensions/subagent
+ln -sf "$(pwd)/packages/coding-agent/examples/extensions/subagent/index.ts" ~/.flame/agent/extensions/subagent/index.ts
+ln -sf "$(pwd)/packages/coding-agent/examples/extensions/subagent/agents.ts" ~/.flame/agent/extensions/subagent/agents.ts
 
 # Symlink agents
-mkdir -p ~/.pi/agent/agents
+mkdir -p ~/.flame/agent/agents
 for f in packages/coding-agent/examples/extensions/subagent/agents/*.md; do
-  ln -sf "$(pwd)/$f" ~/.pi/agent/agents/$(basename "$f")
+  ln -sf "$(pwd)/$f" ~/.flame/agent/agents/$(basename "$f")
 done
 
 # Symlink workflow prompts
-mkdir -p ~/.pi/agent/prompts
+mkdir -p ~/.flame/agent/prompts
 for f in packages/coding-agent/examples/extensions/subagent/prompts/*.md; do
-  ln -sf "$(pwd)/$f" ~/.pi/agent/prompts/$(basename "$f")
+  ln -sf "$(pwd)/$f" ~/.flame/agent/prompts/$(basename "$f")
 done
 ```
 
@@ -56,9 +56,9 @@ done
 
 This tool executes a separate `pi` subprocess with a delegated system prompt and tool/model configuration.
 
-**Project-local agents** (`.pi/agents/*.md`) are repo-controlled prompts that can instruct the model to read files, run bash commands, etc.
+**Project-local agents** (`.flame/agents/*.md`) are repo-controlled prompts that can instruct the model to read files, run bash commands, etc.
 
-**Default behavior:** Only loads **user-level agents** from `~/.pi/agent/agents`.
+**Default behavior:** Only loads **user-level agents** from `~/.flame/agent/agents`.
 
 To enable project-local agents, pass `agentScope: "both"` (or `"project"`). Only do this for repositories you trust.
 
@@ -138,8 +138,8 @@ System prompt for the agent goes here.
 ```
 
 **Locations:**
-- `~/.pi/agent/agents/*.md` - User-level (always loaded)
-- `.pi/agents/*.md` - Project-level (only with `agentScope: "project"` or `"both"`)
+- `~/.flame/agent/agents/*.md` - User-level (always loaded)
+- `.flame/agents/*.md` - Project-level (only with `agentScope: "project"` or `"both"`)
 
 Project agents override user agents with the same name when `agentScope: "both"`.
 
@@ -147,10 +147,34 @@ Project agents override user agents with the same name when `agentScope: "both"`
 
 | Agent | Purpose | Model | Tools |
 |-------|---------|-------|-------|
-| `scout` | Fast codebase recon | Haiku | read, grep, find, ls, bash |
-| `planner` | Implementation plans | Sonnet | read, grep, find, ls |
-| `reviewer` | Code review | Sonnet | read, grep, find, ls, bash |
-| `worker` | General-purpose | Sonnet | (all default) |
+| `scout` | Fast codebase recon | Inherits parent session model | read, grep, find, ls, bash |
+| `planner` | Implementation plans | Inherits parent session model | read, grep, find, ls |
+| `reviewer` | Code review | Inherits parent session model | read, grep, find, ls, bash |
+| `worker` | General-purpose | Inherits parent session model | (all default) |
+
+## Ollama Cloud vs local
+
+By default, subagents **inherit the parent Flame session's provider and model**. If you use Ollama Cloud (`glm-5.1`, etc.), start the parent session on that model and subagents follow automatically.
+
+Do **not** add a local `ollama` provider override in `models.json` unless you actually run Ollama locally. A `baseUrl` of `http://localhost:11434/v1` breaks cloud models and causes `fetch failed`.
+
+For Ollama Cloud, keep your API key in `~/.flame/agent/auth.json` under `ollama` or set `OLLAMA_API_KEY`.
+
+Optional per-agent overrides:
+
+```yaml
+provider: ollama
+model: glm-5.1
+```
+
+Or env vars:
+
+```bash
+export FLAME_SUBAGENT_MODEL=ollama/glm-5.1
+export FLAME_SUBAGENT_SCOUT_MODEL=ollama/qwen2.5-coder:7b
+```
+
+When developing from this repo, subagents reuse the current Flame entrypoint (`flame-test` / `tsx packages/coding-agent/src/cli.ts`). Override with `FLAME_SUBAGENT_COMMAND` if needed.
 
 ## Workflow Prompts
 

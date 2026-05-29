@@ -1,0 +1,12 @@
+{
+  "taskId": "proc_1779624844120",
+  "command": "echo done",
+  "cwd": "C:\\Users\\Administrator\\Desktop\\projects\\Flame\\packages\\coding-agent\\test-temp-process",
+  "status": "running",
+  "pid": 0,
+  "exitCode": null,
+  "signal": null,
+  "startedAt": 1779624844120,
+  "notify": true,
+  "notified": false
+}

@@ -54,7 +54,7 @@ describe("buildSystemPrompt", () => {
 			});
 
 			expect(prompt).toContain(
-				"- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory",
+				"- When reading Flame docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory",
 			);
 		});
 	});
@@ -109,6 +109,24 @@ describe("buildSystemPrompt", () => {
 			});
 
 			expect(prompt.match(/- Use dynamic_tool for summaries\./g)).toHaveLength(1);
+		});
+
+		test("guides post-download shell work through bash when download is enabled", () => {
+			const prompt = buildSystemPrompt({
+				selectedTools: ["read", "bash", "download"],
+				toolSnippets: {
+					read: "Read file contents",
+					bash: "Execute bash commands",
+					download: "Download files with aria2c",
+				},
+				contextFiles: [],
+				skills: [],
+				cwd: process.cwd(),
+			});
+
+			expect(prompt).toContain(
+				"- After download completes, run post-download shell commands with bash using the returned savePath; do not embed shell commands in download",
+			);
 		});
 	});
 });

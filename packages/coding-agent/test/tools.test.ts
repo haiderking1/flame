@@ -12,6 +12,7 @@ import {
 	createGrepTool,
 	createLsTool,
 	createReadTool,
+	createWebSearchTool,
 	createWriteTool,
 } from "../src/index.ts";
 import * as shellModule from "../src/utils/shell.ts";
@@ -23,6 +24,7 @@ const bashTool = createBashTool(process.cwd());
 const grepTool = createGrepTool(process.cwd());
 const findTool = createFindTool(process.cwd());
 const lsTool = createLsTool(process.cwd());
+const webSearchTool = createWebSearchTool(process.cwd());
 
 // Helper to extract text from content blocks
 function getTextOutput(result: any): string {
@@ -391,12 +393,13 @@ describe("Coding Agent Tools", () => {
 			writeFileSync(testFile, "hello\n");
 			chmodSync(testFile, 0o444);
 
+			const expectedCode = process.platform === "win32" ? "EPERM" : "EACCES";
 			await expect(
 				editTool.execute("test-call-14", {
 					path: testFile,
 					edits: [{ oldText: "hello", newText: "world" }],
 				}),
-			).rejects.toThrow(`Could not edit file: ${testFile}. Error code: EACCES.`);
+			).rejects.toThrow(`Could not edit file: ${testFile}. Error code: ${expectedCode}.`);
 		});
 
 		it("should include the original error message for unknown edit access errors", async () => {
@@ -426,6 +429,7 @@ describe("Coding Agent Tools", () => {
 		});
 
 		it("should include EACCES in diff preview for unreadable files", async () => {
+			if (process.platform === "win32") return;
 			const unreadableFile = join(testDir, "unreadable-preview.txt");
 			writeFileSync(unreadableFile, "hello\n");
 			chmodSync(unreadableFile, 0o222);
@@ -728,7 +732,7 @@ describe("Coding Agent Tools", () => {
 			writeFileSync(testFile, "target\n");
 
 			const result = await grepTool.execute("test-call-grep-injection", {
-				pattern: `--pre=${payload}`,
+				pattern: `--pre=${payload.replace(/\\/g, "\\\\")}`,
 				path: testDir,
 			});
 
@@ -1073,5 +1077,179 @@ describe("edit tool CRLF handling", () => {
 
 		const content = readFileSync(testFile, "utf-8");
 		expect(content).toBe("\uFEFFfirst\r\nSECOND\r\nthird\r\nFOURTH\r\n");
+	});
+
+	describe("web_search tool", () => {
+		let originalApiKey: string | undefined;
+
+		beforeEach(() => {
+			originalApiKey = process.env.EXA_API_KEY;
+		});
+
+		afterEach(() => {
+			if (originalApiKey === undefined) {
+				delete process.env.EXA_API_KEY;
+			} else {
+				process.env.EXA_API_KEY = originalApiKey;
+			}
+			vi.restoreAllMocks();
+			vi.unstubAllGlobals();
+		});
+
+		it("should fail if no API key is provided and remote MCP call fails", async () => {
+			delete process.env.EXA_API_KEY;
+			const mockFetch = vi.fn().mockResolvedValue({
+				ok: false,
+				status: 500,
+				text: async () => "Internal Server Error",
+			});
+			vi.stubGlobal("fetch", mockFetch);
+
+			await expect(webSearchTool.execute("test-search-1", { query: "test query" })).rejects.toThrow(
+				/web_search requires an Exa API key or a working connection to remote MCP. Exa MCP returned HTTP 500: Internal Server Error/,
+			);
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				"https://mcp.exa.ai/mcp",
+				expect.objectContaining({
+					method: "POST",
+				}),
+			);
+		});
+
+		it("should fall back to keyless remote HTTP MCP on success when no API key is provided", async () => {
+			delete process.env.EXA_API_KEY;
+
+			const mockResponseText =
+				"event: message\ndata: " +
+				JSON.stringify({
+					jsonrpc: "2.0",
+					id: "1",
+					result: {
+						content: [
+							{
+								type: "text",
+								text: "Title: Fallback Title\nURL: https://example.com/fallback\nPublished: 2026-05-20T00:00:00.000Z\nHighlights:\nThis is a keyless fallback snippet.\n",
+							},
+						],
+					},
+				}) +
+				"\n";
+
+			const mockFetch = vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				text: async () => mockResponseText,
+			});
+			vi.stubGlobal("fetch", mockFetch);
+
+			const result = await webSearchTool.execute("test-search-fallback", {
+				query: "test query",
+				numResults: 1,
+			});
+
+			const output = getTextOutput(result);
+			expect(output).toContain("Fallback Title");
+			expect(output).toContain("https://example.com/fallback");
+			expect(output).toContain("This is a keyless fallback snippet.");
+			expect(result.details.results).toHaveLength(1);
+			expect(result.details.results[0].title).toBe("Fallback Title");
+			expect(result.details.results[0].url).toBe("https://example.com/fallback");
+			expect(result.details.results[0].snippet).toBe("This is a keyless fallback snippet.");
+
+			expect(mockFetch).toHaveBeenCalledWith(
+				"https://mcp.exa.ai/mcp",
+				expect.objectContaining({
+					method: "POST",
+					headers: expect.objectContaining({
+						"Content-Type": "application/json",
+						Accept: "application/json, text/event-stream",
+					}),
+				}),
+			);
+		});
+
+		it("should return search results on success", async () => {
+			process.env.EXA_API_KEY = "test-key";
+
+			const mockResponseData = {
+				results: [
+					{
+						title: "Test Title 1",
+						url: "https://example.com/1",
+						publishedDate: "2026-05-20T00:00:00.000Z",
+						snippet: "This is snippet 1.",
+					},
+					{
+						title: "Test Title 2",
+						url: "https://example.com/2",
+						snippet: "This is snippet 2.",
+					},
+				],
+			};
+
+			const mockFetch = vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => mockResponseData,
+			});
+			vi.stubGlobal("fetch", mockFetch);
+
+			const result = await webSearchTool.execute("test-search-2", {
+				query: "test query",
+				numResults: 2,
+			});
+
+			const output = getTextOutput(result);
+			expect(output).toContain("Test Title 1");
+			expect(output).toContain("https://example.com/1");
+			expect(output).toContain("This is snippet 1.");
+			expect(output).toContain("Test Title 2");
+			expect(output).toContain("https://example.com/2");
+			expect(output).toContain("This is snippet 2.");
+			expect(result.details.results).toHaveLength(2);
+			expect(result.details.numResults).toBe(2);
+
+			// Verify fetch call params
+			expect(mockFetch).toHaveBeenCalledWith(
+				"https://api.exa.ai/search",
+				expect.objectContaining({
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"x-api-key": "test-key",
+					},
+				}),
+			);
+			const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+			expect(body.query).toBe("test query");
+			expect(body.numResults).toBe(2);
+		});
+
+		it("should handle HTTP errors from Exa API", async () => {
+			process.env.EXA_API_KEY = "test-key";
+
+			const mockFetch = vi.fn().mockResolvedValue({
+				ok: false,
+				status: 401,
+				text: async () => "Unauthorized API key",
+			});
+			vi.stubGlobal("fetch", mockFetch);
+
+			await expect(webSearchTool.execute("test-search-3", { query: "test query" })).rejects.toThrow(
+				"Exa search returned HTTP 401: Unauthorized API key",
+			);
+		});
+
+		it("should handle network errors gracefully", async () => {
+			process.env.EXA_API_KEY = "test-key";
+
+			const mockFetch = vi.fn().mockRejectedValue(new Error("Connection refused"));
+			vi.stubGlobal("fetch", mockFetch);
+
+			await expect(webSearchTool.execute("test-search-4", { query: "test" })).rejects.toThrow(
+				"Network error calling Exa: Connection refused",
+			);
+		});
 	});
 });

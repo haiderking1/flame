@@ -16,13 +16,13 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentToolResult } from "@earendil-works/pi-agent-core";
-import type { Message } from "@earendil-works/pi-ai";
-import { StringEnum } from "@earendil-works/pi-ai";
-import { type ExtensionAPI, getMarkdownTheme, withFileMutationQueue } from "@earendil-works/pi-coding-agent";
-import { Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
+import type { AgentToolResult } from "@earendil-works/flame-agent-core";
+import type { Message } from "@earendil-works/flame-ai";
+import { StringEnum } from "@earendil-works/flame-ai";
+import { type ExtensionAPI, getMarkdownTheme, withFileMutationQueue } from "@earendil-works/flame-coding-agent";
+import { Container, Markdown, Spacer, Text } from "@earendil-works/flame-tui";
 import { Type } from "typebox";
-import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.ts";
+import { type AgentConfig, type AgentScope, discoverAgents, resolveSubagentModel } from "./agents.ts";
 
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
@@ -240,20 +240,51 @@ async function writePromptToTempFile(agentName: string, prompt: string): Promise
 	return { dir: tmpDir, filePath };
 }
 
-function getPiInvocation(args: string[]): { command: string; args: string[] } {
+function findRepoRootFromScript(scriptPath: string): string | null {
+	const normalized = scriptPath.replace(/\\/g, "/");
+	const marker = "/packages/coding-agent/";
+	const idx = normalized.lastIndexOf(marker);
+	if (idx === -1) {
+		return null;
+	}
+	return scriptPath.slice(0, idx);
+}
+
+function getFlameInvocation(extraArgs: string[]): { command: string; args: string[] } {
+	const envCommand = process.env.FLAME_SUBAGENT_COMMAND?.trim();
+	if (envCommand) {
+		const parts = envCommand.split(/\s+/).filter(Boolean);
+		if (parts.length > 0) {
+			return { command: parts[0], args: [...parts.slice(1), ...extraArgs] };
+		}
+	}
+
 	const currentScript = process.argv[1];
 	const isBunVirtualScript = currentScript?.startsWith("/$bunfs/root/");
 	if (currentScript && !isBunVirtualScript && fs.existsSync(currentScript)) {
-		return { command: process.execPath, args: [currentScript, ...args] };
+		const scriptExt = path.extname(currentScript).toLowerCase();
+		if (scriptExt === ".ts") {
+			const repoRoot = findRepoRootFromScript(currentScript);
+			if (repoRoot) {
+				const tsxBin =
+					process.platform === "win32"
+						? path.join(repoRoot, "node_modules", ".bin", "tsx.cmd")
+						: path.join(repoRoot, "node_modules", ".bin", "tsx");
+				if (fs.existsSync(tsxBin)) {
+					return { command: tsxBin, args: [currentScript, ...extraArgs] };
+				}
+			}
+		}
+		return { command: process.execPath, args: [currentScript, ...extraArgs] };
 	}
 
 	const execName = path.basename(process.execPath).toLowerCase();
 	const isGenericRuntime = /^(node|bun)(\.exe)?$/.test(execName);
 	if (!isGenericRuntime) {
-		return { command: process.execPath, args };
+		return { command: process.execPath, args: extraArgs };
 	}
 
-	return { command: "pi", args };
+	return { command: "flame", args: extraArgs };
 }
 
 type OnUpdateCallback = (partial: AgentToolResult<SubagentDetails>) => void;
@@ -268,6 +299,7 @@ async function runSingleAgent(
 	signal: AbortSignal | undefined,
 	onUpdate: OnUpdateCallback | undefined,
 	makeDetails: (results: SingleResult[]) => SubagentDetails,
+	parentModel?: { provider: string; id: string },
 ): Promise<SingleResult> {
 	const agent = agents.find((a) => a.name === agentName);
 
@@ -286,7 +318,9 @@ async function runSingleAgent(
 	}
 
 	const args: string[] = ["--mode", "json", "-p", "--no-session"];
-	if (agent.model) args.push("--model", agent.model);
+	const resolvedModel = resolveSubagentModel(agent, parentModel);
+	if (resolvedModel.provider) args.push("--provider", resolvedModel.provider);
+	if (resolvedModel.model) args.push("--model", resolvedModel.model);
 	if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
 
 	let tmpPromptDir: string | null = null;
@@ -300,7 +334,7 @@ async function runSingleAgent(
 		messages: [],
 		stderr: "",
 		usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, contextTokens: 0, turns: 0 },
-		model: agent.model,
+		model: resolvedModel.model ?? agent.model,
 		step,
 	};
 
@@ -325,7 +359,7 @@ async function runSingleAgent(
 		let wasAborted = false;
 
 		const exitCode = await new Promise<number>((resolve) => {
-			const invocation = getPiInvocation(args);
+			const invocation = getFlameInvocation(args);
 			const proc = spawn(invocation.command, invocation.args, {
 				cwd: cwd ?? defaultCwd,
 				shell: false,
@@ -458,9 +492,11 @@ export default function (pi: ExtensionAPI) {
 		description: [
 			"Delegate tasks to specialized subagents with isolated context.",
 			"Modes: single (agent + task), parallel (tasks array), chain (sequential with {previous} placeholder).",
-			'Default agent scope is "user" (from ~/.pi/agent/agents).',
-			'To enable project-local agents in .pi/agents, set agentScope: "both" (or "project").',
+			'Default agent scope is "user" (from ~/.flame/agent/agents).',
+			'To enable project-local agents in .flame/agents, set agentScope: "both" (or "project").',
+			"Subagents inherit provider/model from each agent definition; override with FLAME_SUBAGENT_MODEL or FLAME_SUBAGENT_<AGENT>_MODEL.",
 		].join(" "),
+		promptSnippet: "Delegate work to scout/planner/worker/reviewer subagents with isolated context",
 		parameters: SubagentParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
@@ -468,6 +504,7 @@ export default function (pi: ExtensionAPI) {
 			const discovery = discoverAgents(ctx.cwd, agentScope);
 			const agents = discovery.agents;
 			const confirmProjectAgents = params.confirmProjectAgents ?? true;
+			const parentModel = ctx.model ? { provider: ctx.model.provider, id: ctx.model.id } : undefined;
 
 			const hasChain = (params.chain?.length ?? 0) > 0;
 			const hasTasks = (params.tasks?.length ?? 0) > 0;
@@ -554,6 +591,7 @@ export default function (pi: ExtensionAPI) {
 						signal,
 						chainUpdate,
 						makeDetails("chain"),
+						parentModel,
 					);
 					results.push(result);
 
@@ -632,6 +670,7 @@ export default function (pi: ExtensionAPI) {
 							}
 						},
 						makeDetails("parallel"),
+						parentModel,
 					);
 					allResults[index] = result;
 					emitParallelUpdate();
@@ -668,6 +707,7 @@ export default function (pi: ExtensionAPI) {
 					signal,
 					onUpdate,
 					makeDetails("single"),
+					parentModel,
 				);
 				const isError = isFailedResult(result);
 				if (isError) {

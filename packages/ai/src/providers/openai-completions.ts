@@ -36,6 +36,7 @@ import { parseStreamingJson } from "../utils/json-parse.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { isCloudflareProvider, resolveCloudflareBaseUrl } from "./cloudflare.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
+import { streamOllamaNative } from "./ollama-native.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
 import { buildBaseOptions } from "./simple-options.ts";
 import { transformMessages } from "./transform-messages.ts";
@@ -103,7 +104,7 @@ function resolveCacheRetention(cacheRetention?: CacheRetention): CacheRetention 
 	if (cacheRetention) {
 		return cacheRetention;
 	}
-	if (typeof process !== "undefined" && process.env.PI_CACHE_RETENTION === "long") {
+	if (typeof process !== "undefined" && process.env.FLAME_CACHE_RETENTION === "long") {
 		return "long";
 	}
 	return "short";
@@ -114,6 +115,14 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 	context: Context,
 	options?: OpenAICompletionsOptions,
 ): AssistantMessageEventStream => {
+	// Route Ollama through the native /api/chat transport so options.num_ctx
+	// is actually honored. Ollama's /v1/chat/completions shim has no per-request
+	// way to set context size (PR #8672 closed, PR #11249 unmerged), so going
+	// through the OpenAI SDK guarantees silent truncation on overflow.
+	if (model.provider === "ollama") {
+		return streamOllamaNative(model, context, options);
+	}
+
 	const stream = new AssistantMessageEventStream();
 
 	(async () => {
@@ -136,7 +145,10 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 		};
 
 		try {
-			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || "";
+			const isLocalOllama =
+				model.provider === "ollama" &&
+				(model.baseUrl?.includes("localhost:11434") || model.baseUrl?.includes("127.0.0.1:11434"));
+			const apiKey = options?.apiKey || getEnvApiKey(model.provider) || (isLocalOllama ? "ollama" : "");
 			const compat = getCompat(model);
 			const cacheRetention = resolveCacheRetention(options?.cacheRetention);
 			const cacheSessionId = cacheRetention === "none" ? undefined : options?.sessionId;
@@ -428,7 +440,10 @@ export const streamSimpleOpenAICompletions: StreamFunction<"openai-completions",
 	context: Context,
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream => {
-	const apiKey = options?.apiKey || getEnvApiKey(model.provider);
+	const isLocalOllama =
+		model.provider === "ollama" &&
+		(model.baseUrl?.includes("localhost:11434") || model.baseUrl?.includes("127.0.0.1:11434"));
+	const apiKey = options?.apiKey || getEnvApiKey(model.provider) || (isLocalOllama ? "ollama" : undefined);
 	if (!apiKey) {
 		throw new Error(`No API key for provider: ${model.provider}`);
 	}
@@ -453,13 +468,19 @@ function createClient(
 	sessionId?: string,
 	compat: ResolvedOpenAICompletionsCompat = getCompat(model),
 ) {
+	const isLocalOllama =
+		model.provider === "ollama" &&
+		(model.baseUrl?.includes("localhost:11434") || model.baseUrl?.includes("127.0.0.1:11434"));
 	if (!apiKey) {
-		if (!process.env.OPENAI_API_KEY) {
+		if (isLocalOllama) {
+			apiKey = "ollama";
+		} else if (!process.env.OPENAI_API_KEY) {
 			throw new Error(
 				"OpenAI API key is required. Set OPENAI_API_KEY environment variable or pass it as an argument.",
 			);
+		} else {
+			apiKey = process.env.OPENAI_API_KEY;
 		}
-		apiKey = process.env.OPENAI_API_KEY;
 	}
 
 	const headers = { ...model.headers };
@@ -1077,6 +1098,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 	const isMoonshot = provider === "moonshotai" || provider === "moonshotai-cn" || baseUrl.includes("api.moonshot.");
 	const isCloudflareWorkersAI = provider === "cloudflare-workers-ai" || baseUrl.includes("api.cloudflare.com");
 	const isCloudflareAiGateway = provider === "cloudflare-ai-gateway" || baseUrl.includes("gateway.ai.cloudflare.com");
+	const isOllama = provider === "ollama" || baseUrl.includes("localhost:11434") || baseUrl.includes("ollama.com");
 
 	const isNonStandard =
 		provider === "cerebras" ||
@@ -1091,9 +1113,10 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 		provider === "opencode" ||
 		baseUrl.includes("opencode.ai") ||
 		isCloudflareWorkersAI ||
-		isCloudflareAiGateway;
+		isCloudflareAiGateway ||
+		isOllama;
 
-	const useMaxTokens = baseUrl.includes("chutes.ai") || isMoonshot || isCloudflareAiGateway || isTogether;
+	const useMaxTokens = baseUrl.includes("chutes.ai") || isMoonshot || isCloudflareAiGateway || isTogether || isOllama;
 
 	const isGrok = provider === "xai" || baseUrl.includes("api.x.ai");
 	const isDeepSeek = provider === "deepseek" || baseUrl.includes("deepseek.com");
@@ -1121,7 +1144,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 		openRouterRouting: {},
 		vercelGatewayRouting: {},
 		zaiToolStream: false,
-		supportsStrictMode: !isMoonshot && !isTogether && !isCloudflareAiGateway,
+		supportsStrictMode: !isMoonshot && !isTogether && !isCloudflareAiGateway && !isOllama,
 		cacheControlFormat,
 		sendSessionAffinityHeaders: false,
 		supportsLongCacheRetention: !(isTogether || isCloudflareWorkersAI || isCloudflareAiGateway),

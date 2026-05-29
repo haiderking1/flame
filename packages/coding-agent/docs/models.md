@@ -1,6 +1,6 @@
 # Custom Models
 
-Add custom providers and models (Ollama, vLLM, LM Studio, proxies) via `~/.pi/agent/models.json`.
+Add custom providers and models (Ollama, vLLM, LM Studio, proxies) via `~/.flame/agent/models.json`.
 
 ## Table of Contents
 
@@ -13,6 +13,7 @@ Add custom providers and models (Ollama, vLLM, LM Studio, proxies) via `~/.pi/ag
 - [Per-model Overrides](#per-model-overrides)
 - [Anthropic Messages Compatibility](#anthropic-messages-compatibility)
 - [OpenAI Compatibility](#openai-compatibility)
+- [Ollama](#ollama)
 
 ## Minimal Example
 
@@ -476,5 +477,68 @@ Vercel AI Gateway example:
       ]
     }
   }
+}
+```
+
+## Ollama
+
+Ollama uses the `openai-completions` API and runs in two modes.
+
+### Local Ollama
+
+Base URL: `http://localhost:11434/v1`. No API key is required, but the `apiKey` field must be set (use any value such as `"ollama"`).
+
+```json
+{
+  "providers": {
+    "ollama": {
+      "baseUrl": "http://localhost:11434/v1",
+      "api": "openai-completions",
+      "apiKey": "ollama",
+      "compat": {
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false
+      },
+      "models": [
+        { "id": "llama3.1:8b" },
+        { "id": "qwen2.5-coder:7b" },
+        {
+          "id": "deepseek-r1:14b",
+          "reasoning": true,
+          "contextWindow": 131072
+        }
+      ]
+    }
+  }
+}
+```
+
+Many local Ollama models do not support the `developer` role or `reasoning_effort`. Set `supportsDeveloperRole` and `supportsReasoningEffort` to `false` at the provider level to apply these compat overrides to all models.
+
+### Ollama Cloud
+
+Base URL: `https://ollama.com/v1`. Requires an API key set via the `OLLAMA_API_KEY` environment variable or `auth.json`.
+
+```json
+{
+  "providers": {
+    "ollama-cloud": {
+      "baseUrl": "https://ollama.com/v1",
+      "api": "openai-completions",
+      "apiKey": "OLLAMA_API_KEY",
+      "models": [
+        { "id": "llama3.1:8b" },
+        { "id": "qwen2.5-coder:7b" }
+      ]
+    }
+  }
+}
+```
+
+For `auth.json`, use the `ollama-cloud` key:
+
+```json
+{
+  "ollama-cloud": { "type": "api_key", "key": "your-ollama-api-key" }
 }
 ```

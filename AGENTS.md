@@ -40,7 +40,7 @@
 - Hydrate/update locally with `npm install --ignore-scripts`; clean/CI-style with `npm ci --ignore-scripts`. Don't run lifecycle scripts unless the user asks.
 - If dep metadata changes, refresh `package-lock.json` with `npm install --package-lock-only --ignore-scripts`.
 - If `packages/coding-agent/npm-shrinkwrap.json` needs regen, run `node scripts/generate-coding-agent-shrinkwrap.mjs` (verify with `--check` or `npm run check`). New deps with lifecycle scripts require review and an explicit allowlist entry in that script; never add one silently.
-- Pre-commit blocks lockfile commits unless `PI_ALLOW_LOCKFILE_CHANGE=1`. Don't bypass unless the user wants the lockfile change committed.
+- Pre-commit blocks lockfile commits unless `FLAME_ALLOW_LOCKFILE_CHANGE=1`. Don't bypass unless the user wants the lockfile change committed.
 
 ## Git
 
@@ -87,7 +87,7 @@ Run the TUI in a controlled terminal (from the repo root):
 
 ```bash
 tmux new-session -d -s pi-test -x 80 -y 24
-tmux send-keys -t pi-test "./pi-test.sh" Enter
+tmux send-keys -t pi-test "./flame-test.sh" Enter
 sleep 3 && tmux capture-pane -t pi-test -p     # capture after startup
 tmux send-keys -t pi-test "your prompt here" Enter
 tmux send-keys -t pi-test Escape               # special keys (also C-o for ctrl+o, etc.)
@@ -107,8 +107,8 @@ Rules:
 
 Attribution:
 
-- Internal (from issues): `Fixed foo bar ([#123](https://github.com/earendil-works/pi-mono/issues/123))`
-- External contributions: `Added feature X ([#456](https://github.com/earendil-works/pi-mono/pull/456) by [@username](https://github.com/username))`
+- Internal (from issues): `Fixed foo bar ([#123](https://github.com/earendil-works/flame-mono/issues/123))`
+- External contributions: `Added feature X ([#456](https://github.com/earendil-works/flame-mono/pull/456) by [@username](https://github.com/username))`
 
 ## Releasing
 
@@ -120,10 +120,10 @@ Attribution:
    ```bash
    npm run release:local -- --out /tmp/pi-local-release --force
    cd /tmp
-   /tmp/pi-local-release/node/pi --help
+   /tmp/pi-local-release/node/flame --help
    /tmp/pi-local-release/node/pi --version
    /tmp/pi-local-release/node/pi
-   /tmp/pi-local-release/bun/pi --help
+   /tmp/pi-local-release/bun/flame --help
    /tmp/pi-local-release/bun/pi --version
    ```
    Verify startup, model/account listing, and at least one real prompt with the intended default provider. Failures are release blockers unless the user explicitly accepts the risk.

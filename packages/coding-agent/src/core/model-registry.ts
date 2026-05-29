@@ -17,8 +17,8 @@ import {
 	registerApiProvider,
 	resetApiProviders,
 	type SimpleStreamOptions,
-} from "@earendil-works/pi-ai";
-import { registerOAuthProvider, resetOAuthProviders } from "@earendil-works/pi-ai/oauth";
+} from "@earendil-works/flame-ai";
+import { registerOAuthProvider, resetOAuthProviders } from "@earendil-works/flame-ai/oauth";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { type Static, Type } from "typebox";
@@ -27,6 +27,7 @@ import type { TLocalizedValidationError } from "typebox/error";
 import { getAgentDir } from "../config.ts";
 import { normalizePath } from "../utils/paths.ts";
 import type { AuthStatus, AuthStorage } from "./auth-storage.ts";
+import { discoverOllamaLocalModels, OLLAMA_LOCAL_BASE_URL } from "./ollama-discovery.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "./provider-display-names.ts";
 import {
 	clearConfigValueCache,
@@ -374,6 +375,31 @@ export class ModelRegistry {
 		}
 	}
 
+	async discoverLocalModels(): Promise<number> {
+		try {
+			const localModels = await discoverOllamaLocalModels();
+			for (const local of localModels) {
+				const alreadyExists = this.models.some(
+					(m) => m.provider === local.provider && m.id === local.id && m.baseUrl === local.baseUrl,
+				);
+				if (!alreadyExists) {
+					this.models.push(local);
+				}
+			}
+			return localModels.length;
+		} catch {
+			return 0;
+		}
+	}
+
+	/**
+	 * Refresh models from disk, then discover local Ollama models.
+	 */
+	async refreshWithDiscovery(): Promise<void> {
+		this.refresh();
+		await this.discoverLocalModels();
+	}
+
 	/**
 	 * Get any error from loading models.json (undefined if no error).
 	 */
@@ -641,6 +667,9 @@ export class ModelRegistry {
 	 * Get API key for a model.
 	 */
 	hasConfiguredAuth(model: Model<Api>): boolean {
+		if (model.provider === "ollama" && model.baseUrl === OLLAMA_LOCAL_BASE_URL) {
+			return true;
+		}
 		return (
 			this.authStorage.hasAuth(model.provider) ||
 			this.providerRequestConfigs.get(model.provider)?.apiKey !== undefined

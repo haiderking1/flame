@@ -17,6 +17,25 @@ function copyToX11Clipboard(options: NativeClipboardExecOptions): void {
 	}
 }
 
+function readFromX11Clipboard(timeout: number, maxBuffer: number): string {
+	try {
+		return execSync("xclip -selection clipboard -o", {
+			encoding: "utf8",
+			timeout,
+			maxBuffer,
+		});
+	} catch {
+		return execSync("xsel --clipboard --output", {
+			encoding: "utf8",
+			timeout,
+			maxBuffer,
+		});
+	}
+}
+
+const READ_TIMEOUT_MS = 5000;
+const MAX_CLIPBOARD_BYTES = 10 * 1024 * 1024;
+
 const MAX_OSC52_ENCODED_LENGTH = 100_000;
 
 function isRemoteSession(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -124,4 +143,68 @@ export async function copyToClipboard(text: string): Promise<void> {
 	if (!copied) {
 		throw new Error("Failed to copy to clipboard");
 	}
+}
+
+export async function readFromClipboard(): Promise<string> {
+	const p = platform();
+
+	try {
+		if (clipboard && p !== "linux") {
+			if (clipboard.hasText && !clipboard.hasText()) {
+				return "";
+			}
+			return await clipboard.getText();
+		}
+	} catch {
+		// Fall through to platform-specific clipboard tools.
+	}
+
+	try {
+		if (p === "darwin") {
+			return execSync("pbpaste", {
+				encoding: "utf8",
+				timeout: READ_TIMEOUT_MS,
+				maxBuffer: MAX_CLIPBOARD_BYTES,
+			});
+		}
+		if (p === "win32") {
+			return execSync('powershell -NoProfile -Command "Get-Clipboard -Raw"', {
+				encoding: "utf8",
+				timeout: READ_TIMEOUT_MS,
+				maxBuffer: MAX_CLIPBOARD_BYTES,
+			});
+		}
+
+		if (process.env.TERMUX_VERSION) {
+			return execSync("termux-clipboard-get", {
+				encoding: "utf8",
+				timeout: READ_TIMEOUT_MS,
+				maxBuffer: MAX_CLIPBOARD_BYTES,
+			});
+		}
+
+		const hasWaylandDisplay = Boolean(process.env.WAYLAND_DISPLAY);
+		const hasX11Display = Boolean(process.env.DISPLAY);
+		const isWayland = isWaylandSession();
+		if (isWayland && hasWaylandDisplay) {
+			try {
+				execSync("which wl-paste", { stdio: "ignore" });
+				return execSync("wl-paste", {
+					encoding: "utf8",
+					timeout: READ_TIMEOUT_MS,
+					maxBuffer: MAX_CLIPBOARD_BYTES,
+				});
+			} catch {
+				if (hasX11Display) {
+					return readFromX11Clipboard(READ_TIMEOUT_MS, MAX_CLIPBOARD_BYTES);
+				}
+			}
+		} else if (hasX11Display) {
+			return readFromX11Clipboard(READ_TIMEOUT_MS, MAX_CLIPBOARD_BYTES);
+		}
+	} catch {
+		// Fall through to error below.
+	}
+
+	throw new Error("Failed to read from clipboard");
 }
