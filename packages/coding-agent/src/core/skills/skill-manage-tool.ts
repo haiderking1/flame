@@ -1,3 +1,4 @@
+import { Text } from "@earendil-works/flame-tui";
 import { type Static, Type } from "typebox";
 import { getFlameHome } from "../../utils/flame-home.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
@@ -66,6 +67,9 @@ export interface SkillManageToolDetails {
 	action: SkillManageInput["action"];
 	name: string;
 	success: boolean;
+	message?: string;
+	path?: string;
+	error?: string;
 }
 
 const SKILL_MANAGE_DESCRIPTION =
@@ -101,6 +105,40 @@ export function createSkillManageToolDefinition(
 		promptGuidelines: [],
 		parameters: skillManageSchema,
 
+		renderCall(args, theme, context) {
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			const action = args?.action ?? "manage";
+			const name = args?.name ?? "";
+			const extra = args?.category
+				? ` ${theme.fg("muted", `[${args.category}]`)}`
+				: args?.file_path
+					? ` ${theme.fg("muted", args.file_path)}`
+					: "";
+			text.setText(
+				`${theme.fg("toolTitle", theme.bold("skill_manage"))} ${theme.fg("accent", `${action} ${name}`)}${extra}`,
+			);
+			return text;
+		},
+
+		renderResult(result, options, theme, context) {
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			const details = result.details as SkillManageToolDetails | undefined;
+			if (context.isError || details?.success === false) {
+				const msg = details?.error ?? (result.content[0]?.type === "text" ? (result.content[0].text ?? "") : "");
+				text.setText(theme.fg("warning", msg.slice(0, 200)));
+			} else if (options.isPartial) {
+				text.setText(theme.fg("muted", "Working on skill..."));
+			} else if (details?.success) {
+				const verb = PAST_TENSE[details.action] ?? `${details.action}d`;
+				const where = details.path ? ` ${theme.fg("muted", `→ ${details.path}`)}` : "";
+				text.setText(theme.fg("toolOutput", `${verb} skill '${details.name}'${where}`));
+			} else {
+				const output = result.content[0]?.type === "text" ? (result.content[0].text ?? "") : "";
+				text.setText(theme.fg("toolOutput", output.slice(0, 200)));
+			}
+			return text;
+		},
+
 		async execute(_toolCallId, args) {
 			const result = await executeSkillManage(args, options);
 			const text = JSON.stringify(result, null, 2);
@@ -110,11 +148,24 @@ export function createSkillManageToolDefinition(
 					action: args.action,
 					name: args.name,
 					success: result.success,
+					message: result.message,
+					path: result.path,
+					error: result.error,
 				},
 			};
 		},
 	};
 }
+
+/** Human past-tense verb per action for the result line. */
+const PAST_TENSE: Record<SkillManageInput["action"], string> = {
+	create: "created",
+	patch: "patched",
+	edit: "edited",
+	delete: "deleted",
+	write_file: "wrote file to",
+	remove_file: "removed file from",
+};
 
 export function createSkillManageTool(options: SkillManageToolOptions = {}) {
 	const definition = createSkillManageToolDefinition(options);
