@@ -39,3 +39,6 @@ plans/
 .pi/hf-sessions/
 .pi/hf-sessions-backup/
 collect.sh
+
+# Test scratch artifacts (regenerated on every run)
+packages/coding-agent/test-temp-process/
