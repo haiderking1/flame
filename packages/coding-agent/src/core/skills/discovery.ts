@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import ignore from "ignore";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import ignore from "ignore";
 import { parseFrontmatter } from "../../utils/frontmatter.ts";
 import { canonicalizePath, resolvePath } from "../../utils/paths.ts";
 import type { ResourceDiagnostic } from "../diagnostics.ts";
@@ -159,9 +159,7 @@ function validateDescription(description: string | undefined): string[] {
 	if (!description || description.trim() === "") {
 		errors.push("description is required");
 	} else if (description.length > MAX_SKILL_DESCRIPTION_LENGTH) {
-		errors.push(
-			`description exceeds ${MAX_SKILL_DESCRIPTION_LENGTH} characters (${description.length})`,
-		);
+		errors.push(`description exceeds ${MAX_SKILL_DESCRIPTION_LENGTH} characters (${description.length})`);
 	}
 
 	return errors;
@@ -281,14 +279,7 @@ function loadSkillsFromDirInternal(
 			}
 
 			if (isDirectory) {
-				const subResult = loadSkillsFromDirInternal(
-					fullPath,
-					source,
-					false,
-					ig,
-					root,
-					categoryRoot,
-				);
+				const subResult = loadSkillsFromDirInternal(fullPath, source, false, ig, root, categoryRoot);
 				skills.push(...subResult.skills);
 				diagnostics.push(...subResult.diagnostics);
 				continue;
@@ -419,9 +410,7 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 
 	if (includeDefaults) {
 		const flameSkillsDir = getSkillsDir();
-		addSkills(
-			loadSkillsFromDirInternal(flameSkillsDir, "user", true, undefined, undefined, flameSkillsDir),
-		);
+		addSkills(loadSkillsFromDirInternal(flameSkillsDir, "user", true, undefined, undefined, flameSkillsDir));
 		const legacyDir = getLegacyAgentSkillsDir(resolvedAgentDir);
 		addSkills(loadSkillsFromDirInternal(legacyDir, "user", true, undefined, undefined, legacyDir));
 	}
@@ -457,9 +446,7 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 			const stats = statSync(resolvedPath);
 			const source = getSource(resolvedPath);
 			if (stats.isDirectory()) {
-				addSkills(
-					loadSkillsFromDirInternal(resolvedPath, source, true, undefined, undefined, resolvedPath),
-				);
+				addSkills(loadSkillsFromDirInternal(resolvedPath, source, true, undefined, undefined, resolvedPath));
 			} else if (stats.isFile() && resolvedPath.endsWith(".md")) {
 				const parentDir = dirname(resolvedPath);
 				const result = loadSkillFromFile(resolvedPath, source, parentDir);

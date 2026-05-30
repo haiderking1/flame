@@ -39,7 +39,10 @@ export interface SkillScanResult {
 
 export type SkillTrustLevel = "builtin" | "trusted" | "community" | "agent-created";
 
-const INSTALL_POLICY: Record<SkillTrustLevel, readonly ["allow" | "block" | "ask", "allow" | "block" | "ask", "allow" | "block" | "ask"]> = {
+const INSTALL_POLICY: Record<
+	SkillTrustLevel,
+	readonly ["allow" | "block" | "ask", "allow" | "block" | "ask", "allow" | "block" | "ask"]
+> = {
 	builtin: ["allow", "allow", "allow"],
 	trusted: ["allow", "allow", "block"],
 	community: ["allow", "block", "block"],
@@ -343,7 +346,10 @@ export function shouldAllowInstall(
 		return { allowed: true, reason: `Allowed (${result.trustLevel} source, ${result.verdict} verdict)` };
 	}
 
-	if (force && !(result.verdict === "dangerous" && (result.trustLevel === "community" || result.trustLevel === "trusted"))) {
+	if (
+		force &&
+		!(result.verdict === "dangerous" && (result.trustLevel === "community" || result.trustLevel === "trusted"))
+	) {
 		return {
 			allowed: true,
 			reason: `Force-installed despite ${result.verdict} verdict (${result.findings.length} findings)`,

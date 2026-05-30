@@ -169,6 +169,8 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 
 	let prompt = `${identityParagraph}
 
+Your identity is defined by ~/.flame/SOUL.md. If the user asks you to change your name, personality, tone, or behavioral style, edit that file with your write tool. Keep it concise (under 500 words). Changes take effect next session.
+
 Available tools:
 ${toolsList}
 

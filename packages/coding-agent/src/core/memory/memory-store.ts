@@ -118,9 +118,7 @@ export class MemoryStore {
 			if (bak) return buildDriftError(getMemoryFilePath(target), bak);
 
 			const entries = this.entriesFor(target);
-			const matches = entries
-				.map((entry, idx) => ({ entry, idx }))
-				.filter(({ entry }) => entry.includes(oldTrim));
+			const matches = entries.map((entry, idx) => ({ entry, idx })).filter(({ entry }) => entry.includes(oldTrim));
 
 			if (matches.length === 0) {
 				return { success: false, error: `No entry matched '${oldTrim}'.` };
@@ -165,9 +163,7 @@ export class MemoryStore {
 			if (bak) return buildDriftError(getMemoryFilePath(target), bak);
 
 			const entries = this.entriesFor(target);
-			const matches = entries
-				.map((entry, idx) => ({ entry, idx }))
-				.filter(({ entry }) => entry.includes(oldTrim));
+			const matches = entries.map((entry, idx) => ({ entry, idx })).filter(({ entry }) => entry.includes(oldTrim));
 
 			if (matches.length === 0) {
 				return { success: false, error: `No entry matched '${oldTrim}'.` };

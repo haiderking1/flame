@@ -50,14 +50,8 @@ describe("skills pillar skill-view", () => {
 	it("returns ambiguity error for multiple matches", () => {
 		mkdirSync(join(tempHome, "skills", "a", "dup"), { recursive: true });
 		mkdirSync(join(tempHome, "skills", "b", "dup"), { recursive: true });
-		writeFileSync(
-			join(tempHome, "skills", "a", "dup", "SKILL.md"),
-			"---\nname: dup-a\ndescription: A\n---\n",
-		);
-		writeFileSync(
-			join(tempHome, "skills", "b", "dup", "SKILL.md"),
-			"---\nname: dup-b\ndescription: B\n---\n",
-		);
+		writeFileSync(join(tempHome, "skills", "a", "dup", "SKILL.md"), "---\nname: dup-a\ndescription: A\n---\n");
+		writeFileSync(join(tempHome, "skills", "b", "dup", "SKILL.md"), "---\nname: dup-b\ndescription: B\n---\n");
 
 		const result = executeSkillView({ name: "dup" });
 		expect(result.success).toBe(false);
@@ -67,10 +61,7 @@ describe("skills pillar skill-view", () => {
 
 	it("blocks path traversal in file_path", () => {
 		mkdirSync(join(tempHome, "skills", "secure"), { recursive: true });
-		writeFileSync(
-			join(tempHome, "skills", "secure", "SKILL.md"),
-			"---\nname: secure\ndescription: Secure\n---\n",
-		);
+		writeFileSync(join(tempHome, "skills", "secure", "SKILL.md"), "---\nname: secure\ndescription: Secure\n---\n");
 		mkdirSync(join(tempHome, "skills", "secure", "references"), { recursive: true });
 		writeFileSync(join(tempHome, "skills", "secure", "references", "note.md"), "secret");
 
@@ -81,10 +72,7 @@ describe("skills pillar skill-view", () => {
 
 	it("loads linked reference file", () => {
 		mkdirSync(join(tempHome, "skills", "refs", "references"), { recursive: true });
-		writeFileSync(
-			join(tempHome, "skills", "refs", "SKILL.md"),
-			"---\nname: refs\ndescription: Has refs\n---\n",
-		);
+		writeFileSync(join(tempHome, "skills", "refs", "SKILL.md"), "---\nname: refs\ndescription: Has refs\n---\n");
 		writeFileSync(join(tempHome, "skills", "refs", "references", "api.md"), "API docs");
 
 		const result = executeSkillView({ name: "refs", file_path: "references/api.md" });
@@ -108,10 +96,7 @@ describe("skills pillar skill-view", () => {
 	it("substitutes FLAME_SKILL_DIR when preprocessing enabled", () => {
 		mkdirSync(join(tempHome, "skills", "vars"), { recursive: true });
 		const skillDir = join(tempHome, "skills", "vars");
-		writeFileSync(
-			join(skillDir, "SKILL.md"),
-			"---\nname: vars\ndescription: Vars\n---\nDir is ${FLAME_SKILL_DIR}\n",
-		);
+		writeFileSync(join(skillDir, "SKILL.md"), "---\nname: vars\ndescription: Vars\n---\nDir is ${FLAME_SKILL_DIR}\n");
 
 		const result = executeSkillView({ name: "vars" });
 		expect(result.success).toBe(true);

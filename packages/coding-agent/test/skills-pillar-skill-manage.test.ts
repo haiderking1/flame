@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadSkillsFromDir } from "../src/core/skills/discovery.ts";
 import { getSkillsDir } from "../src/core/skills/paths.ts";
@@ -75,7 +75,11 @@ describe("skills pillar skill_manage", () => {
 	});
 
 	it("edit replaces full SKILL.md", async () => {
-		await executeSkillManage({ action: "create", name: "edit-me", content: VALID_SKILL.replace("test-skill", "edit-me") });
+		await executeSkillManage({
+			action: "create",
+			name: "edit-me",
+			content: VALID_SKILL.replace("test-skill", "edit-me"),
+		});
 		const updated = VALID_SKILL.replace("test-skill", "edit-me").replace("step two", "step three");
 		const result = await executeSkillManage({ action: "edit", name: "edit-me", content: updated });
 		expect(result.success).toBe(true);
@@ -84,7 +88,11 @@ describe("skills pillar skill_manage", () => {
 	});
 
 	it("patch happy path", async () => {
-		await executeSkillManage({ action: "create", name: "patch-me", content: VALID_SKILL.replace("test-skill", "patch-me") });
+		await executeSkillManage({
+			action: "create",
+			name: "patch-me",
+			content: VALID_SKILL.replace("test-skill", "patch-me"),
+		});
 		const result = await executeSkillManage({
 			action: "patch",
 			name: "patch-me",
@@ -96,7 +104,11 @@ describe("skills pillar skill_manage", () => {
 	});
 
 	it("patch errors when old_string not found", async () => {
-		await executeSkillManage({ action: "create", name: "no-match", content: VALID_SKILL.replace("test-skill", "no-match") });
+		await executeSkillManage({
+			action: "create",
+			name: "no-match",
+			content: VALID_SKILL.replace("test-skill", "no-match"),
+		});
 		const result = await executeSkillManage({
 			action: "patch",
 			name: "no-match",
@@ -152,7 +164,11 @@ alpha beta alpha
 	});
 
 	it("write_file and remove_file", async () => {
-		await executeSkillManage({ action: "create", name: "files", content: VALID_SKILL.replace("test-skill", "files") });
+		await executeSkillManage({
+			action: "create",
+			name: "files",
+			content: VALID_SKILL.replace("test-skill", "files"),
+		});
 		const write = await executeSkillManage({
 			action: "write_file",
 			name: "files",
@@ -173,7 +189,11 @@ alpha beta alpha
 	});
 
 	it("write_file rejects path traversal", async () => {
-		await executeSkillManage({ action: "create", name: "secure", content: VALID_SKILL.replace("test-skill", "secure") });
+		await executeSkillManage({
+			action: "create",
+			name: "secure",
+			content: VALID_SKILL.replace("test-skill", "secure"),
+		});
 		const result = await executeSkillManage({
 			action: "write_file",
 			name: "secure",

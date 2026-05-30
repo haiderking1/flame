@@ -18,7 +18,7 @@
  * pinned skills bypass all transitions, and the deterministic pass needs no
  * model. Best-effort throughout — a curator failure never disturbs the session.
  */
-import { type Dirent, existsSync, mkdirSync, readdirSync, renameSync, statSync } from "node:fs";
+import { type Dirent, existsSync, mkdirSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
 	Agent,
@@ -36,7 +36,7 @@ import { createSkillsListToolDefinition } from "../skills/skills-list-tool.ts";
 import { wrapToolDefinition } from "../tools/tool-definition-wrapper.ts";
 import { snapshotSkills } from "./curator-backup.ts";
 import { buildCuratorReviewPrompt } from "./curator-prompts.ts";
-import { type CuratorState, loadCuratorState, saveCuratorState } from "./curator-state.ts";
+import { type CuratorState, loadCuratorState, type SkillLifecycleState, saveCuratorState } from "./curator-state.ts";
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
@@ -137,14 +137,22 @@ function archiveSkillDir(name: string, skillDir: string): boolean {
 	}
 }
 
+export interface SkillTransitionDetail {
+	name: string;
+	from: SkillLifecycleState;
+	to: SkillLifecycleState;
+}
+
 /**
  * Apply deterministic, LLM-free lifecycle transitions. Mirrors hermes'
- * `apply_automatic_transitions`. Mutates `state.states` in place.
+ * `apply_automatic_transitions`. Mutates `state.states` in place unless dryRun is true.
  */
 export function applyAutomaticTransitions(
 	state: CuratorState,
 	settings: CuratorSettings,
 	now: number = Date.now(),
+	dryRun = false,
+	details?: SkillTransitionDetail[],
 ): TransitionCounts {
 	const staleCutoff = now - settings.staleAfterDays * MS_PER_DAY;
 	const archiveCutoff = now - settings.archiveAfterDays * MS_PER_DAY;
@@ -163,16 +171,25 @@ export function applyAutomaticTransitions(
 		}
 
 		if (anchor <= archiveCutoff) {
-			if (archiveSkillDir(name, skillDir)) {
-				state.states[name] = "archived";
+			if (dryRun || archiveSkillDir(name, skillDir)) {
+				if (!dryRun) {
+					state.states[name] = "archived";
+				}
 				counts.archived++;
+				details?.push({ name, from: current, to: "archived" });
 			}
 		} else if (anchor <= staleCutoff && current === "active") {
-			state.states[name] = "stale";
+			if (!dryRun) {
+				state.states[name] = "stale";
+			}
 			counts.markedStale++;
+			details?.push({ name, from: current, to: "stale" });
 		} else if (anchor > staleCutoff && current === "stale") {
-			state.states[name] = "active";
+			if (!dryRun) {
+				state.states[name] = "active";
+			}
 			counts.reactivated++;
+			details?.push({ name, from: current, to: "active" });
 		}
 	}
 
@@ -212,6 +229,10 @@ export interface MaybeRunCuratorParams {
 	maxIterations?: number;
 	/** Override the clock (tests). */
 	now?: number;
+	/** Force run bypassing deterministic schedule gates. */
+	force?: boolean;
+	/** Run in dry-run mode (simulation only, no disk writes or snapshots). */
+	dryRun?: boolean;
 }
 
 /**
@@ -221,8 +242,9 @@ export interface MaybeRunCuratorParams {
 export async function maybeRunCurator(params: MaybeRunCuratorParams): Promise<CuratorRunResult> {
 	const now = params.now ?? Date.now();
 	const state = loadCuratorState();
+	const dryRun = params.dryRun === true;
 
-	if (!shouldRunNow(state, params.settings, now)) {
+	if (!params.force && !shouldRunNow(state, params.settings, now)) {
 		// Seed lastRunAt on first observation so the first real pass is deferred.
 		if (params.settings.enabled && !state.paused && !state.lastRunAt) {
 			state.lastRunAt = new Date(now).toISOString();
@@ -233,15 +255,18 @@ export async function maybeRunCurator(params: MaybeRunCuratorParams): Promise<Cu
 	}
 
 	try {
-		// 1. Snapshot before any mutation.
-		snapshotSkills("pre-curator-run", params.settings.maxBackups);
+		// 1. Snapshot before any mutation (only in live mode).
+		if (!dryRun) {
+			snapshotSkills("pre-curator-run", params.settings.maxBackups);
+		}
 
 		// 2. Deterministic transitions.
-		const counts = applyAutomaticTransitions(state, params.settings, now);
+		const transitionDetails: SkillTransitionDetail[] = [];
+		const counts = applyAutomaticTransitions(state, params.settings, now, dryRun, transitionDetails);
 
-		// 3. Optional LLM consolidation pass.
+		// 3. Optional LLM consolidation pass (only in live mode).
 		let consolidationSummary: string | undefined;
-		if (params.settings.llmConsolidation && canRunConsolidation(params)) {
+		if (!dryRun && params.settings.llmConsolidation && canRunConsolidation(params)) {
 			consolidationSummary = await runCuratorConsolidation(params);
 		}
 
@@ -250,12 +275,85 @@ export async function maybeRunCurator(params: MaybeRunCuratorParams): Promise<Cu
 		if (counts.archived) summaryParts.push(`${counts.archived} archived`);
 		if (counts.reactivated) summaryParts.push(`${counts.reactivated} reactivated`);
 		if (consolidationSummary) summaryParts.push("consolidation pass complete");
-		const summary = summaryParts.length > 0 ? summaryParts.join(", ") : "no changes";
+		let summary = summaryParts.length > 0 ? summaryParts.join(", ") : "no changes";
+		if (dryRun) {
+			summary = `dry-run: ${summary}`;
+		}
 
-		state.lastRunAt = new Date(now).toISOString();
-		state.lastRunSummary = summary;
-		state.runCount += 1;
-		await saveCuratorState(state);
+		if (!dryRun) {
+			state.lastRunAt = new Date(now).toISOString();
+			state.lastRunSummary = summary;
+			state.runCount += 1;
+			await saveCuratorState(state);
+		}
+
+		// 4. Write run reports (REPORT.md + run.json) to runs log directory.
+		try {
+			const d = new Date(now);
+			const pad = (n: number) => String(n).padStart(2, "0");
+			const runId = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
+			const runDir = join(getSkillsDir(), ".curator_runs", runId);
+			mkdirSync(runDir, { recursive: true });
+
+			const runJson = {
+				runId,
+				timestamp: d.toISOString(),
+				dryRun,
+				settings: params.settings,
+				counts,
+				transitions: transitionDetails,
+				pinned: state.pinned,
+				consolidationSummary,
+			};
+			writeFileSync(join(runDir, "run.json"), `${JSON.stringify(runJson, null, 2)}\n`, "utf-8");
+
+			let report = `# Curator Run Report — ${d.toISOString()}\n\n`;
+			if (dryRun) {
+				report += `> [!WARNING]\n`;
+				report += `> **DRY RUN PASS ONLY** — No files were modified, consolidated, or archived.\n\n`;
+			}
+			report += `## Summary\n\n`;
+			report += `- **Date/Time**: ${d.toISOString()}\n`;
+			report += `- **Mode**: ${dryRun ? "Dry-run (simulation)" : "Live (mutating)"}\n`;
+			report += `- **Total Checked**: ${counts.checked}\n`;
+			report += `- **Marked Stale**: ${counts.markedStale}\n`;
+			report += `- **Archived**: ${counts.archived}\n`;
+			report += `- **Reactivated**: ${counts.reactivated}\n\n`;
+
+			if (transitionDetails.length > 0) {
+				report += `## Transitions\n\n`;
+				report += `| Skill | Action | From State | To State |\n`;
+				report += `| :--- | :--- | :--- | :--- |\n`;
+				for (const t of transitionDetails) {
+					const actionText =
+						t.to === "archived"
+							? "Archived (moved to .archive)"
+							: t.to === "stale"
+								? "Marked Stale"
+								: "Reactivated Active";
+					report += `| \`${t.name}\` | ${actionText} | \`${t.from}\` | \`${t.to}\` |\n`;
+				}
+				report += `\n`;
+			} else {
+				report += `## Transitions\n\nNo skill transitions occurred during this pass.\n\n`;
+			}
+
+			if (state.pinned.length > 0) {
+				report += `## Pinned Skills (Bypassed)\n\n`;
+				for (const p of state.pinned) {
+					report += `- \`${p}\`\n`;
+				}
+				report += `\n`;
+			}
+
+			if (consolidationSummary) {
+				report += `## LLM Consolidation Results\n\n${consolidationSummary}\n`;
+			}
+
+			writeFileSync(join(runDir, "REPORT.md"), report, "utf-8");
+		} catch {
+			// Best-effort reporting — never crash curator loop due to logging failure.
+		}
 
 		return { ran: true, counts, consolidationSummary, summary };
 	} catch {

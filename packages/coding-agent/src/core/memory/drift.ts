@@ -52,7 +52,10 @@ export async function detectExternalDrift(filePath: string, charLimit: number): 
 	return { driftDetected: true, backupPath };
 }
 
-export function buildDriftError(filePath: string, backupPath: string): { success: false; error: string; drift_backup: string; remediation: string } {
+export function buildDriftError(
+	filePath: string,
+	backupPath: string,
+): { success: false; error: string; drift_backup: string; remediation: string } {
 	return {
 		success: false,
 		error:

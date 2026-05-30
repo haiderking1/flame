@@ -1,8 +1,8 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
-import { executeSkillView } from "./skill-view-tool.ts";
 import { getSkillsDir } from "./paths.ts";
 import { defaultPreprocessingConfig, preprocessSkillContent, type SkillsPreprocessingConfig } from "./preprocessing.ts";
+import { executeSkillView } from "./skill-view-tool.ts";
 
 const SKILL_INVALID_CHARS = /[^a-z0-9-]/g;
 const SKILL_MULTI_HYPHEN = /-{2,}/g;
@@ -98,7 +98,9 @@ export function buildSkillInvocationMessage(
 
 	if (options.userInstruction?.trim()) {
 		parts.push("");
-		parts.push(`The user has provided the following instruction alongside the skill invocation: ${options.userInstruction.trim()}`);
+		parts.push(
+			`The user has provided the following instruction alongside the skill invocation: ${options.userInstruction.trim()}`,
+		);
 	}
 
 	if (options.runtimeNote?.trim()) {

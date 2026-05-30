@@ -27,10 +27,7 @@ export interface SkillsListToolOptions {
 	disabledNames?: Set<string>;
 }
 
-export function executeSkillsList(
-	args: SkillsListInput,
-	options: SkillsListToolOptions = {},
-): Record<string, unknown> {
+export function executeSkillsList(args: SkillsListInput, options: SkillsListToolOptions = {}): Record<string, unknown> {
 	const skillsDir = getSkillsDir();
 	if (!existsSync(skillsDir)) {
 		try {

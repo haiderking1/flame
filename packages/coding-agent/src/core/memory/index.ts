@@ -1,11 +1,11 @@
 export { atomicWrite } from "./atomic-write.ts";
 export {
 	buildDriftError,
+	type DriftResult,
 	detectExternalDrift,
 	ENTRY_DELIMITER,
 	parseEntries,
 	serializeEntries,
-	type DriftResult,
 } from "./drift.ts";
 export { withFileLock } from "./file-lock.ts";
 export {
