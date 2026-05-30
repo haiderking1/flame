@@ -13,7 +13,7 @@
  * Modes use this class and add their own I/O layer on top.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import type {
 	Agent,
@@ -34,7 +34,6 @@ import {
 	streamSimple,
 } from "@earendil-works/flame-ai";
 import { theme } from "../modes/interactive/theme/theme.ts";
-import { buildSkillsSystemPromptSync, expandSkillSlashCommand, SKILLS_GUIDANCE } from "./skills/index.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { sleep } from "../utils/sleep.ts";
 import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.ts";
@@ -78,6 +77,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
+import { loadSoulMd, MEMORY_GUIDANCE, MemoryStore } from "./memory/index.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import {
@@ -87,10 +87,11 @@ import {
 } from "./process-tasks.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
-import { loadSoulMd, MEMORY_GUIDANCE, MemoryStore } from "./memory/index.ts";
+import { maybeRunCurator, NudgeTracker, runBackgroundReview } from "./self-improvement/index.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionManager } from "./session-manager.ts";
 import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.ts";
 import type { SettingsManager } from "./settings-manager.ts";
+import { buildSkillsSystemPromptSync, expandSkillSlashCommand, SKILLS_GUIDANCE } from "./skills/index.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
@@ -150,7 +151,9 @@ export type AgentSessionEvent =
 			errorMessage?: string;
 	  }
 	| { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
-	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string };
+	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
+	| { type: "self_improvement_review"; summary: string; memory: boolean; skills: boolean }
+	| { type: "curator_run"; summary: string };
 
 /** Listener function for agent session events */
 export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
@@ -328,6 +331,13 @@ export class AgentSession {
 	private _soulContent: string | undefined;
 	private _memoryReady: Promise<void>;
 
+	// Self-improvement loop (Pillar 5)
+	private _nudgeTracker: NudgeTracker;
+	/** True when this turn's user prompt tripped the memory-review nudge. */
+	private _pendingReviewMemory = false;
+	/** Guards against overlapping background reviews on this session. */
+	private _reviewRunning = false;
+
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
 		this.sessionManager = config.sessionManager;
@@ -343,6 +353,12 @@ export class AgentSession {
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 
+		const selfImprovement = this.settingsManager.getSelfImprovementSettings();
+		this._nudgeTracker = new NudgeTracker({
+			memoryNudgeInterval: selfImprovement.memoryNudgeInterval,
+			skillNudgeInterval: selfImprovement.skillNudgeInterval,
+		});
+
 		// Kick off persistent-memory + soul load. The synchronous _buildRuntime
 		// below will rebuild the system prompt with an empty snapshot; when
 		// the async load completes we rebuild again so subsequent turns see
@@ -357,6 +373,9 @@ export class AgentSession {
 			.then(() => {
 				this._baseSystemPrompt = this._rebuildSystemPrompt(this.getActiveToolNames());
 				this.agent.state.systemPrompt = this._baseSystemPrompt;
+				// Inactivity curator (Pillar 5b). No-op unless opted in via settings;
+				// fire-and-forget so it never blocks startup.
+				void this._maybeRunCuratorOnStartup();
 			})
 			.catch(() => {
 				// Best-effort: a memory/soul load failure must not crash the
@@ -455,6 +474,17 @@ export class AgentSession {
 		};
 
 		this.agent.afterToolCall = async ({ toolCall, args, result, isError }) => {
+			// Self-improvement skill-nudge cadence: count tool-call iterations
+			// while the skill tool is available, and reset the counter whenever
+			// skill_manage actually succeeds (no point nudging a review when a
+			// skill was just updated). Mirrors hermes' _iters_since_skill.
+			if (this.getActiveToolNames().includes("skill_manage")) {
+				this._nudgeTracker.onToolIteration();
+			}
+			if (toolCall.name === "skill_manage" && (result.details as { success?: boolean } | undefined)?.success) {
+				this._nudgeTracker.onSkillManageUsed();
+			}
+
 			const runner = this._extensionRunner;
 			if (!runner.hasHandlers("tool_result")) {
 				return undefined;
@@ -1192,8 +1222,127 @@ export class AgentSession {
 			return;
 		}
 
+		// Self-improvement memory-nudge cadence: evaluate the per-user-turn gate
+		// before the run (matches hermes' pre-loop _turns_since_memory check).
+		this._pendingReviewMemory = this.getActiveToolNames().includes("memory")
+			? this._nudgeTracker.onUserTurnStart()
+			: false;
+
 		preflightResult?.(true);
 		await this._runAgentPrompt(messages);
+
+		// Fire the post-turn self-improvement review off the user-facing path so
+		// it never blocks the response.
+		void this._maybeRunSelfImprovementReview();
+	}
+
+	/**
+	 * Run the post-turn self-improvement review (Pillar 5) when a nudge gate
+	 * fired and the turn finished cleanly. Fire-and-forget: the forked review
+	 * agent writes memory/skills off the main path. Best-effort throughout.
+	 */
+	private async _maybeRunSelfImprovementReview(): Promise<void> {
+		const reviewMemory = this._pendingReviewMemory;
+		this._pendingReviewMemory = false;
+
+		const settings = this.settingsManager.getSelfImprovementSettings();
+		if (!settings.enabled || this._reviewRunning) {
+			return;
+		}
+
+		const skillActive = this.getActiveToolNames().includes("skill_manage");
+		const reviewSkills = skillActive && this._nudgeTracker.consumeSkillReviewDue();
+		if (!reviewMemory && !reviewSkills) {
+			return;
+		}
+
+		// Only review after a clean finish: the last assistant message must carry
+		// real text and not be aborted/errored (mirrors hermes' final_response gate).
+		const last = this._findLastAssistantMessage();
+		if (!last || last.stopReason === "aborted" || last.stopReason === "error") {
+			return;
+		}
+		const hasText = last.content.some((c) => c.type === "text" && c.text.trim().length > 0);
+		if (!hasText) {
+			return;
+		}
+
+		const model = this.model;
+		if (!model) {
+			return;
+		}
+
+		this._reviewRunning = true;
+		try {
+			const result = await runBackgroundReview({
+				snapshot: this.agent.state.messages.slice(),
+				reviewMemory,
+				reviewSkills,
+				memoryStore: this._memoryStore,
+				model,
+				thinkingLevel: this.agent.state.thinkingLevel,
+				streamFn: this.agent.streamFn,
+				convertToLlm: this.agent.convertToLlm,
+				transport: this.agent.transport,
+				thinkingBudgets: this.agent.thinkingBudgets,
+				maxRetryDelayMs: this.agent.maxRetryDelayMs,
+				sessionId: this.agent.sessionId,
+				baseSystemPrompt: this._baseSystemPrompt,
+				maxIterations: settings.reviewMaxIterations,
+				guardAgentCreated: this.settingsManager.getSkillsGuardAgentCreated(),
+				skillViewSessionId: this.sessionId,
+			});
+
+			if (result.summary) {
+				// The review may have written memory; refresh the frozen snapshot so
+				// the next turn's system prompt reflects it.
+				await this._refreshMemoryAfterCompaction();
+				this._emit({
+					type: "self_improvement_review",
+					summary: result.summary,
+					memory: reviewMemory,
+					skills: reviewSkills,
+				});
+			}
+		} catch {
+			// Best-effort: a failed review must not disturb the session.
+		} finally {
+			this._reviewRunning = false;
+		}
+	}
+
+	/**
+	 * Run the inactivity curator (Pillar 5b) at session start when opted in.
+	 * No-op unless `selfImprovement.curator.enabled` is set. Fire-and-forget and
+	 * best-effort: it must never block startup or disturb the session.
+	 */
+	private async _maybeRunCuratorOnStartup(): Promise<void> {
+		const settings = this.settingsManager.getCuratorSettings();
+		if (!settings.enabled) {
+			return;
+		}
+		try {
+			const result = await maybeRunCurator({
+				settings,
+				model: this.model,
+				thinkingLevel: this.agent.state.thinkingLevel,
+				streamFn: this.agent.streamFn,
+				convertToLlm: this.agent.convertToLlm,
+				transport: this.agent.transport,
+				thinkingBudgets: this.agent.thinkingBudgets,
+				maxRetryDelayMs: this.agent.maxRetryDelayMs,
+				sessionId: this.agent.sessionId,
+				baseSystemPrompt: this._baseSystemPrompt,
+				guardAgentCreated: this.settingsManager.getSkillsGuardAgentCreated(),
+			});
+			if (result.ran && result.summary && result.summary !== "no changes") {
+				// Skills changed on disk; refresh so the next turn's prompt reflects it.
+				await this._refreshMemoryAfterCompaction();
+				this._emit({ type: "curator_run", summary: result.summary });
+			}
+		} catch {
+			// Best-effort.
+		}
 	}
 
 	/**

@@ -80,6 +80,37 @@ export interface SkillsConfigSettings {
 	guardAgentCreated?: boolean;
 }
 
+export interface CuratorSettings {
+	/** Master switch for the inactivity curator (default: false — opt-in, it is heavier). */
+	enabled?: boolean;
+	/** Hours between curator runs (default: 168 = 7 days). */
+	intervalHours?: number;
+	/** Days of skill inactivity before it is marked stale (default: 30). */
+	staleAfterDays?: number;
+	/** Days of skill inactivity before a stale skill is archived (default: 90). */
+	archiveAfterDays?: number;
+	/** Number of skill snapshots to keep (default: 5). */
+	maxBackups?: number;
+	/**
+	 * When true, the curator also runs an LLM consolidation pass (umbrella-building)
+	 * after the deterministic stale/archive transitions (default: false).
+	 */
+	llmConsolidation?: boolean;
+}
+
+export interface SelfImprovementSettings {
+	/** Master switch for the post-turn background review loop (default: true). */
+	enabled?: boolean;
+	/** User turns between memory-review nudges; 0 disables (default: 10). */
+	memoryNudgeInterval?: number;
+	/** Tool-call iterations between skill-review nudges; 0 disables (default: 10). */
+	skillNudgeInterval?: number;
+	/** Max assistant turns the forked review agent may run (default: 16). */
+	reviewMaxIterations?: number;
+	/** Inactivity curator (skill consolidation/archival) settings. */
+	curator?: CuratorSettings;
+}
+
 export interface Settings {
 	lastChangelogVersion?: string;
 	defaultProvider?: string;
@@ -103,6 +134,7 @@ export interface Settings {
 	extensions?: string[]; // Array of local extension file paths or directories
 	skills?: string[]; // Array of local skill file paths or directories
 	skillsConfig?: SkillsConfigSettings; // Tool configuration (guard, etc.)
+	selfImprovement?: SelfImprovementSettings; // Post-turn memory/skill review loop + curator
 	prompts?: string[]; // Array of local prompt template paths or directories
 	themes?: string[]; // Array of local theme file paths or directories
 	enableSkillCommands?: boolean; // default: true - register skills as /skill:name commands
@@ -693,6 +725,40 @@ export class SettingsManager {
 			enabled: this.getCompactionEnabled(),
 			reserveTokens: this.getCompactionReserveTokens(),
 			keepRecentTokens: this.getCompactionKeepRecentTokens(),
+		};
+	}
+
+	getSelfImprovementSettings(): {
+		enabled: boolean;
+		memoryNudgeInterval: number;
+		skillNudgeInterval: number;
+		reviewMaxIterations: number;
+	} {
+		const si = this.settings.selfImprovement;
+		return {
+			enabled: si?.enabled ?? true,
+			memoryNudgeInterval: si?.memoryNudgeInterval ?? 10,
+			skillNudgeInterval: si?.skillNudgeInterval ?? 10,
+			reviewMaxIterations: si?.reviewMaxIterations ?? 16,
+		};
+	}
+
+	getCuratorSettings(): {
+		enabled: boolean;
+		intervalHours: number;
+		staleAfterDays: number;
+		archiveAfterDays: number;
+		maxBackups: number;
+		llmConsolidation: boolean;
+	} {
+		const curator = this.settings.selfImprovement?.curator;
+		return {
+			enabled: curator?.enabled ?? false,
+			intervalHours: curator?.intervalHours ?? 168,
+			staleAfterDays: curator?.staleAfterDays ?? 30,
+			archiveAfterDays: curator?.archiveAfterDays ?? 90,
+			maxBackups: curator?.maxBackups ?? 5,
+			llmConsolidation: curator?.llmConsolidation ?? false,
 		};
 	}
 
