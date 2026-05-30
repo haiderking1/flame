@@ -1,0 +1,12 @@
+{
+  "taskId": "proc_1780112525117",
+  "command": "npm run build",
+  "cwd": "/home/idk/projects/flame/packages/coding-agent/test-temp-process",
+  "status": "running",
+  "pid": 4242,
+  "exitCode": null,
+  "signal": null,
+  "startedAt": 1780112525117,
+  "notify": true,
+  "notified": false
+}
