@@ -86,7 +86,6 @@
 		"tui",
 		"agent"
 	],
-	"author": "Mario Zechner",
 	"license": "MIT",
 	"repository": {
 		"type": "git",

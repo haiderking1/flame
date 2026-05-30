@@ -24,7 +24,6 @@
 		"typescript",
 		"cli"
 	],
-	"author": "Mario Zechner",
 	"license": "MIT",
 	"repository": {
 		"type": "git",

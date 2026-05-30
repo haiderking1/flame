@@ -88,7 +88,6 @@
 		"unified",
 		"api"
 	],
-	"author": "Mario Zechner",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
