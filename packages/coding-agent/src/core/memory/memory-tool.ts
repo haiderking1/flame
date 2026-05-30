@@ -10,14 +10,14 @@ const memorySchema = Type.Object({
 		description: "What to do: add a new entry, replace an existing one, or remove one.",
 	}),
 	target: Type.Union([Type.Literal("memory"), Type.Literal("user")], {
-		description: "Which store: 'memory' for personal notes (env facts, project conventions), 'user' for user profile (preferences, role, style).",
+		description:
+			"Which store: 'memory' for personal notes (env facts, project conventions), 'user' for user profile (preferences, role, style).",
 	}),
-	content: Type.Optional(
-		Type.String({ description: "Entry content. Required for 'add' and 'replace'." }),
-	),
+	content: Type.Optional(Type.String({ description: "Entry content. Required for 'add' and 'replace'." })),
 	old_text: Type.Optional(
 		Type.String({
-			description: "Short unique substring identifying the entry to replace or remove. Required for 'replace' and 'remove'.",
+			description:
+				"Short unique substring identifying the entry to replace or remove. Required for 'replace' and 'remove'.",
 		}),
 	),
 });
@@ -50,9 +50,7 @@ const TOOL_DESCRIPTION =
 	"ACTIONS: add (new entry), replace (update existing — old_text identifies it), remove (delete — old_text identifies it).\n\n" +
 	"SKIP: trivial/obvious info, things easily re-discovered, raw data dumps, and temporary task state.";
 
-export function createMemoryToolDefinition(
-	store: MemoryStore,
-): ToolDefinition<typeof memorySchema, MemoryToolDetails> {
+export function createMemoryToolDefinition(store: MemoryStore): ToolDefinition<typeof memorySchema, MemoryToolDetails> {
 	return {
 		name: "memory",
 		label: "memory",

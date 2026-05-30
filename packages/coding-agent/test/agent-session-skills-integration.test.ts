@@ -4,12 +4,12 @@
  */
 
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { buildSkillsSystemPromptSync } from "../src/core/skills/prompt-index.ts";
 import { executeSkillManage } from "../src/core/skills/skill-manage-actions.ts";
 import { executeSkillView } from "../src/core/skills/skill-view-tool.ts";
-import { buildSkillsSystemPromptSync } from "../src/core/skills/prompt-index.ts";
 import { createHarnessWithExtensions } from "./test-harness.ts";
 
 const SKILL_CONTENT = `---

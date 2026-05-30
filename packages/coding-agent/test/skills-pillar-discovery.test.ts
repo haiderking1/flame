@@ -25,10 +25,7 @@ describe("skills pillar discovery", () => {
 	it("iterSkillIndexFiles excludes node_modules and .git", () => {
 		const root = join(tempDir, "skills-root");
 		mkdirSync(join(root, "github", "my-skill"), { recursive: true });
-		writeFileSync(
-			join(root, "github", "my-skill", "SKILL.md"),
-			"---\nname: my-skill\ndescription: test\n---\nbody",
-		);
+		writeFileSync(join(root, "github", "my-skill", "SKILL.md"), "---\nname: my-skill\ndescription: test\n---\nbody");
 		mkdirSync(join(root, "node_modules", "pkg", "nested-skill"), { recursive: true });
 		writeFileSync(
 			join(root, "node_modules", "pkg", "nested-skill", "SKILL.md"),
@@ -53,10 +50,7 @@ describe("skills pillar discovery", () => {
 	it("loadSkillsFromDir assigns category from path", () => {
 		const root = join(tempDir, "cat-skill");
 		mkdirSync(join(root, "devops", "deploy"), { recursive: true });
-		writeFileSync(
-			join(root, "devops", "deploy", "SKILL.md"),
-			"---\nname: deploy\ndescription: Deploy things\n---\n",
-		);
+		writeFileSync(join(root, "devops", "deploy", "SKILL.md"), "---\nname: deploy\ndescription: Deploy things\n---\n");
 		const { skills } = loadSkillsFromDir({ dir: root, source: "test", skillsRoot: root });
 		expect(skills).toHaveLength(1);
 		expect(skills[0]?.category).toBe("devops");

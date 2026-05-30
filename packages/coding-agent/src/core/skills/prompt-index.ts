@@ -4,12 +4,7 @@ import { parseFrontmatter } from "../../utils/frontmatter.ts";
 import { atomicWrite } from "../memory/atomic-write.ts";
 import { SKILLS_PROMPT_CACHE_MAX, SKILLS_SNAPSHOT_VERSION } from "./constants.ts";
 import { iterSkillIndexFiles } from "./discovery.ts";
-import {
-	buildSnapshotEntry,
-	extractSkillDescription,
-	skillMatchesPlatform,
-	skillShouldShow,
-} from "./frontmatter.ts";
+import { buildSnapshotEntry, extractSkillDescription, skillMatchesPlatform, skillShouldShow } from "./frontmatter.ts";
 import { getSkillsDir, getSkillsPromptSnapshotPath } from "./paths.ts";
 import { buildSkillsIndexFooter, buildSkillsIndexHeader } from "./prompt-strings.ts";
 import type { SkillConditions, SkillFrontmatter, SkillSnapshotEntry, SkillsPromptSnapshot } from "./types.ts";
@@ -81,7 +76,11 @@ async function writeSkillsSnapshot(
 	} catch {}
 }
 
-function parseSkillFile(skillFile: string): { compatible: boolean; frontmatter: SkillFrontmatter; description: string } {
+function parseSkillFile(skillFile: string): {
+	compatible: boolean;
+	frontmatter: SkillFrontmatter;
+	description: string;
+} {
 	try {
 		const raw = readFileSync(skillFile, "utf-8");
 		const { frontmatter } = parseFrontmatter<SkillFrontmatter>(raw);
@@ -107,10 +106,7 @@ function readCategoryDescriptions(skillsDir: string): Record<string, string> {
 			const parts = rel.split("/");
 			const cat = parts.length > 1 ? parts.slice(0, -1).join("/") : "general";
 			let desc = String(catDesc).trim();
-			if (
-				(desc.startsWith('"') && desc.endsWith('"')) ||
-				(desc.startsWith("'") && desc.endsWith("'"))
-			) {
+			if ((desc.startsWith('"') && desc.endsWith('"')) || (desc.startsWith("'") && desc.endsWith("'"))) {
 				desc = desc.slice(1, -1);
 			}
 			descriptions[cat] = desc;
@@ -151,7 +147,10 @@ function cacheKey(options: BuildSkillsSystemPromptOptions, skillsDir: string, ex
 	const tools = options.availableTools ? [...options.availableTools].sort().join(",") : "";
 	const toolsets = options.availableToolsets ? [...options.availableToolsets].sort().join(",") : "";
 	const disabled = options.disabledNames ? [...options.disabledNames].sort().join(",") : "";
-	const ext = externalDirs.map((d) => resolve(d)).sort().join("|");
+	const ext = externalDirs
+		.map((d) => resolve(d))
+		.sort()
+		.join("|");
 	return `${resolve(skillsDir)}|${ext}|${tools}|${toolsets}|${options.platformHint ?? ""}|${disabled}`;
 }
 
@@ -221,7 +220,10 @@ export async function buildSkillsSystemPrompt(options: BuildSkillsSystemPromptOp
 			if (!skillShouldShow(conditions, options.availableTools, options.availableToolsets)) {
 				continue;
 			}
-			skillsByCategory.set(category, [...(skillsByCategory.get(category) ?? []), [frontmatterName, entry.description ?? ""]]);
+			skillsByCategory.set(category, [
+				...(skillsByCategory.get(category) ?? []),
+				[frontmatterName, entry.description ?? ""],
+			]);
 		}
 		categoryDescriptions = { ...(snapshot.category_descriptions ?? {}) };
 	} else if (existsSync(skillsDir)) {
@@ -334,7 +336,10 @@ export function buildSkillsSystemPromptSync(options: BuildSkillsSystemPromptOpti
 			if (!skillShouldShow(conditions, options.availableTools, options.availableToolsets)) {
 				continue;
 			}
-			skillsByCategory.set(category, [...(skillsByCategory.get(category) ?? []), [frontmatterName, entry.description ?? ""]]);
+			skillsByCategory.set(category, [
+				...(skillsByCategory.get(category) ?? []),
+				[frontmatterName, entry.description ?? ""],
+			]);
 		}
 		categoryDescriptions = { ...(snapshot.category_descriptions ?? {}) };
 	} else if (existsSync(skillsDir)) {

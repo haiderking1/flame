@@ -1,6 +1,6 @@
 import { type Static, Type } from "typebox";
-import type { ToolDefinition } from "../extensions/types.ts";
 import { getFlameHome } from "../../utils/flame-home.ts";
+import type { ToolDefinition } from "../extensions/types.ts";
 import { executeSkillManage, type SkillManageActionOptions } from "./skill-manage-actions.ts";
 
 const skillManageSchema = Type.Object({
@@ -21,14 +21,12 @@ const skillManageSchema = Type.Object({
 	}),
 	content: Type.Optional(
 		Type.String({
-			description:
-				"Full SKILL.md content (YAML frontmatter + markdown body). Required for 'create' and 'edit'.",
+			description: "Full SKILL.md content (YAML frontmatter + markdown body). Required for 'create' and 'edit'.",
 		}),
 	),
 	old_string: Type.Optional(
 		Type.String({
-			description:
-				"Text to find in the file (required for 'patch'). Must be unique unless replace_all=true.",
+			description: "Text to find in the file (required for 'patch'). Must be unique unless replace_all=true.",
 		}),
 	),
 	new_string: Type.Optional(
@@ -53,9 +51,7 @@ const skillManageSchema = Type.Object({
 				"Path to a supporting file within the skill directory. For write_file/remove_file: required. For patch: optional, defaults to SKILL.md.",
 		}),
 	),
-	file_content: Type.Optional(
-		Type.String({ description: "Content for the file. Required for 'write_file'." }),
-	),
+	file_content: Type.Optional(Type.String({ description: "Content for the file. Required for 'write_file'." })),
 	absorbed_into: Type.Optional(
 		Type.String({
 			description:
@@ -81,7 +77,7 @@ const SKILL_MANAGE_DESCRIPTION =
 	"edit (full SKILL.md rewrite — major overhauls only), " +
 	"delete, write_file, remove_file.\n\n" +
 	"On delete, pass `absorbed_into=<umbrella>` when merging into another skill, " +
-	"or `absorbed_into=\"\"` when pruning with no forwarding target.\n\n" +
+	'or `absorbed_into=""` when pruning with no forwarding target.\n\n' +
 	"Create when: complex task succeeded (5+ calls), errors overcome, " +
 	"user-corrected approach worked, non-trivial workflow discovered, " +
 	"or user asks you to remember a procedure.\n" +

@@ -1,4 +1,10 @@
 export {
+	createMemoryTool,
+	createMemoryToolDefinition,
+	type MemoryToolDetails,
+	type MemoryToolInput,
+} from "../memory/memory-tool.ts";
+export {
 	type BashOperations,
 	type BashSpawnContext,
 	type BashSpawnHook,
@@ -62,12 +68,6 @@ export {
 	type LsToolOptions,
 } from "./ls.ts";
 export {
-	createMemoryTool,
-	createMemoryToolDefinition,
-	type MemoryToolDetails,
-	type MemoryToolInput,
-} from "../memory/memory-tool.ts";
-export {
 	createProcessTool,
 	createProcessToolDefinition,
 	type ProcessToolDetails,
@@ -110,14 +110,6 @@ export {
 
 import type { AgentTool } from "@earendil-works/flame-agent-core";
 import type { ToolDefinition } from "../extensions/types.ts";
-import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
-import { type BrowserToolOptions, createBrowserTool, createBrowserToolDefinition } from "./browser.ts";
-import { createClipboardTool, createClipboardToolDefinition } from "./clipboard.ts";
-import { createDownloadTool, createDownloadToolDefinition } from "./download.ts";
-import { createEditTool, createEditToolDefinition, type EditToolOptions } from "./edit.ts";
-import { createFindTool, createFindToolDefinition, type FindToolOptions } from "./find.ts";
-import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "./grep.ts";
-import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.ts";
 import { MemoryStore } from "../memory/memory-store.ts";
 import { createMemoryTool, createMemoryToolDefinition } from "../memory/memory-tool.ts";
 import {
@@ -127,6 +119,14 @@ import {
 } from "../skills/skill-manage-tool.ts";
 import { createSkillViewToolDefinition } from "../skills/skill-view-tool.ts";
 import { createSkillsListToolDefinition } from "../skills/skills-list-tool.ts";
+import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
+import { type BrowserToolOptions, createBrowserTool, createBrowserToolDefinition } from "./browser.ts";
+import { createClipboardTool, createClipboardToolDefinition } from "./clipboard.ts";
+import { createDownloadTool, createDownloadToolDefinition } from "./download.ts";
+import { createEditTool, createEditToolDefinition, type EditToolOptions } from "./edit.ts";
+import { createFindTool, createFindToolDefinition, type FindToolOptions } from "./find.ts";
+import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "./grep.ts";
+import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.ts";
 import { createProcessTool, createProcessToolDefinition, type ProcessToolOptions } from "./process.ts";
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.ts";
 import { createWebSearchTool, createWebSearchToolDefinition, type WebSearchToolOptions } from "./web-search.ts";

@@ -156,3 +156,36 @@ export function snapshotSkillsDir(id: string): string | undefined {
 	}
 	return undefined;
 }
+
+/** Restore a snapshot by replacing the active skills tree with the snapshot's contents. */
+export function restoreSkillsSnapshot(id: string, keep: number = 5): boolean {
+	const source = snapshotSkillsDir(id);
+	if (!source) {
+		return false;
+	}
+	const skillsDir = getSkillsDir();
+	try {
+		// Take a safety snapshot of current skills before mutating
+		snapshotSkills("rollback-safety", keep);
+
+		// Remove current skill files except exclusions
+		if (existsSync(skillsDir)) {
+			for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
+				if (EXCLUDED_ENTRIES.has(entry.name)) {
+					continue;
+				}
+				rmSync(join(skillsDir, entry.name), { recursive: true, force: true });
+			}
+		} else {
+			mkdirSync(skillsDir, { recursive: true });
+		}
+
+		// Copy snapshot files back
+		for (const entry of readdirSync(source, { withFileTypes: true })) {
+			cpSync(join(source, entry.name), join(skillsDir, entry.name), { recursive: true });
+		}
+		return true;
+	} catch {
+		return false;
+	}
+}

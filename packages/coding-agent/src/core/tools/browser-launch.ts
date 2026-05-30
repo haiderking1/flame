@@ -54,6 +54,19 @@ export function parseCdpPort(baseUrl: string): number {
 	return 9222;
 }
 
+function commandExists(command: string): boolean {
+	const pathEnv = process.env.PATH || "";
+	const pathDirs = pathEnv.split(process.platform === "win32" ? ";" : ":");
+	for (const dir of pathDirs) {
+		if (!dir) continue;
+		const fullPath = join(dir, command);
+		if (existsSync(fullPath)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 export function resolveBrowserExecutable(): string {
 	const override = process.env.FLAME_BROWSER_EXECUTABLE?.trim();
 	if (override) {
@@ -76,6 +89,11 @@ export function resolveBrowserExecutable(): string {
 	}
 
 	if (process.platform === "linux") {
+		for (const cmd of LINUX_BROWSER_COMMANDS) {
+			if (commandExists(cmd)) {
+				return cmd;
+			}
+		}
 		return LINUX_BROWSER_COMMANDS[0];
 	}
 
@@ -147,6 +165,10 @@ async function launchBrowserOnce(baseUrl: string): Promise<void> {
 		detached: true,
 		stdio: "ignore",
 		windowsHide: true,
+	});
+	child.on("error", () => {
+		// Catch error to prevent uncaughtException crash.
+		// The waitForCdpReady poll below will naturally time out and throw a clean error.
 	});
 	child.unref();
 

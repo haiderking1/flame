@@ -79,6 +79,15 @@ import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScop
 import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
+import {
+	listSnapshots,
+	loadCuratorState,
+	maybeRunCurator,
+	pinSkill,
+	restoreSkillsSnapshot,
+	setCuratorPaused,
+	unpinSkill,
+} from "../../core/self-improvement/index.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
 import { type SessionContext, SessionManager } from "../../core/session-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
@@ -2565,6 +2574,11 @@ export class InteractiveMode {
 				await this.handleCompactCommand(customInstructions);
 				return;
 			}
+			if (text === "/curator" || text.startsWith("/curator ")) {
+				this.editor.setText("");
+				await this.handleCuratorCommand(text);
+				return;
+			}
 			if (text === "/reload") {
 				this.editor.setText("");
 				await this.handleReloadCommand();
@@ -2989,6 +3003,14 @@ export class InteractiveMode {
 				this.ui.requestRender();
 				break;
 			}
+
+			case "self_improvement_review":
+				this.showStatus(`Self-improvement review: ${event.summary}`);
+				break;
+
+			case "curator_run":
+				this.showStatus(`Curator: ${event.summary}`);
+				break;
 		}
 	}
 
@@ -5599,6 +5621,127 @@ export class InteractiveMode {
 		} catch {
 			// Ignore, will be emitted as an event
 		}
+	}
+
+	private async handleCuratorCommand(argsString: string): Promise<void> {
+		const parts = argsString.trim().split(/\s+/);
+		const subcommand = parts[1]?.toLowerCase();
+
+		if (!subcommand) {
+			this.showWarning(
+				"Usage: /curator [status | run | pin <skill> | unpin <skill> | pause | resume | restore [snapshot-id]]",
+			);
+			return;
+		}
+
+		if (subcommand === "status") {
+			const state = loadCuratorState();
+			const settings = this.settingsManager.getCuratorSettings();
+			const statusStr = [
+				`Curator Status:`,
+				`  Enabled: ${settings.enabled ? "yes" : "no"}`,
+				`  Paused: ${state.paused ? "yes" : "no"}`,
+				`  Total Runs: ${state.runCount}`,
+				`  Last Run At: ${state.lastRunAt || "never"}`,
+				`  Last Run Summary: ${state.lastRunSummary || "none"}`,
+				`  Pinned Skills: ${state.pinned.length > 0 ? state.pinned.join(", ") : "none"}`,
+				`  Interval (Hours): ${settings.intervalHours}`,
+				`  Stale After (Days): ${settings.staleAfterDays}`,
+				`  Archive After (Days): ${settings.archiveAfterDays}`,
+			].join("\n");
+			this.showStatus(statusStr);
+			return;
+		}
+
+		if (subcommand === "pause") {
+			await setCuratorPaused(true);
+			this.showStatus("Curator paused");
+			return;
+		}
+
+		if (subcommand === "resume") {
+			await setCuratorPaused(false);
+			this.showStatus("Curator resumed");
+			return;
+		}
+
+		if (subcommand === "pin") {
+			const skillName = parts.slice(2).join(" ").trim();
+			if (!skillName) {
+				this.showWarning("Usage: /curator pin <skill>");
+				return;
+			}
+			await pinSkill(skillName);
+			this.showStatus(`Pinned skill "${skillName}" (exempt from automatic curator transitions)`);
+			return;
+		}
+
+		if (subcommand === "unpin") {
+			const skillName = parts.slice(2).join(" ").trim();
+			if (!skillName) {
+				this.showWarning("Usage: /curator unpin <skill>");
+				return;
+			}
+			await unpinSkill(skillName);
+			this.showStatus(`Unpinned skill "${skillName}"`);
+			return;
+		}
+
+		if (subcommand === "run") {
+			const dryRun = parts.includes("--dry-run") || parts.includes("-n");
+			this.showStatus(dryRun ? "Starting manual curator dry-run pass..." : "Starting manual curator pass...");
+			const settings = this.settingsManager.getCuratorSettings();
+
+			const result = await maybeRunCurator({
+				settings,
+				force: true,
+				dryRun,
+				model: this.session.agent.state.model,
+				thinkingLevel: this.session.agent.state.thinkingLevel,
+				streamFn: this.session.agent.streamFn,
+				convertToLlm: this.session.agent.convertToLlm,
+				transport: this.session.agent.transport,
+				thinkingBudgets: this.session.agent.thinkingBudgets,
+				maxRetryDelayMs: this.session.agent.maxRetryDelayMs,
+				sessionId: this.session.sessionId,
+				baseSystemPrompt: this.session.baseSystemPrompt,
+				guardAgentCreated: this.settingsManager.getSkillsGuardAgentCreated(),
+			});
+
+			if (result.ran) {
+				this.showStatus(`Curator run completed: ${result.summary}`);
+			} else {
+				this.showStatus("Curator pass failed or skipped");
+			}
+			return;
+		}
+
+		if (subcommand === "restore") {
+			const id = parts[2]?.trim();
+			if (!id) {
+				const snaps = listSnapshots();
+				if (snaps.length === 0) {
+					this.showWarning("No snapshots available");
+				} else {
+					this.showStatus(
+						`Available snapshots (newest first):\n${snaps.map((s) => `  - ${s}`).join("\n")}\nUsage: /curator restore <snapshot-id>`,
+					);
+				}
+				return;
+			}
+
+			const ok = restoreSkillsSnapshot(id, this.settingsManager.getCuratorSettings().maxBackups);
+			if (ok) {
+				this.showStatus(`Successfully restored skills tree to snapshot "${id}"`);
+			} else {
+				this.showError(`Failed to restore snapshot "${id}" (make sure the ID is correct)`);
+			}
+			return;
+		}
+
+		this.showWarning(
+			`Unknown /curator subcommand "${subcommand}". Use status, run, pin, unpin, pause, resume, or restore.`,
+		);
 	}
 
 	stop(): void {

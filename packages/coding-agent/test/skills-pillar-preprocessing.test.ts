@@ -44,12 +44,10 @@ describe("skills pillar preprocessing", () => {
 	});
 
 	it("preprocessSkillContent applies template vars before optional shell", () => {
-		const result = preprocessSkillContent(
-			"Dir=${FLAME_SKILL_DIR}",
-			"/my/skill",
-			undefined,
-			{ templateVars: true, inlineShell: false },
-		);
+		const result = preprocessSkillContent("Dir=${FLAME_SKILL_DIR}", "/my/skill", undefined, {
+			templateVars: true,
+			inlineShell: false,
+		});
 		expect(result).toBe("Dir=/my/skill");
 	});
 });

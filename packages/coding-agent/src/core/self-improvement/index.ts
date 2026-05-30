@@ -23,6 +23,13 @@ export {
 	type TransitionCounts,
 } from "./curator.ts";
 export {
+	listSnapshots,
+	restoreSkillsSnapshot,
+	type SnapshotManifest,
+	snapshotSkills,
+	snapshotSkillsDir,
+} from "./curator-backup.ts";
+export {
 	type CuratorState,
 	defaultCuratorState,
 	loadCuratorState,

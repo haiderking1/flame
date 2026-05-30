@@ -1,15 +1,15 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { type Static, Type } from "typebox";
+import { parseFrontmatter } from "../../utils/frontmatter.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
-import { INJECTION_PATTERNS, EXCLUDED_SKILL_DIRS } from "./constants.ts";
+import { EXCLUDED_SKILL_DIRS, INJECTION_PATTERNS } from "./constants.ts";
 import { getCategoryFromSkillPath, isExcludedSkillPath, iterSkillIndexFiles } from "./discovery.ts";
 import { extractRelatedSkills, extractSkillTags, skillMatchesPlatform } from "./frontmatter.ts";
 import { hasTraversalComponent, isPathWithinDir, validateWithinDir } from "./path-security.ts";
 import { getSkillsDir } from "./paths.ts";
 import { preprocessSkillContent } from "./preprocessing.ts";
 import type { SkillFrontmatter } from "./types.ts";
-import { parseFrontmatter } from "../../utils/frontmatter.ts";
 
 const skillViewSchema = Type.Object({
 	name: Type.String({
@@ -64,7 +64,12 @@ function getTrustedDirs(externalDirs: string[]): string[] {
 	return dirs;
 }
 
-function recordCandidate(candidates: SkillCandidate[], seen: Set<string>, skillDir: string | null, skillMd: string): void {
+function recordCandidate(
+	candidates: SkillCandidate[],
+	seen: Set<string>,
+	skillDir: string | null,
+	skillMd: string,
+): void {
 	const key = resolve(skillMd);
 	if (seen.has(key)) {
 		return;
@@ -206,10 +211,7 @@ function listAvailableFiles(skillDir: string): Record<string, string[]> {
 	return scanLinkedFiles(skillDir);
 }
 
-export function executeSkillView(
-	args: SkillViewInput,
-	options: SkillViewToolOptions = {},
-): Record<string, unknown> {
+export function executeSkillView(args: SkillViewInput, options: SkillViewToolOptions = {}): Record<string, unknown> {
 	const externalDirs = options.externalDirs ?? [];
 	const disabled = options.disabledNames ?? new Set<string>();
 	const name = args.name.trim();
@@ -349,9 +351,7 @@ export function executeSkillView(
 		: rawBody;
 
 	const skillsRoot = getSkillsDir();
-	const category = existsSync(skillsRoot)
-		? getCategoryFromSkillPath(skillMd, skillsRoot)
-		: "general";
+	const category = existsSync(skillsRoot) ? getCategoryFromSkillPath(skillMd, skillsRoot) : "general";
 	const linkedFiles = scanLinkedFiles(resolvedSkillDir);
 	const tags = extractSkillTags(fm);
 	const relatedSkills = extractRelatedSkills(fm);

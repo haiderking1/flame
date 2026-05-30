@@ -39,6 +39,13 @@ describe("loadSoulMd", () => {
 		expect(content).toBe("You are Solaris, a thoughtful coding partner.");
 	});
 
+	it("falls back to and loads soul.md (lowercase) when SOUL.md (uppercase) is missing", async () => {
+		const lowercasePath = getSoulPath().replace(/SOUL\.md$/, "soul.md");
+		writeFileSync(lowercasePath, "You are Shadow, a chill coding agent.", "utf-8");
+		const content = await loadSoulMd();
+		expect(content).toBe("You are Shadow, a chill coding agent.");
+	});
+
 	it("truncates content longer than the soul char limit and annotates the truncation", async () => {
 		const long = "x".repeat(30_000);
 		writeFileSync(getSoulPath(), long, "utf-8");

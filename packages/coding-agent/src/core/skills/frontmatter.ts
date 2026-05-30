@@ -50,10 +50,7 @@ export function extractSkillDescription(frontmatter: SkillFrontmatter): string {
 		return "";
 	}
 	let desc = String(rawDesc).trim();
-	if (
-		(desc.startsWith('"') && desc.endsWith('"')) ||
-		(desc.startsWith("'") && desc.endsWith("'"))
-	) {
+	if ((desc.startsWith('"') && desc.endsWith('"')) || (desc.startsWith("'") && desc.endsWith("'"))) {
 		desc = desc.slice(1, -1);
 	}
 	if (desc.length > PROMPT_INDEX_DESCRIPTION_MAX) {

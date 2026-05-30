@@ -265,7 +265,8 @@ export const SKILL_GUARD_THREAT_PATTERNS: SkillThreatPattern[] = [
 	}),
 	// Python: don\'t -> don't in JS string
 	threat({
-		source: "act\\s+as\\s+(if|though)\\s+(?:\\w+\\s+)*you\\s+(?:\\w+\\s+)*(have\\s+no|don't\\s+have)\\s+(?:\\w+\\s+)*(restrictions|limits|rules)",
+		source:
+			"act\\s+as\\s+(if|though)\\s+(?:\\w+\\s+)*you\\s+(?:\\w+\\s+)*(have\\s+no|don't\\s+have)\\s+(?:\\w+\\s+)*(restrictions|limits|rules)",
 		patternId: "bypass_restrictions",
 		severity: "critical",
 		category: "injection",
@@ -913,7 +914,8 @@ export const SKILL_GUARD_THREAT_PATTERNS: SkillThreatPattern[] = [
 
 	// -- Context window exfiltration --
 	threat({
-		source: "(include|output|print|send|share)\\s+(?:\\w+\\s+)*(conversation|chat\\s+history|previous\\s+messages|context)",
+		source:
+			"(include|output|print|send|share)\\s+(?:\\w+\\s+)*(conversation|chat\\s+history|previous\\s+messages|context)",
 		patternId: "context_exfil",
 		severity: "high",
 		category: "exfiltration",

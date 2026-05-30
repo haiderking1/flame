@@ -17,8 +17,17 @@ export async function loadSoulMd(): Promise<string | undefined> {
 	try {
 		raw = await fs.readFile(path, "utf-8");
 	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-		throw err;
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+			const altPath = path.replace(/SOUL\.md$/, "soul.md");
+			try {
+				raw = await fs.readFile(altPath, "utf-8");
+			} catch (altErr) {
+				if ((altErr as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+				throw altErr;
+			}
+		} else {
+			throw err;
+		}
 	}
 	const content = raw.trim();
 	if (!content) return undefined;

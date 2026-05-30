@@ -48,14 +48,8 @@ describe("skills pillar skills-list", () => {
 	it("filters by category", () => {
 		mkdirSync(join(tempHome, "skills", "a", "one"), { recursive: true });
 		mkdirSync(join(tempHome, "skills", "b", "two"), { recursive: true });
-		writeFileSync(
-			join(tempHome, "skills", "a", "one", "SKILL.md"),
-			"---\nname: one\ndescription: One\n---\n",
-		);
-		writeFileSync(
-			join(tempHome, "skills", "b", "two", "SKILL.md"),
-			"---\nname: two\ndescription: Two\n---\n",
-		);
+		writeFileSync(join(tempHome, "skills", "a", "one", "SKILL.md"), "---\nname: one\ndescription: One\n---\n");
+		writeFileSync(join(tempHome, "skills", "b", "two", "SKILL.md"), "---\nname: two\ndescription: Two\n---\n");
 
 		const result = executeSkillsList({ category: "a" });
 		expect(result.count).toBe(1);

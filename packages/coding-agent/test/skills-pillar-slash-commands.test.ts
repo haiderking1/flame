@@ -1,8 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { expandSkillSlashCommand, buildSkillInvocationMessage } from "../src/core/skills/slash-commands.ts";
+import { buildSkillInvocationMessage, expandSkillSlashCommand } from "../src/core/skills/slash-commands.ts";
 
 let tempHome: string;
 let originalFlameHome: string | undefined;
@@ -39,10 +39,7 @@ describe("skills pillar slash commands", () => {
 
 	it("buildSkillInvocationMessage includes skill directory hint", () => {
 		const skillDir = join(tempHome, "skills", "hinted");
-		const msg = buildSkillInvocationMessage(
-			{ name: "hinted", content: "Body text" },
-			skillDir,
-		);
+		const msg = buildSkillInvocationMessage({ name: "hinted", content: "Body text" }, skillDir);
 		expect(msg).toContain("[Skill directory:");
 		expect(msg).toContain("hinted");
 	});

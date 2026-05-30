@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Flame &times; Hermes Port — Progress</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1d212b; --ink: #e6e9ef;
+    --muted: #9aa3b2; --line: #2a2f3a; --flame: #ff6b35; --flame2: #ffb347;
+    --good: #3fb950; --warn: #d29922; --bad: #f85149; --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
+  header {
+    border-bottom: 1px solid var(--line); padding-bottom: 20px; margin-bottom: 28px;
+  }
+  h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: -0.02em; }
+  h1 .fire { background: linear-gradient(90deg, var(--flame), var(--flame2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { color: var(--muted); font-size: 14px; }
+  h2 { font-size: 19px; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 15px; margin: 20px 0 8px; color: var(--flame2); }
+  code, .mono { font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; font-size: 13px; }
+  code { background: var(--panel2); padding: 1px 6px; border-radius: 5px; color: #cdd6e3; }
+  p { margin: 8px 0; }
+  ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 16px 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .card .n { font-size: 26px; font-weight: 700; }
+  .card .l { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  tr:last-child td { border-bottom: none; }
+  .bar { height: 7px; border-radius: 4px; background: var(--panel2); overflow: hidden; min-width: 90px; }
+  .bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--flame), var(--flame2)); }
+  .pct { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--line); color: var(--muted); }
+  .tag.done { color: var(--good); border-color: #1d4427; background: #11261a; }
+  .tag.partial { color: var(--warn); border-color: #4a3a12; background: #241d0e; }
+  .tag.todo { color: var(--bad); border-color: #4a1f1f; background: #261111; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin: 14px 0; }
+  .files { font-family: "SF Mono", Menlo, monospace; font-size: 12.5px; color: var(--muted); }
+  .files b { color: var(--ink); font-weight: 600; }
+  .next { border-left: 3px solid var(--flame); padding-left: 14px; margin: 14px 0; }
+  .next .eff { font-size: 12px; color: var(--muted); }
+  .legend { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1><span class="fire">Flame</span> &times; Hermes Port &mdash; Pillar 5 Progress</h1>
+  <div class="sub">Self-improvement loop &amp; curator &middot; committed to <code>main</code> @ <code>360aaca8</code> &middot; generated 2026-05-30</div>
+</header>
+
+<p>
+  Flame is a TypeScript port of <a href="https://github.com/" >hermes-agent</a>'s capabilities into the pi/flame
+  coding-agent harness. Pillars 1+2 (Memory + SOUL) and 3 (Skills) were already landed. This work ports
+  <b>Pillar 5 &mdash; the self-improvement loop</b> (per-turn background memory/skill review) and
+  <b>Pillar 5b &mdash; the inactivity curator</b>, built directly against the hermes source at
+  <code>~/.hermes/hermes-agent</code> (v0.15.1).
+</p>
+
+<div class="grid">
+  <div class="card"><div class="n">~90%</div><div class="l">Per-turn review loop fidelity</div></div>
+  <div class="card"><div class="n">~65%</div><div class="l">Curator fidelity</div></div>
+  <div class="card"><div class="n">8</div><div class="l">New source modules</div></div>
+  <div class="card"><div class="n">15</div><div class="l">New tests (all passing)</div></div>
+</div>
+
+<h2>What was built</h2>
+
+<h3>Per-turn self-improvement loop <span class="tag done">landed</span></h3>
+<ul>
+  <li><b>NudgeTracker</b> (<code>nudge-tracker.ts</code>) &mdash; memory gate per user turn, skill gate per
+      tool-call iteration; resets on fire and whenever <code>skill_manage</code> is used. <code>0</code> disables a gate.</li>
+  <li><b>runBackgroundReview</b> (<code>background-review.ts</code>) &mdash; forks a headless <code>Agent</code> after
+      qualifying turns, off the user-facing path. Reuses the parent <code>streamFn</code>/model/<code>sessionId</code>/base
+      system prompt verbatim (provider prefix-cache parity), restricts tools to a memory + skills whitelist, shares the
+      parent <code>MemoryStore</code> so writes hit disk, caps iterations, dedupes the action summary, best-effort.</li>
+  <li><b>Review prompts</b> (<code>review-prompts.ts</code>) &mdash; the memory / skill / combined prompts ported
+      near-verbatim from <code>background_review.py</code>, retargeted to flame tool names.</li>
+  <li><b>AgentSession wiring</b> &mdash; tool-iteration counting in <code>afterToolCall</code>, memory gate at prompt
+      start, fire-and-forget review after the run drains, emits a <code>self_improvement_review</code> event.</li>
+</ul>
+
+<h3>Inactivity curator <span class="tag partial">core landed</span></h3>
+<ul>
+  <li><b>curator.ts</b> &mdash; deterministic age-based transitions (active &rarr; stale &rarr; archived) using each skill
+      dir's most recent file mtime; pinned skills bypass; archive-never-delete (moves to <code>.archive/</code>);
+      optional LLM consolidation fork using a ported curator prompt.</li>
+  <li><b>curator-state.ts</b> &mdash; <code>.curator_state</code> (lastRunAt, pause, pins, per-skill lifecycle), atomic writes.</li>
+  <li><b>curator-backup.ts</b> &mdash; pre-run recursive-copy snapshots + manifest, pruned to keep N.</li>
+  <li><b>Session-start trigger</b> &mdash; gated by interval; emits a <code>curator_run</code> event. Opt-in via settings.</li>
+</ul>
+
+<div class="panel files">
+  <b>New:</b> packages/coding-agent/src/core/self-improvement/{nudge-tracker, background-review, review-prompts,
+  curator, curator-state, curator-backup, curator-prompts, index}.ts<br/>
+  <b>Modified:</b> core/agent-session.ts, core/settings-manager.ts<br/>
+  <b>Tests:</b> test/self-improvement-{nudge-tracker, review-actions, curator, background-review}.test.ts<br/>
+  <b>Settings:</b> <span class="mono">selfImprovement.{enabled, memoryNudgeInterval, skillNudgeInterval, reviewMaxIterations, curator.*}</span>
+  &mdash; review on by default; curator opt-in.
+</div>
+
+<h2>Fidelity vs hermes</h2>
+<table>
+  <thead><tr><th>Component</th><th>Status</th><th style="width:160px">Match</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Review prompts</td><td><span class="tag done">done</span></td>
+      <td><span class="bar"><span style="width:95%"></span></span> <span class="pct">95%</span></td>
+      <td>Near-verbatim. Protected-skills note trimmed (flame has no bundled/hub skills).</td>
+    </tr>
+    <tr>
+      <td>Nudge gates</td><td><span class="tag done">done</span></td>
+      <td><span class="bar"><span style="width:90%"></span></span> <span class="pct">90%</span></td>
+      <td>Skill cadence counts per tool call vs hermes' per agent-loop iteration (slightly finer).</td>
+    </tr>
+    <tr>
+      <td>Forked review agent</td><td><span class="tag done">done</span></td>
+      <td><span class="bar"><span style="width:85%"></span></span> <span class="pct">85%</span></td>
+      <td>Async fire-and-forget + hard tool whitelist vs hermes' daemon thread + runtime deny.</td>
+    </tr>
+    <tr>
+      <td>Summary surfacing</td><td><span class="tag partial">partial</span></td>
+      <td><span class="bar"><span style="width:70%"></span></span> <span class="pct">70%</span></td>
+      <td>Event fires; the <code>&#128190;</code> TUI line is not rendered yet.</td>
+    </tr>
+    <tr>
+      <td>Curator &mdash; deterministic core</td><td><span class="tag partial">partial</span></td>
+      <td><span class="bar"><span style="width:80%"></span></span> <span class="pct">80%</span></td>
+      <td>mtime activity vs hermes' usage DB; recursive-copy snapshots vs tar.gz.</td>
+    </tr>
+    <tr>
+      <td>Curator &mdash; LLM consolidation &amp; ops</td><td><span class="tag todo">partial</span></td>
+      <td><span class="bar"><span style="width:60%"></span></span> <span class="pct">60%</span></td>
+      <td>No dry-run, reports, YAML reconciliation, cron migration, or CLI yet.</td>
+    </tr>
+  </tbody>
+</table>
+<p class="legend">Blended Pillar 5: <b>~80&ndash;85%</b>. The per-turn loop (the core value) is ~90%; the curator's ops/CLI surface is the main gap.</p>
+
+<h2>Roadmap to 100% hermes parity</h2>
+
+<div class="next">
+  <h3 style="margin-top:4px">1. Surface review &amp; curator results in the TUI <span class="eff">&mdash; effort: S</span></h3>
+  <p>The <code>self_improvement_review</code> and <code>curator_run</code> events already fire. Render the hermes
+     <code>&#128190; Self-improvement review: &hellip;</code> line in the footer / notification area. Closes surfacing to ~95%.</p>
+</div>
+
+<div class="next">
+  <h3>2. <code>/curator</code> slash-commands <span class="eff">&mdash; effort: M</span></h3>
+  <p>Wire <code>run</code> (with <code>--dry-run</code>), <code>pin</code>/<code>unpin</code>, <code>pause</code>/<code>resume</code>,
+     <code>restore &lt;name&gt;</code>, and <code>status</code>. State + pins + snapshot restore primitives already exist;
+     this is mostly command plumbing. Closes most of the curator CLI gap.</p>
+</div>
+
+<div class="next">
+  <h3>3. Curator dry-run mode + per-run reports <span class="eff">&mdash; effort: M</span></h3>
+  <p>Port the dry-run banner (report-only, no mutations) and write <code>REPORT.md</code> + <code>run.json</code> per run
+     under a logs dir, including the consolidations/prunings split. Hermes uses these for review-before-live.</p>
+</div>
+
+<div class="next">
+  <h3>4. Skill provenance + usage tracking <span class="eff">&mdash; effort: L</span></h3>
+  <p>Port a flame analog of hermes' <code>skill_usage</code>: created-at / last-activity / use-count + an
+     <code>agent-created</code> vs imported distinction. Today the curator derives activity from file mtime and treats all
+     skills as agent-created. This unlocks accurate transitions and the consolidation YAML reconciliation.</p>
+</div>
+
+<div class="next">
+  <h3>5. consolidations/prunings reconciliation <span class="eff">&mdash; effort: M</span></h3>
+  <p>Parse the consolidation pass's structured YAML block and classify each archived skill as
+     <i>consolidated-into-umbrella</i> vs <i>pruned</i> by scanning that run's <code>skill_manage</code> calls
+     (hermes' <code>_classify_removed_skills</code>). Drives skill-reference migration.</p>
+</div>
+
+<div class="next">
+  <h3>6. Iteration-accurate skill cadence <span class="eff">&mdash; effort: S</span></h3>
+  <p>Optionally switch the skill nudge to count one increment per assistant turn that issued tool calls (hermes'
+     per-API-iteration semantics) instead of per tool call, for exact cadence matching.</p>
+</div>
+
+<div class="next">
+  <h3>7. tar.gz snapshots + rollback CLI <span class="eff">&mdash; effort: S</span></h3>
+  <p>Swap recursive-copy snapshots for streamed <code>tar.gz</code> (hermes parity, smaller on disk) and add a
+     <code>restore</code> path that moves the current tree aside before extracting, so rollback is itself undoable.</p>
+</div>
+
+<div class="next">
+  <h3>8. Inactivity-accurate trigger <span class="eff">&mdash; effort: S</span></h3>
+  <p>Hermes runs the curator when the agent is genuinely idle (min-idle-hours since last activity), not just at session
+     start. Add an idle gate so it never competes with an active turn.</p>
+</div>
+
+<h3>Explicitly out of scope (by earlier project decisions)</h3>
+<ul>
+  <li>No bundled skills (agent grows its own library &mdash; the stated source of value).</li>
+  <li>External memory providers (honcho / mem0 / supermemory), <code>&lt;memory-context&gt;</code> scrubber, <code>session_search</code>.</li>
+  <li>codex_app_server runtime downgrade for the review fork (flame has no codex runtime).</li>
+</ul>
+
+<footer>
+  Pillar 5 of the hermes&rarr;flame port. Verified: <code>tsgo --noEmit</code> clean, biome clean, 15 new tests passing,
+  no regressions in adjacent suites. &middot; Next-best ROI: items 1 &amp; 2 (TUI surfacing + <code>/curator</code> commands).
+</footer>
+
+</div>
+</body>
+</html>

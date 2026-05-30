@@ -86,3 +86,77 @@ describe("curator applyAutomaticTransitions", () => {
 		expect(state.states.revived).toBe("active");
 	});
 });
+
+describe("curator snapshot and restore", () => {
+	it("can snapshot the skills tree and successfully restore it", () => {
+		const { listSnapshots, restoreSkillsSnapshot, snapshotSkills } = require("../src/core/self-improvement/index.ts");
+		createSkill("skill-a", 1);
+		createSkill("skill-b", 5);
+
+		// Take snapshot
+		const snapPath = snapshotSkills("test-snapshot", 5);
+		expect(snapPath).toBeDefined();
+
+		const snapshots = listSnapshots();
+		expect(snapshots.length).toBe(1);
+
+		// Mutate skill files (e.g. write a new skill, delete skill-a)
+		createSkill("skill-c", 1);
+		rmSync(join(getSkillsDir(), "skill-a"), { recursive: true, force: true });
+
+		expect(existsSync(join(getSkillsDir(), "skill-a"))).toBe(false);
+		expect(existsSync(join(getSkillsDir(), "skill-c"))).toBe(true);
+
+		// Restore snapshot
+		const ok = restoreSkillsSnapshot(snapshots[0], 5);
+		expect(ok).toBe(true);
+
+		// skill-a should be back, skill-c should be gone
+		expect(existsSync(join(getSkillsDir(), "skill-a", "SKILL.md"))).toBe(true);
+		expect(existsSync(join(getSkillsDir(), "skill-c"))).toBe(false);
+		expect(existsSync(join(getSkillsDir(), "skill-b", "SKILL.md"))).toBe(true);
+	});
+});
+
+describe("curator dry-run and per-run reporting", () => {
+	it("does not mutate files during dry-run but successfully writes reports", async () => {
+		const { maybeRunCurator } = require("../src/core/self-improvement/index.ts");
+		createSkill("ancient-skill", 120);
+
+		const settings = {
+			enabled: true,
+			intervalHours: 168,
+			staleAfterDays: 30,
+			archiveAfterDays: 90,
+			maxBackups: 5,
+			llmConsolidation: false,
+		};
+
+		const result = await maybeRunCurator({
+			settings,
+			force: true,
+			dryRun: true,
+		});
+
+		expect(result.ran).toBe(true);
+		expect(result.summary).toContain("dry-run");
+		expect(result.counts.archived).toBe(1);
+
+		// Directory must NOT have been moved since it's a dry-run
+		expect(existsSync(join(getSkillsDir(), "ancient-skill", "SKILL.md"))).toBe(true);
+
+		// Assert reports were written under .curator_runs/
+		const runsDir = join(getSkillsDir(), ".curator_runs");
+		expect(existsSync(runsDir)).toBe(true);
+
+		const { readdirSync, readFileSync } = require("node:fs");
+		const dirs = readdirSync(runsDir);
+		expect(dirs.length).toBeGreaterThan(0);
+
+		const reportPath = join(runsDir, dirs[0], "REPORT.md");
+		expect(existsSync(reportPath)).toBe(true);
+		const reportContent = readFileSync(reportPath, "utf-8");
+		expect(reportContent).toContain("DRY RUN PASS ONLY");
+		expect(reportContent).toContain("ancient-skill");
+	});
+});

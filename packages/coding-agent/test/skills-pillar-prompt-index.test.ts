@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { getSkillsPromptSnapshotPath } from "../src/core/skills/paths.ts";
 import {
 	buildSkillsSystemPrompt,
 	clearSkillsSystemPromptCache,
@@ -9,7 +10,6 @@ import {
 	resetSkillsPromptCacheForTests,
 } from "../src/core/skills/prompt-index.ts";
 import { SKILLS_GUIDANCE } from "../src/core/skills/prompt-strings.ts";
-import { getSkillsPromptSnapshotPath } from "../src/core/skills/paths.ts";
 
 describe("skills pillar prompt-index", () => {
 	const originalFlameHome = process.env.FLAME_HOME;
@@ -39,10 +39,7 @@ describe("skills pillar prompt-index", () => {
 
 	it("builds categorical index with skill_view guidance", async () => {
 		mkdirSync(join(tempHome, "skills", "github", "code-review"), { recursive: true });
-		writeFileSync(
-			join(tempHome, "skills", "github", "DESCRIPTION.md"),
-			"---\ndescription: GitHub workflows\n---\n",
-		);
+		writeFileSync(join(tempHome, "skills", "github", "DESCRIPTION.md"), "---\ndescription: GitHub workflows\n---\n");
 		writeFileSync(
 			join(tempHome, "skills", "github", "code-review", "SKILL.md"),
 			"---\nname: code-review\ndescription: Review pull requests carefully\n---\n# Review\n",
@@ -58,10 +55,7 @@ describe("skills pillar prompt-index", () => {
 
 	it("writes disk snapshot on cold scan", async () => {
 		mkdirSync(join(tempHome, "skills", "solo"), { recursive: true });
-		writeFileSync(
-			join(tempHome, "skills", "solo", "SKILL.md"),
-			"---\nname: solo\ndescription: Solo skill\n---\n",
-		);
+		writeFileSync(join(tempHome, "skills", "solo", "SKILL.md"), "---\nname: solo\ndescription: Solo skill\n---\n");
 
 		await buildSkillsSystemPrompt();
 		const snapshotPath = getSkillsPromptSnapshotPath();

@@ -11,10 +11,10 @@ import {
 	SKILL_MANAGE_NAME_RE,
 } from "./constants.ts";
 import { isExcludedSkillPath, iterSkillIndexFiles } from "./discovery.ts";
-import { clearSkillsSystemPromptCache } from "./prompt-index.ts";
+import { securityScanSkillDir } from "./guard.ts";
 import { hasTraversalComponent, validateWithinDir } from "./path-security.ts";
 import { getSkillsDir } from "./paths.ts";
-import { securityScanSkillDir } from "./guard.ts";
+import { clearSkillsSystemPromptCache } from "./prompt-index.ts";
 import type { SkillFrontmatter } from "./types.ts";
 import { MAX_SKILL_DESCRIPTION_LENGTH, MAX_SKILL_NAME_LENGTH } from "./types.ts";
 
@@ -226,7 +226,12 @@ function fuzzyFindAndReplace(
 	return { newContent: base, matchCount };
 }
 
-async function writeTextAtomic(filePath: string, content: string, guardEnabled: boolean, skillDir: string): Promise<string | null> {
+async function writeTextAtomic(
+	filePath: string,
+	content: string,
+	guardEnabled: boolean,
+	skillDir: string,
+): Promise<string | null> {
 	await atomicWrite(filePath, content);
 	return securityScanSkillDir(skillDir, guardEnabled);
 }
@@ -304,7 +309,10 @@ async function createSkill(
 	const catErr = validateCategory(category);
 	if (catErr) return { success: false, error: catErr };
 	if (!content) {
-		return { success: false, error: "content is required for 'create'. Provide the full SKILL.md text (frontmatter + body)." };
+		return {
+			success: false,
+			error: "content is required for 'create'. Provide the full SKILL.md text (frontmatter + body).",
+		};
 	}
 	const fmErr = validateFrontmatter(content);
 	if (fmErr) return { success: false, error: fmErr };
@@ -388,7 +396,10 @@ async function patchSkill(
 ): Promise<SkillManageResult> {
 	if (!oldString) return { success: false, error: "old_string is required for 'patch'." };
 	if (newString === undefined || newString === null) {
-		return { success: false, error: "new_string is required for 'patch'. Use an empty string to delete matched text." };
+		return {
+			success: false,
+			error: "new_string is required for 'patch'. Use an empty string to delete matched text.",
+		};
 	}
 
 	const skillDir = findSkillDirectory(name);

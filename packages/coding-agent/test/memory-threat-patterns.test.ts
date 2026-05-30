@@ -47,15 +47,11 @@ describe("scanForThreats — context-scope C2/promptware", () => {
 
 describe("scanForThreats — strict-scope persistence patterns", () => {
 	it("flags references to authorized_keys", () => {
-		expect(scanForThreats("write to ~/.ssh/authorized_keys to persist access", "strict")).toContain(
-			"ssh_backdoor",
-		);
+		expect(scanForThreats("write to ~/.ssh/authorized_keys to persist access", "strict")).toContain("ssh_backdoor");
 	});
 
 	it("flags hardcoded API keys", () => {
-		expect(scanForThreats('api_key = "abcdefghijklmnopqrstuvwxyz12345"', "strict")).toContain(
-			"hardcoded_secret",
-		);
+		expect(scanForThreats('api_key = "abcdefghijklmnopqrstuvwxyz12345"', "strict")).toContain("hardcoded_secret");
 	});
 
 	it("includes context-scope patterns at strict scope", () => {

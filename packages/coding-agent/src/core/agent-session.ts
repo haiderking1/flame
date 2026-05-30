@@ -474,13 +474,6 @@ export class AgentSession {
 		};
 
 		this.agent.afterToolCall = async ({ toolCall, args, result, isError }) => {
-			// Self-improvement skill-nudge cadence: count tool-call iterations
-			// while the skill tool is available, and reset the counter whenever
-			// skill_manage actually succeeds (no point nudging a review when a
-			// skill was just updated). Mirrors hermes' _iters_since_skill.
-			if (this.getActiveToolNames().includes("skill_manage")) {
-				this._nudgeTracker.onToolIteration();
-			}
 			if (toolCall.name === "skill_manage" && (result.details as { success?: boolean } | undefined)?.success) {
 				this._nudgeTracker.onSkillManageUsed();
 			}
@@ -536,6 +529,13 @@ export class AgentSession {
 
 	/** Internal handler for agent events - shared by subscribe and reconnect */
 	private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
+		if (event.type === "turn_end") {
+			// Self-improvement skill-nudge cadence: count one increment per assistant turn that issued tool calls
+			if (event.toolResults && event.toolResults.length > 0 && this.getActiveToolNames().includes("skill_manage")) {
+				this._nudgeTracker.onToolIteration();
+			}
+		}
+
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
 		// This ensures the UI sees the updated queue state
 		if (event.type === "message_start" && event.message.role === "user") {
@@ -813,6 +813,11 @@ export class AgentSession {
 	/** Current effective system prompt (includes any per-turn extension modifications) */
 	get systemPrompt(): string {
 		return this.agent.state.systemPrompt;
+	}
+
+	/** Base system prompt before any per-turn extension modifications */
+	get baseSystemPrompt(): string {
+		return this._baseSystemPrompt;
 	}
 
 	/** Current retry attempt (0 if not retrying) */
