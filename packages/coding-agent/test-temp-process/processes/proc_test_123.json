@@ -1,12 +1,12 @@
 {
   "taskId": "proc_test_123",
   "command": "echo hello",
-  "cwd": "C:\\Users\\Administrator\\Desktop\\projects\\Flame\\packages\\coding-agent\\test-temp-process",
+  "cwd": "/home/idk/projects/flame/packages/coding-agent/test-temp-process",
   "status": "failed",
   "pid": 0,
   "exitCode": null,
   "signal": null,
-  "startedAt": 1779624872028,
+  "startedAt": 1780113985214,
   "notify": true,
-  "finishedAt": 1779624872028
+  "finishedAt": 1780113985215
 }

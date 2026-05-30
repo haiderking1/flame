@@ -1,0 +1,12 @@
+{
+  "taskId": "proc_1780113844838",
+  "command": "echo done",
+  "cwd": "/home/idk/projects/flame/packages/coding-agent/test-temp-process",
+  "status": "success",
+  "pid": 7777,
+  "exitCode": 0,
+  "startedAt": 1780113844838,
+  "notify": true,
+  "notified": true,
+  "finishedAt": 1780113844839
+}
