@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { type Dirent, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { Text } from "@earendil-works/flame-tui";
 import { type Static, Type } from "typebox";
 import { parseFrontmatter } from "../../utils/frontmatter.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
@@ -30,6 +31,7 @@ export interface SkillViewToolDetails {
 	name: string;
 	success: boolean;
 	filePath?: string;
+	error?: string;
 }
 
 const SKILL_VIEW_DESCRIPTION =
@@ -135,7 +137,7 @@ function findSkillCandidates(name: string, externalDirs: string[]): SkillCandida
 		}
 
 		function walkForLegacyFlat(dir: string): void {
-			let entries;
+			let entries: Dirent[];
 			try {
 				entries = readdirSync(dir, { withFileTypes: true });
 			} catch {
@@ -169,7 +171,7 @@ function scanLinkedFiles(skillDir: string): Record<string, string[]> {
 	};
 
 	function walk(dir: string): void {
-		let entries;
+		let entries: Dirent[];
 		try {
 			entries = readdirSync(dir, { withFileTypes: true });
 		} catch {
@@ -386,6 +388,32 @@ export function createSkillViewToolDefinition(
 		promptGuidelines: [],
 		parameters: skillViewSchema,
 
+		renderCall(args, theme, context) {
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			const name = args?.name ?? "";
+			const file = args?.file_path ? ` ${theme.fg("muted", args.file_path)}` : "";
+			text.setText(`${theme.fg("toolTitle", theme.bold("skill_view"))} ${theme.fg("accent", name)}${file}`);
+			return text;
+		},
+
+		renderResult(result, options, theme, context) {
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			const details = result.details as SkillViewToolDetails | undefined;
+			if (context.isError || details?.success === false) {
+				const msg = details?.error ?? (result.content[0]?.type === "text" ? (result.content[0].text ?? "") : "");
+				text.setText(theme.fg("warning", msg.slice(0, 200)));
+			} else if (options.isPartial) {
+				text.setText(theme.fg("muted", "Loading skill..."));
+			} else if (details?.success) {
+				const what = details.filePath ? `${details.name} → ${details.filePath}` : `loaded skill '${details.name}'`;
+				text.setText(theme.fg("toolOutput", what));
+			} else {
+				const output = result.content[0]?.type === "text" ? (result.content[0].text ?? "") : "";
+				text.setText(theme.fg("toolOutput", output.slice(0, 200)));
+			}
+			return text;
+		},
+
 		async execute(_toolCallId, args) {
 			const result = executeSkillView(args, options);
 			const text = JSON.stringify(result, null, 2);
@@ -395,6 +423,7 @@ export function createSkillViewToolDefinition(
 					name: args.name,
 					success: result.success === true,
 					filePath: typeof result.file === "string" ? result.file : undefined,
+					error: typeof result.error === "string" ? result.error : undefined,
 				},
 			};
 		},

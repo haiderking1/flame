@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync } from "node:fs";
+import { Text } from "@earendil-works/flame-tui";
 import { type Static, Type } from "typebox";
 import type { ToolDefinition } from "../extensions/types.ts";
 import { discoverAllSkills } from "./discovery.ts";
@@ -90,6 +91,28 @@ export function createSkillsListToolDefinition(
 		promptSnippet: "List available skills (metadata only)",
 		promptGuidelines: [],
 		parameters: skillsListSchema,
+
+		renderCall(args, theme, context) {
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			const cat = args?.category ? ` ${theme.fg("muted", `[${args.category}]`)}` : "";
+			text.setText(`${theme.fg("toolTitle", theme.bold("skills_list"))}${cat}`);
+			return text;
+		},
+
+		renderResult(result, options, theme, context) {
+			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+			const details = result.details as SkillsListToolDetails | undefined;
+			if (context.isError) {
+				const msg = result.content[0]?.type === "text" ? (result.content[0].text ?? "") : "";
+				text.setText(theme.fg("warning", msg.slice(0, 200)));
+			} else if (options.isPartial) {
+				text.setText(theme.fg("muted", "Listing skills..."));
+			} else {
+				const n = details?.count ?? 0;
+				text.setText(theme.fg("toolOutput", `${n} skill${n === 1 ? "" : "s"}`));
+			}
+			return text;
+		},
 
 		async execute(_toolCallId, args) {
 			const result = executeSkillsList(args, options);
