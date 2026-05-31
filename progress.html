@@ -64,8 +64,8 @@
 
 <header>
   <h1><span class="fire">Flame</span> &times; Hermes Port &mdash; Pillar 5 Progress</h1>
-  <div class="sub">Self-improvement loop &amp; curator &middot; <code>main</code> @ <code>5737a84f</code> &middot; updated 2026-05-31</div>
-  <span class="badge">&#10003; Workflow parity + skill-usage DB &mdash; roadmap cleared, only 2 minor deltas left</span>
+  <div class="sub">Self-improvement loop &amp; curator &middot; <code>main</code> @ <code>b78f97ed</code> &middot; updated 2026-05-31</div>
+  <span class="badge">&#10003; Full Pillar 5 parity &mdash; every roadmap item and hermes delta closed</span>
 </header>
 
 <p>
@@ -76,19 +76,18 @@
   <code>~/.hermes/hermes-agent</code> (v0.15.1).
 </p>
 <p>
-  <b>Status update:</b> every item on the previous roadmap has shipped &mdash; TUI surfacing, the full
-  <code>/curator</code> command suite, dry-run + per-run reports, snapshot rollback, and iteration-accurate
-  cadence &mdash; plus skill-tool summary lines in the TUI that hermes itself doesn't render as cleanly.
-  <b>The biggest remaining gap is now closed too:</b> the <code>skill_usage</code> DB has been ported
-  faithfully, so the curator keys off real per-skill activity instead of file mtime. Only two small
-  hermes refinements remain (see <a href="#deltas">mechanism differences</a>).
+  <b>Status update:</b> the port is functionally complete. Everything on the roadmap shipped &mdash; TUI
+  surfacing, the full <code>/curator</code> command suite, dry-run + per-run reports, snapshot rollback, and
+  iteration-accurate cadence &mdash; and the three follow-up hermes deltas are now all closed too: the
+  <code>skill_usage</code> activity DB, the idle-since-activity run gate, and consolidation/pruning
+  reconciliation. Only the deliberately out-of-scope items (below) remain unbuilt.
 </p>
 
 <div class="grid">
-  <div class="card"><div class="n">~96%</div><div class="l">Per-turn review loop fidelity</div></div>
-  <div class="card"><div class="n">~95%</div><div class="l">Curator fidelity (ops + CLI)</div></div>
-  <div class="card"><div class="n">~96%</div><div class="l">Blended Pillar 5</div></div>
-  <div class="card"><div class="n">28</div><div class="l">Self-improvement tests passing</div></div>
+  <div class="card"><div class="n">~98%</div><div class="l">Per-turn review loop fidelity</div></div>
+  <div class="card"><div class="n">~98%</div><div class="l">Curator fidelity (ops + CLI)</div></div>
+  <div class="card"><div class="n">~98%</div><div class="l">Blended Pillar 5</div></div>
+  <div class="card"><div class="n">38</div><div class="l">Self-improvement tests passing</div></div>
 </div>
 
 <h2>What was built</h2>
@@ -201,16 +200,26 @@
       <td>Faithful port of <code>skill_usage.py</code>; hermes-wire-compatible sidecar. Cross-process file lock omitted (flame has no cron daemon).</td>
     </tr>
     <tr>
+      <td>Curator &mdash; idle gate</td><td><span class="tag done">done</span></td>
+      <td><span class="bar"><span style="width:100%"></span></span> <span class="pct">100%</span></td>
+      <td>Ports <code>min_idle_hours</code>: skips a scheduled run unless idle ≥ 2h since last activity; never gates forced runs.</td>
+    </tr>
+    <tr>
+      <td>Consolidation reconciliation</td><td><span class="tag done">done</span></td>
+      <td><span class="bar"><span style="width:95%"></span></span> <span class="pct">95%</span></td>
+      <td>Classifies removed skills consolidated-vs-pruned via the authoritative <code>absorbed_into</code> + path/word heuristic. YAML-summary fallback omitted (declaration is authoritative).</td>
+    </tr>
+    <tr>
       <td>Skill-tool TUI lines</td><td><span class="tag done">done</span></td>
       <td><span class="bar"><span style="width:100%"></span></span> <span class="pct">100%</span></td>
       <td>create / view / list all render clean summary lines.</td>
     </tr>
   </tbody>
 </table>
-<p class="legend">Blended Pillar 5: <b>~96%</b>. The per-turn loop, curator CLI, and the activity-tracking DB are at parity.
-  Only two small hermes refinements remain (below).</p>
+<p class="legend">Blended Pillar 5: <b>~98%</b>. The per-turn loop, the full curator (CLI, activity DB, idle gate,
+  consolidation reconciliation) are all at parity. The only unbuilt items are out of scope by earlier project decisions.</p>
 
-<h2>Completed roadmap <span class="tag done">6 / 8 done &middot; 2 minor left</span></h2>
+<h2>Completed roadmap <span class="tag done">8 / 8 done</span></h2>
 
 <div class="done-item"><h3><span class="check">&#10003;</span> 1. Surface review &amp; curator results in the TUI</h3>
   <p>Both events render through <code>showStatus</code> in interactive mode.</p></div>
@@ -227,26 +236,17 @@
 <div class="done-item"><h3><span class="check">&#10003;</span> 4. Skill usage DB (was the big "L" item)</h3>
   <p>Ported <code>skill_usage.py</code> in full &mdash; <code>.usage.json</code> sidecar, real use/view/patch tracking,
      provenance, and curator transitions keyed off it. Hermes-wire-compatible.</p></div>
+<div class="done-item"><h3><span class="check">&#10003;</span> 8. Idle-since-activity trigger</h3>
+  <p>Ports <code>min_idle_hours</code>. AgentSession records activity into <code>.curator_state</code>; the startup
+     pass measures cross-session idle time and defers a run until the agent has been idle ≥ 2h.</p></div>
+<div class="done-item"><h3><span class="check">&#10003;</span> 5. Consolidation / pruning reconciliation</h3>
+  <p>Ports <code>_classify_removed_skills</code> &amp; <code>_extract_absorbed_into_declarations</code>. Each skill
+     removed during a consolidation pass is labelled <i>consolidated &rarr; umbrella</i> or <i>pruned</i> and surfaced
+     in <code>REPORT.md</code> / <code>run.json</code> + a rename summary.</p></div>
 <div class="done-item"><h3><span class="check">&#10003;</span> Bonus &mdash; skill-tool TUI summary lines</h3>
   <p>Not on the original roadmap; closes the &ldquo;nothing shows when a skill is created&rdquo; gap vs hermes.</p></div>
 
-<h2 id="deltas">Remaining mechanism differences <span class="tag partial">by design</span></h2>
-<p>Two small hermes refinements are all that's left. They are implementation choices, not absent features &mdash;
-   the user-visible workflow is equivalent.</p>
-
-<div class="next">
-  <h3>A. Consolidation / pruning reconciliation <span class="eff">&mdash; roadmap #5</span></h3>
-  <p>The LLM consolidation pass runs and <code>skill_manage delete</code> already takes <code>absorbed_into</code>.
-     What's not ported is hermes' post-hoc <code>_classify_removed_skills</code> that parses the run's YAML to label
-     each removal <i>consolidated</i> vs <i>pruned</i> for reference migration &mdash; a reporting refinement.</p>
-</div>
-<div class="next">
-  <h3>B. Idle-since-activity trigger <span class="eff">&mdash; roadmap #8</span></h3>
-  <p>The curator is interval-gated at session start. Hermes additionally requires a minimum idle window since the last
-     activity. Adding that gate would prevent any chance of competing with an active turn.</p>
-</div>
-
-<h3>Explicitly out of scope (by earlier project decisions)</h3>
+<h3 id="deltas">Explicitly out of scope (by earlier project decisions)</h3>
 <ul>
   <li>No bundled skills (agent grows its own library &mdash; the stated source of value).</li>
   <li>External memory providers (honcho / mem0 / supermemory), <code>&lt;memory-context&gt;</code> scrubber, <code>session_search</code>.</li>
@@ -254,9 +254,9 @@
 </ul>
 
 <footer>
-  Pillar 5 of the hermes&rarr;flame port. Verified: <code>tsgo --noEmit</code> clean, biome clean, 28 self-improvement
+  Pillar 5 of the hermes&rarr;flame port. Verified: <code>tsgo --noEmit</code> clean, biome clean, 38 self-improvement
   tests passing, no new regressions (the pre-existing full-suite failures reproduce identically at HEAD).
-  &middot; ~96% blended parity; the two remaining items are reporting/scheduling refinements, not capability gaps.
+  &middot; ~98% blended parity; every roadmap item and hermes delta is closed. Only the out-of-scope items remain.
 </footer>
 
 </div>
