@@ -3,6 +3,7 @@ import { type Static, Type } from "typebox";
 import { getFlameHome } from "../../utils/flame-home.ts";
 import type { ToolDefinition } from "../extensions/types.ts";
 import { executeSkillManage, type SkillManageActionOptions } from "./skill-manage-actions.ts";
+import { bumpPatch, forget, markAgentCreated } from "./skill-usage.ts";
 
 const skillManageSchema = Type.Object({
 	action: Type.Union(
@@ -92,7 +93,15 @@ const SKILL_MANAGE_DESCRIPTION =
 	"Good skills: trigger conditions, numbered steps with exact commands, " +
 	"pitfalls section, verification steps. Use skill_view() to see format examples.";
 
-export interface SkillManageToolOptions extends SkillManageActionOptions {}
+export interface SkillManageToolOptions extends SkillManageActionOptions {
+	/**
+	 * When true, a successful `create` marks the new skill `created_by: "agent"`
+	 * in the usage sidecar, opting it into curator management. Only the background
+	 * self-improvement review fork sets this — foreground (user-directed) creates
+	 * stay off-limits to the curator, matching hermes' `is_background_review()` gate.
+	 */
+	markCreatedAsAgent?: boolean;
+}
 
 export function createSkillManageToolDefinition(
 	options: SkillManageToolOptions = {},
@@ -141,6 +150,28 @@ export function createSkillManageToolDefinition(
 
 		async execute(_toolCallId, args) {
 			const result = await executeSkillManage(args, options);
+			// Usage telemetry (best-effort): mark provenance on agent-created skills,
+			// bump patch activity, and forget deleted skills. Mirrors hermes' wiring.
+			if (result.success) {
+				try {
+					if (args.action === "create") {
+						if (options.markCreatedAsAgent) {
+							await markAgentCreated(args.name);
+						}
+					} else if (
+						args.action === "patch" ||
+						args.action === "edit" ||
+						args.action === "write_file" ||
+						args.action === "remove_file"
+					) {
+						await bumpPatch(args.name);
+					} else if (args.action === "delete") {
+						await forget(args.name);
+					}
+				} catch {
+					// telemetry never breaks the tool call
+				}
+			}
 			const text = JSON.stringify(result, null, 2);
 			return {
 				content: [{ type: "text", text }],

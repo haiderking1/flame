@@ -14,9 +14,11 @@ vi.mock("../src/core/self-improvement/index.js", () => ({
 		runCount: 2,
 		lastRunAt: "2026-05-30T00:00:00.000Z",
 		lastRunSummary: "completed successfully",
-		pinned: ["test-skill"],
-		states: {},
 	})),
+	agentCreatedReport: vi.fn(() => [
+		{ name: "test-skill", state: "active", pinned: true },
+		{ name: "other-skill", state: "stale", pinned: false },
+	]),
 	setCuratorPaused: mockSetCuratorPaused,
 	pinSkill: mockPinSkill,
 	unpinSkill: mockUnpinSkill,

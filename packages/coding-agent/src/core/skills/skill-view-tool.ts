@@ -10,6 +10,7 @@ import { extractRelatedSkills, extractSkillTags, skillMatchesPlatform } from "./
 import { hasTraversalComponent, isPathWithinDir, validateWithinDir } from "./path-security.ts";
 import { getSkillsDir } from "./paths.ts";
 import { preprocessSkillContent } from "./preprocessing.ts";
+import { bumpUse, bumpView } from "./skill-usage.ts";
 import type { SkillFrontmatter } from "./types.ts";
 
 const skillViewSchema = Type.Object({
@@ -416,6 +417,18 @@ export function createSkillViewToolDefinition(
 
 		async execute(_toolCallId, args) {
 			const result = executeSkillView(args, options);
+			// Telemetry (best-effort): a skill_view is the agent loading a skill to
+			// act on it — count it as both a view and a use, since the curator's
+			// stale timer keys off last_used_at. Mirrors hermes' _skill_view_with_bump.
+			if (result.success === true) {
+				const resolved = typeof result.name === "string" && result.name ? result.name : args.name;
+				try {
+					await bumpView(resolved);
+					await bumpUse(resolved);
+				} catch {
+					// telemetry never breaks the tool call
+				}
+			}
 			const text = JSON.stringify(result, null, 2);
 			return {
 				content: [{ type: "text", text }],

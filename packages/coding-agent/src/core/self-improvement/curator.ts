@@ -18,8 +18,8 @@
  * pinned skills bypass all transitions, and the deterministic pass needs no
  * model. Best-effort throughout — a curator failure never disturbs the session.
  */
-import { type Dirent, existsSync, mkdirSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
 	Agent,
 	type AgentMessage,
@@ -28,9 +28,9 @@ import {
 	type ThinkingLevel,
 } from "@earendil-works/flame-agent-core";
 import type { Message, Model, ThinkingBudgets, Transport } from "@earendil-works/flame-ai";
-import { discoverAllSkills } from "../skills/discovery.ts";
 import { getSkillsDir } from "../skills/paths.ts";
 import { createSkillManageToolDefinition } from "../skills/skill-manage-tool.ts";
+import { agentCreatedReport, archiveSkill, setState as usageSetState } from "../skills/skill-usage.ts";
 import { createSkillViewToolDefinition } from "../skills/skill-view-tool.ts";
 import { createSkillsListToolDefinition } from "../skills/skills-list-tool.ts";
 import { wrapToolDefinition } from "../tools/tool-definition-wrapper.ts";
@@ -64,79 +64,6 @@ export interface CuratorRunResult {
 	summary?: string;
 }
 
-interface SkillEntry {
-	name: string;
-	skillDir: string;
-}
-
-/** Enumerate agent-authored skills, excluding the archive tree. */
-function enumerateSkills(): SkillEntry[] {
-	const skills = discoverAllSkills();
-	const entries: SkillEntry[] = [];
-	for (const skill of skills) {
-		const normalized = skill.filePath.split("\\").join("/");
-		if (normalized.includes("/.archive/")) {
-			continue;
-		}
-		entries.push({ name: skill.name, skillDir: dirname(skill.filePath) });
-	}
-	return entries;
-}
-
-/** Most recent file mtime under a skill directory (the activity anchor). */
-function skillActivityMs(skillDir: string): number {
-	let newest = 0;
-	const walk = (dir: string): void => {
-		let dirEntries: Dirent[];
-		try {
-			dirEntries = readdirSync(dir, { withFileTypes: true });
-		} catch {
-			return;
-		}
-		for (const entry of dirEntries) {
-			const full = join(dir, entry.name);
-			if (entry.isDirectory()) {
-				walk(full);
-				continue;
-			}
-			try {
-				const mtime = statSync(full).mtimeMs;
-				if (mtime > newest) {
-					newest = mtime;
-				}
-			} catch {
-				// ignore unreadable file
-			}
-		}
-	};
-	walk(skillDir);
-	if (newest === 0) {
-		try {
-			newest = statSync(skillDir).mtimeMs;
-		} catch {
-			newest = Date.now();
-		}
-	}
-	return newest;
-}
-
-/** Move a skill directory into `<skills>/.archive/<name>/`. Never deletes. */
-function archiveSkillDir(name: string, skillDir: string): boolean {
-	const archiveRoot = join(getSkillsDir(), ".archive");
-	try {
-		mkdirSync(archiveRoot, { recursive: true });
-		let dest = join(archiveRoot, name);
-		let suffix = 1;
-		while (existsSync(dest)) {
-			dest = join(archiveRoot, `${name}-${suffix++}`);
-		}
-		renameSync(skillDir, dest);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
 export interface SkillTransitionDetail {
 	name: string;
 	from: SkillLifecycleState;
@@ -144,56 +71,69 @@ export interface SkillTransitionDetail {
 }
 
 /**
- * Apply deterministic, LLM-free lifecycle transitions. Mirrors hermes'
- * `apply_automatic_transitions`. Mutates `state.states` in place unless dryRun is true.
+ * Apply deterministic, LLM-free lifecycle transitions. Faithful port of hermes'
+ * `apply_automatic_transitions`: walk every agent-created skill, anchor on its
+ * latest real activity (`last_activity_at`, falling back to `created_at`), and
+ * move active → stale → archived. Pinned skills are never touched. State and
+ * archival are persisted in the `.usage.json` sidecar (skill-usage), not here.
+ * In `dryRun` mode nothing is written — counts and details only.
  */
-export function applyAutomaticTransitions(
-	state: CuratorState,
+export async function applyAutomaticTransitions(
 	settings: CuratorSettings,
 	now: number = Date.now(),
 	dryRun = false,
 	details?: SkillTransitionDetail[],
-): TransitionCounts {
+): Promise<TransitionCounts> {
 	const staleCutoff = now - settings.staleAfterDays * MS_PER_DAY;
 	const archiveCutoff = now - settings.archiveAfterDays * MS_PER_DAY;
 	const counts: TransitionCounts = { checked: 0, markedStale: 0, archived: 0, reactivated: 0 };
-	const pinned = new Set(state.pinned);
 
-	for (const { name, skillDir } of enumerateSkills()) {
+	for (const row of agentCreatedReport()) {
 		counts.checked++;
-		if (pinned.has(name)) {
+		if (row.pinned) {
 			continue;
 		}
-		const anchor = skillActivityMs(skillDir);
-		const current = state.states[name] ?? "active";
+		// Never-active skills anchor on created_at so they don't archive immediately.
+		const anchor = parseIsoMs(row.last_activity_at) ?? parseIsoMs(row.created_at) ?? now;
+		const current = (row.state ?? "active") as SkillLifecycleState;
 		if (current === "archived") {
 			continue;
 		}
 
 		if (anchor <= archiveCutoff) {
-			if (dryRun || archiveSkillDir(name, skillDir)) {
-				if (!dryRun) {
-					state.states[name] = "archived";
-				}
+			let ok = true;
+			if (!dryRun) {
+				ok = (await archiveSkill(row.name)).ok;
+			}
+			if (ok) {
 				counts.archived++;
-				details?.push({ name, from: current, to: "archived" });
+				details?.push({ name: row.name, from: current, to: "archived" });
 			}
 		} else if (anchor <= staleCutoff && current === "active") {
 			if (!dryRun) {
-				state.states[name] = "stale";
+				await usageSetState(row.name, "stale");
 			}
 			counts.markedStale++;
-			details?.push({ name, from: current, to: "stale" });
+			details?.push({ name: row.name, from: current, to: "stale" });
 		} else if (anchor > staleCutoff && current === "stale") {
 			if (!dryRun) {
-				state.states[name] = "active";
+				await usageSetState(row.name, "active");
 			}
 			counts.reactivated++;
-			details?.push({ name, from: current, to: "active" });
+			details?.push({ name: row.name, from: current, to: "active" });
 		}
 	}
 
 	return counts;
+}
+
+/** Parse an ISO timestamp to epoch-ms, or undefined when absent/invalid. */
+function parseIsoMs(value: string | null | undefined): number | undefined {
+	if (!value) {
+		return undefined;
+	}
+	const ms = Date.parse(value);
+	return Number.isNaN(ms) ? undefined : ms;
 }
 
 /** Static run gates: enabled, not paused, and one interval since the last run. */
@@ -262,7 +202,10 @@ export async function maybeRunCurator(params: MaybeRunCuratorParams): Promise<Cu
 
 		// 2. Deterministic transitions.
 		const transitionDetails: SkillTransitionDetail[] = [];
-		const counts = applyAutomaticTransitions(state, params.settings, now, dryRun, transitionDetails);
+		const counts = await applyAutomaticTransitions(params.settings, now, dryRun, transitionDetails);
+		const pinnedNames = agentCreatedReport()
+			.filter((r) => r.pinned)
+			.map((r) => r.name);
 
 		// 3. Optional LLM consolidation pass (only in live mode).
 		let consolidationSummary: string | undefined;
@@ -302,7 +245,7 @@ export async function maybeRunCurator(params: MaybeRunCuratorParams): Promise<Cu
 				settings: params.settings,
 				counts,
 				transitions: transitionDetails,
-				pinned: state.pinned,
+				pinned: pinnedNames,
 				consolidationSummary,
 			};
 			writeFileSync(join(runDir, "run.json"), `${JSON.stringify(runJson, null, 2)}\n`, "utf-8");
@@ -338,9 +281,9 @@ export async function maybeRunCurator(params: MaybeRunCuratorParams): Promise<Cu
 				report += `## Transitions\n\nNo skill transitions occurred during this pass.\n\n`;
 			}
 
-			if (state.pinned.length > 0) {
+			if (pinnedNames.length > 0) {
 				report += `## Pinned Skills (Bypassed)\n\n`;
-				for (const p of state.pinned) {
+				for (const p of pinnedNames) {
 					report += `- \`${p}\`\n`;
 				}
 				report += `\n`;
@@ -370,7 +313,9 @@ function buildCuratorTools(params: MaybeRunCuratorParams): AgentTool[] {
 	return [
 		wrapToolDefinition(createSkillsListToolDefinition()),
 		wrapToolDefinition(createSkillViewToolDefinition({ sessionId: params.sessionId })),
-		wrapToolDefinition(createSkillManageToolDefinition({ guardAgentCreated: params.guardAgentCreated })),
+		wrapToolDefinition(
+			createSkillManageToolDefinition({ guardAgentCreated: params.guardAgentCreated, markCreatedAsAgent: true }),
+		),
 	];
 }
 

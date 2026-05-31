@@ -13,7 +13,14 @@ import { join } from "node:path";
 import { getSkillsDir } from "../skills/paths.ts";
 
 /** Entries under skills/ that must never be rolled into a snapshot. */
-const EXCLUDED_ENTRIES = new Set([".curator_backups", ".archive", ".curator_state", ".skills_prompt_snapshot.json"]);
+const EXCLUDED_ENTRIES = new Set([
+	".curator_backups",
+	".curator_runs",
+	".archive",
+	".curator_state",
+	".usage.json",
+	".skills_prompt_snapshot.json",
+]);
 
 const BACKUPS_DIRNAME = ".curator_backups";
 

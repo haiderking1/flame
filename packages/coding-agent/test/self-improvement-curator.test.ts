@@ -1,11 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyAutomaticTransitions, type CuratorSettings } from "../src/core/self-improvement/curator.ts";
-import { defaultCuratorState } from "../src/core/self-improvement/curator-state.ts";
 import { getSkillsDir } from "../src/core/skills/paths.ts";
 import { resetSkillsPromptCacheForTests } from "../src/core/skills/prompt-index.ts";
+import { getRecord, loadUsage, saveUsage, type UsageRecord } from "../src/core/skills/skill-usage.ts";
 
 const SETTINGS: CuratorSettings = {
 	enabled: true,
@@ -21,13 +21,40 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 let tempHome: string;
 let originalFlameHome: string | undefined;
 
-function createSkill(name: string, ageDays: number): void {
+/** Create a plain skill on disk (no usage record — not curator-managed). */
+function createSkill(name: string): void {
 	const dir = join(getSkillsDir(), name);
 	mkdirSync(dir, { recursive: true });
-	const file = join(dir, "SKILL.md");
-	writeFileSync(file, `---\nname: ${name}\ndescription: ${name} skill\n---\nbody\n`, "utf-8");
-	const when = new Date(Date.now() - ageDays * DAY_MS);
-	utimesSync(file, when, when);
+	writeFileSync(join(dir, "SKILL.md"), `---\nname: ${name}\ndescription: ${name} skill\n---\nbody\n`, "utf-8");
+}
+
+/**
+ * Create an agent-created (curator-managed) skill with a usage record whose
+ * activity is `activityAgeDays` old. Mirrors how the background review fork
+ * would have created and used it.
+ */
+async function createManagedSkill(
+	name: string,
+	activityAgeDays: number,
+	opts: { state?: UsageRecord["state"]; pinned?: boolean } = {},
+): Promise<void> {
+	createSkill(name);
+	const activityIso = new Date(Date.now() - activityAgeDays * DAY_MS).toISOString();
+	const map = loadUsage();
+	map[name] = {
+		created_by: "agent",
+		use_count: 1,
+		view_count: 0,
+		last_used_at: activityIso,
+		last_viewed_at: null,
+		patch_count: 0,
+		last_patched_at: null,
+		created_at: activityIso,
+		state: opts.state ?? "active",
+		pinned: opts.pinned ?? false,
+		archived_at: null,
+	};
+	await saveUsage(map);
 }
 
 beforeEach(() => {
@@ -45,53 +72,57 @@ afterEach(() => {
 });
 
 describe("curator applyAutomaticTransitions", () => {
-	it("marks inactive skills stale and very old ones archived; leaves fresh ones alone", () => {
-		createSkill("fresh", 1);
-		createSkill("stale-one", 45);
-		createSkill("ancient", 120);
-		const state = defaultCuratorState();
+	it("marks inactive skills stale and very old ones archived; leaves fresh ones alone", async () => {
+		await createManagedSkill("fresh", 1);
+		await createManagedSkill("stale-one", 45);
+		await createManagedSkill("ancient", 120);
 
-		const counts = applyAutomaticTransitions(state, SETTINGS);
+		const counts = await applyAutomaticTransitions(SETTINGS);
 
 		expect(counts.checked).toBe(3);
-		expect(state.states.fresh).toBeUndefined(); // still active, untouched
-		expect(state.states["stale-one"]).toBe("stale");
-		expect(state.states.ancient).toBe("archived");
+		expect(getRecord("fresh").state).toBe("active"); // still active, untouched
+		expect(getRecord("stale-one").state).toBe("stale");
+		expect(getRecord("ancient").state).toBe("archived");
 
 		// Archived skill directory was moved into .archive/, never deleted.
 		expect(existsSync(join(getSkillsDir(), "ancient"))).toBe(false);
 		expect(existsSync(join(getSkillsDir(), ".archive", "ancient", "SKILL.md"))).toBe(true);
 	});
 
-	it("never touches pinned skills", () => {
-		createSkill("pinned-old", 200);
-		const state = defaultCuratorState();
-		state.pinned = ["pinned-old"];
+	it("never touches pinned skills", async () => {
+		await createManagedSkill("pinned-old", 200, { pinned: true });
 
-		const counts = applyAutomaticTransitions(state, SETTINGS);
+		const counts = await applyAutomaticTransitions(SETTINGS);
 
 		expect(counts.archived).toBe(0);
-		expect(state.states["pinned-old"]).toBeUndefined();
+		expect(getRecord("pinned-old").state).toBe("active");
 		expect(existsSync(join(getSkillsDir(), "pinned-old", "SKILL.md"))).toBe(true);
 	});
 
-	it("reactivates a stale skill that became active again", () => {
-		createSkill("revived", 1); // fresh on disk
-		const state = defaultCuratorState();
-		state.states.revived = "stale"; // but previously marked stale
+	it("reactivates a stale skill that became active again", async () => {
+		await createManagedSkill("revived", 1, { state: "stale" }); // fresh activity, was stale
 
-		const counts = applyAutomaticTransitions(state, SETTINGS);
+		const counts = await applyAutomaticTransitions(SETTINGS);
 
 		expect(counts.reactivated).toBe(1);
-		expect(state.states.revived).toBe("active");
+		expect(getRecord("revived").state).toBe("active");
+	});
+
+	it("ignores skills that are not agent-created (user-authored)", async () => {
+		createSkill("user-skill"); // no usage record → not curator-managed
+
+		const counts = await applyAutomaticTransitions(SETTINGS);
+
+		expect(counts.checked).toBe(0);
+		expect(existsSync(join(getSkillsDir(), "user-skill", "SKILL.md"))).toBe(true);
 	});
 });
 
 describe("curator snapshot and restore", () => {
 	it("can snapshot the skills tree and successfully restore it", () => {
 		const { listSnapshots, restoreSkillsSnapshot, snapshotSkills } = require("../src/core/self-improvement/index.ts");
-		createSkill("skill-a", 1);
-		createSkill("skill-b", 5);
+		createSkill("skill-a");
+		createSkill("skill-b");
 
 		// Take snapshot
 		const snapPath = snapshotSkills("test-snapshot", 5);
@@ -101,7 +132,7 @@ describe("curator snapshot and restore", () => {
 		expect(snapshots.length).toBe(1);
 
 		// Mutate skill files (e.g. write a new skill, delete skill-a)
-		createSkill("skill-c", 1);
+		createSkill("skill-c");
 		rmSync(join(getSkillsDir(), "skill-a"), { recursive: true, force: true });
 
 		expect(existsSync(join(getSkillsDir(), "skill-a"))).toBe(false);
@@ -121,19 +152,10 @@ describe("curator snapshot and restore", () => {
 describe("curator dry-run and per-run reporting", () => {
 	it("does not mutate files during dry-run but successfully writes reports", async () => {
 		const { maybeRunCurator } = require("../src/core/self-improvement/index.ts");
-		createSkill("ancient-skill", 120);
-
-		const settings = {
-			enabled: true,
-			intervalHours: 168,
-			staleAfterDays: 30,
-			archiveAfterDays: 90,
-			maxBackups: 5,
-			llmConsolidation: false,
-		};
+		await createManagedSkill("ancient-skill", 120);
 
 		const result = await maybeRunCurator({
-			settings,
+			settings: SETTINGS,
 			force: true,
 			dryRun: true,
 		});
@@ -144,6 +166,7 @@ describe("curator dry-run and per-run reporting", () => {
 
 		// Directory must NOT have been moved since it's a dry-run
 		expect(existsSync(join(getSkillsDir(), "ancient-skill", "SKILL.md"))).toBe(true);
+		expect(getRecord("ancient-skill").state).toBe("active"); // unchanged on disk
 
 		// Assert reports were written under .curator_runs/
 		const runsDir = join(getSkillsDir(), ".curator_runs");

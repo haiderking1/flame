@@ -7,6 +7,16 @@
  */
 
 export {
+	agentCreatedReport,
+	archiveSkill,
+	listArchivedSkillNames,
+	pinSkill,
+	restoreSkill,
+	setPinned,
+	type UsageReportRow,
+	unpinSkill,
+} from "../skills/skill-usage.ts";
+export {
 	type BackgroundReviewParams,
 	type BackgroundReviewResult,
 	DEFAULT_REVIEW_MAX_ITERATIONS,
@@ -33,11 +43,9 @@ export {
 	type CuratorState,
 	defaultCuratorState,
 	loadCuratorState,
-	pinSkill,
 	type SkillLifecycleState,
 	saveCuratorState,
 	setCuratorPaused,
-	unpinSkill,
 } from "./curator-state.ts";
 export { NudgeTracker, type NudgeTrackerOptions } from "./nudge-tracker.ts";
 export {

@@ -80,6 +80,7 @@ import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import {
+	agentCreatedReport,
 	listSnapshots,
 	loadCuratorState,
 	maybeRunCurator,
@@ -5637,6 +5638,9 @@ export class InteractiveMode {
 		if (subcommand === "status") {
 			const state = loadCuratorState();
 			const settings = this.settingsManager.getCuratorSettings();
+			const report = agentCreatedReport();
+			const pinned = report.filter((r) => r.pinned).map((r) => r.name);
+			const byState = (s: string) => report.filter((r) => r.state === s).length;
 			const statusStr = [
 				`Curator Status:`,
 				`  Enabled: ${settings.enabled ? "yes" : "no"}`,
@@ -5644,7 +5648,8 @@ export class InteractiveMode {
 				`  Total Runs: ${state.runCount}`,
 				`  Last Run At: ${state.lastRunAt || "never"}`,
 				`  Last Run Summary: ${state.lastRunSummary || "none"}`,
-				`  Pinned Skills: ${state.pinned.length > 0 ? state.pinned.join(", ") : "none"}`,
+				`  Curator-managed Skills: ${report.length} (active ${byState("active")}, stale ${byState("stale")})`,
+				`  Pinned Skills: ${pinned.length > 0 ? pinned.join(", ") : "none"}`,
 				`  Interval (Hours): ${settings.intervalHours}`,
 				`  Stale After (Days): ${settings.staleAfterDays}`,
 				`  Archive After (Days): ${settings.archiveAfterDays}`,

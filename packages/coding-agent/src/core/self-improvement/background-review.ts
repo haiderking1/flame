@@ -88,7 +88,9 @@ function buildReviewTools(params: BackgroundReviewParams): AgentTool[] {
 		createMemoryTool(params.memoryStore),
 		wrapToolDefinition(createSkillsListToolDefinition()),
 		wrapToolDefinition(createSkillViewToolDefinition({ sessionId: params.skillViewSessionId })),
-		wrapToolDefinition(createSkillManageToolDefinition({ guardAgentCreated: params.guardAgentCreated })),
+		wrapToolDefinition(
+			createSkillManageToolDefinition({ guardAgentCreated: params.guardAgentCreated, markCreatedAsAgent: true }),
+		),
 	];
 }
 
