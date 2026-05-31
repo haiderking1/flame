@@ -29,12 +29,19 @@ import {
 	type ThinkingLevel,
 } from "@earendil-works/flame-agent-core";
 import type { Message, Model, ThinkingBudgets, Transport } from "@earendil-works/flame-ai";
+import { discoverAllSkills } from "../skills/discovery.ts";
 import { getSkillsDir } from "../skills/paths.ts";
 import { createSkillManageToolDefinition } from "../skills/skill-manage-tool.ts";
 import { agentCreatedReport, archiveSkill, setState as usageSetState } from "../skills/skill-usage.ts";
 import { createSkillViewToolDefinition } from "../skills/skill-view-tool.ts";
 import { createSkillsListToolDefinition } from "../skills/skills-list-tool.ts";
 import { wrapToolDefinition } from "../tools/tool-definition-wrapper.ts";
+import {
+	buildRenameSummary,
+	type CapturedSkillCall,
+	type ClassificationResult,
+	reconcileRemovedSkills,
+} from "./consolidation-reconcile.ts";
 import { snapshotSkills } from "./curator-backup.ts";
 import { buildCuratorReviewPrompt } from "./curator-prompts.ts";
 import { type CuratorState, loadCuratorState, type SkillLifecycleState, saveCuratorState } from "./curator-state.ts";
@@ -225,16 +232,20 @@ export async function maybeRunCurator(params: MaybeRunCuratorParams): Promise<Cu
 			.map((r) => r.name);
 
 		// 3. Optional LLM consolidation pass (only in live mode).
-		let consolidationSummary: string | undefined;
+		let consolidation: ConsolidationOutcome | undefined;
 		if (!dryRun && params.settings.llmConsolidation && canRunConsolidation(params)) {
-			consolidationSummary = await runCuratorConsolidation(params);
+			consolidation = await runCuratorConsolidation(params);
 		}
+		const consolidatedCount = consolidation?.classification.consolidated.length ?? 0;
+		const prunedCount = consolidation?.classification.pruned.length ?? 0;
 
 		const summaryParts: string[] = [];
 		if (counts.markedStale) summaryParts.push(`${counts.markedStale} stale`);
 		if (counts.archived) summaryParts.push(`${counts.archived} archived`);
 		if (counts.reactivated) summaryParts.push(`${counts.reactivated} reactivated`);
-		if (consolidationSummary) summaryParts.push("consolidation pass complete");
+		if (consolidatedCount) summaryParts.push(`${consolidatedCount} consolidated`);
+		if (prunedCount) summaryParts.push(`${prunedCount} pruned`);
+		else if (consolidation) summaryParts.push("consolidation pass complete");
 		let summary = summaryParts.length > 0 ? summaryParts.join(", ") : "no changes";
 		if (dryRun) {
 			summary = `dry-run: ${summary}`;
@@ -263,7 +274,13 @@ export async function maybeRunCurator(params: MaybeRunCuratorParams): Promise<Cu
 				counts,
 				transitions: transitionDetails,
 				pinned: pinnedNames,
-				consolidationSummary,
+				consolidation: consolidation
+					? {
+							consolidated: consolidation.classification.consolidated,
+							pruned: consolidation.classification.pruned,
+							finalText: consolidation.text,
+						}
+					: undefined,
 			};
 			writeFileSync(join(runDir, "run.json"), `${JSON.stringify(runJson, null, 2)}\n`, "utf-8");
 
@@ -306,8 +323,30 @@ export async function maybeRunCurator(params: MaybeRunCuratorParams): Promise<Cu
 				report += `\n`;
 			}
 
-			if (consolidationSummary) {
-				report += `## LLM Consolidation Results\n\n${consolidationSummary}\n`;
+			if (consolidation) {
+				report += `## LLM Consolidation Results\n\n`;
+				const { consolidated, pruned } = consolidation.classification;
+				if (consolidated.length > 0) {
+					report += `### Consolidated (absorbed into an umbrella)\n\n`;
+					report += `| Skill | Into | Evidence |\n| :--- | :--- | :--- |\n`;
+					for (const e of consolidated) {
+						report += `| \`${e.name}\` | \`${e.into}\` | ${e.evidence ?? ""} |\n`;
+					}
+					report += `\n`;
+				}
+				if (pruned.length > 0) {
+					report += `### Pruned (archived, no forwarding target)\n\n`;
+					for (const e of pruned) {
+						report += `- \`${e.name}\`\n`;
+					}
+					report += `\n`;
+				}
+				if (consolidation.renameSummary) {
+					report += `\`\`\`\n${consolidation.renameSummary}\n\`\`\`\n\n`;
+				}
+				if (consolidation.text) {
+					report += `${consolidation.text}\n`;
+				}
 			}
 
 			writeFileSync(join(runDir, "REPORT.md"), report, "utf-8");
@@ -315,7 +354,7 @@ export async function maybeRunCurator(params: MaybeRunCuratorParams): Promise<Cu
 			// Best-effort reporting — never crash curator loop due to logging failure.
 		}
 
-		return { ran: true, counts, consolidationSummary, summary };
+		return { ran: true, counts, consolidationSummary: consolidation?.text, summary };
 	} catch {
 		return { ran: false };
 	}
@@ -336,10 +375,31 @@ function buildCuratorTools(params: MaybeRunCuratorParams): AgentTool[] {
 	];
 }
 
-/** Run the forked LLM consolidation pass. Returns its final text, or undefined. */
-async function runCuratorConsolidation(params: MaybeRunCuratorParams): Promise<string | undefined> {
+/** Outcome of the LLM consolidation pass: final text + removed-skill classification. */
+export interface ConsolidationOutcome {
+	text?: string;
+	classification: ClassificationResult;
+	renameSummary: string;
+}
+
+/** Distinct skill names currently on disk (excluding the archive tree). */
+function currentSkillNames(): Set<string> {
+	const names = new Set<string>();
+	for (const skill of discoverAllSkills()) {
+		if (!skill.filePath.split("\\").join("/").includes("/.archive/")) {
+			names.add(skill.name);
+		}
+	}
+	return names;
+}
+
+/** Run the forked LLM consolidation pass + reconcile what it removed. */
+async function runCuratorConsolidation(params: MaybeRunCuratorParams): Promise<ConsolidationOutcome | undefined> {
 	const maxIterations = Math.max(1, params.maxIterations ?? 24);
 	try {
+		const beforeNames = currentSkillNames();
+		const calls: CapturedSkillCall[] = [];
+
 		const agent = new Agent({
 			initialState: {
 				systemPrompt: params.baseSystemPrompt ?? "",
@@ -357,7 +417,9 @@ async function runCuratorConsolidation(params: MaybeRunCuratorParams): Promise<s
 
 		let turnCount = 0;
 		const unsubscribe = agent.subscribe((event) => {
-			if (event.type === "turn_end") {
+			if (event.type === "tool_execution_start" && event.toolName === "skill_manage") {
+				calls.push((event.args ?? {}) as CapturedSkillCall);
+			} else if (event.type === "turn_end") {
 				turnCount++;
 				if (turnCount >= maxIterations) {
 					agent.abort();
@@ -371,7 +433,16 @@ async function runCuratorConsolidation(params: MaybeRunCuratorParams): Promise<s
 			unsubscribe();
 		}
 
-		return lastAssistantText(agent.state.messages);
+		const afterNames = currentSkillNames();
+		const removed = [...beforeNames].filter((n) => !afterNames.has(n)).sort();
+		const added = [...afterNames].filter((n) => !beforeNames.has(n)).sort();
+		const classification = reconcileRemovedSkills(removed, added, afterNames, calls);
+
+		return {
+			text: lastAssistantText(agent.state.messages),
+			classification,
+			renameSummary: buildRenameSummary(classification),
+		};
 	} catch {
 		return undefined;
 	}
