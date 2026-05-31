@@ -1329,11 +1329,6 @@ export class AgentSession {
 		}
 	}
 
-	/**
-	 * Run the inactivity curator (Pillar 5b) at session start when opted in.
-	 * No-op unless `selfImprovement.curator.enabled` is set. Fire-and-forget and
-	 * best-effort: it must never block startup or disturb the session.
-	 */
 	/** Persist curator activity, at most once per 60s, best-effort and non-blocking. */
 	private _recordCuratorActivityThrottled(): void {
 		if (!this.settingsManager.getCuratorSettings().enabled) {
@@ -1349,6 +1344,11 @@ export class AgentSession {
 		});
 	}
 
+	/**
+	 * Run the inactivity curator (Pillar 5b) at session start when opted in.
+	 * No-op unless `selfImprovement.curator.enabled` is set. Fire-and-forget and
+	 * best-effort: it must never block startup or disturb the session.
+	 */
 	private async _maybeRunCuratorOnStartup(): Promise<void> {
 		const settings = this.settingsManager.getCuratorSettings();
 		if (!settings.enabled) {
