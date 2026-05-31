@@ -7,10 +7,11 @@
  *
  *  1. snapshots the skills tree (reversible safety net);
  *  2. applies deterministic age-based lifecycle transitions
- *     (active → stale → archived) using each skill directory's most recent file
- *     mtime as the activity anchor — flame's filesystem-native substitute for
- *     hermes' usage DB. Pinned skills are never touched. Archiving moves the
- *     directory into `<skills>/.archive/` and never deletes;
+ *     (active → stale → archived) anchored on each skill's latest real activity
+ *     from the `.usage.json` sidecar (see `../skills/skill-usage.ts`), falling
+ *     back to `created_at`. Only agent-created skills are touched; pinned skills
+ *     are never touched. Archiving moves the directory into `<skills>/.archive/`
+ *     and never deletes;
  *  3. optionally runs an LLM consolidation pass (umbrella-building) via a forked
  *     headless agent restricted to the skill tools.
  *
