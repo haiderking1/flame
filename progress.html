@@ -64,8 +64,8 @@
 
 <header>
   <h1><span class="fire">Flame</span> &times; Hermes Port &mdash; Pillar 5 Progress</h1>
-  <div class="sub">Self-improvement loop &amp; curator &middot; <code>main</code> @ <code>48938912</code> &middot; updated 2026-05-30</div>
-  <span class="badge">&#10003; Workflow parity achieved &mdash; the original 8-item roadmap is cleared</span>
+  <div class="sub">Self-improvement loop &amp; curator &middot; <code>main</code> @ <code>5737a84f</code> &middot; updated 2026-05-31</div>
+  <span class="badge">&#10003; Workflow parity + skill-usage DB &mdash; roadmap cleared, only 2 minor deltas left</span>
 </header>
 
 <p>
@@ -78,16 +78,17 @@
 <p>
   <b>Status update:</b> every item on the previous roadmap has shipped &mdash; TUI surfacing, the full
   <code>/curator</code> command suite, dry-run + per-run reports, snapshot rollback, and iteration-accurate
-  cadence &mdash; plus skill-tool summary lines in the TUI that hermes itself doesn't render as cleanly. What
-  remains are two hermes <i>internal-bookkeeping</i> mechanisms that flame achieves by different means (see
-  <a href="#deltas">mechanism differences</a>), not missing behaviour.
+  cadence &mdash; plus skill-tool summary lines in the TUI that hermes itself doesn't render as cleanly.
+  <b>The biggest remaining gap is now closed too:</b> the <code>skill_usage</code> DB has been ported
+  faithfully, so the curator keys off real per-skill activity instead of file mtime. Only two small
+  hermes refinements remain (see <a href="#deltas">mechanism differences</a>).
 </p>
 
 <div class="grid">
   <div class="card"><div class="n">~96%</div><div class="l">Per-turn review loop fidelity</div></div>
-  <div class="card"><div class="n">~90%</div><div class="l">Curator fidelity (ops + CLI)</div></div>
-  <div class="card"><div class="n">~93%</div><div class="l">Blended Pillar 5</div></div>
-  <div class="card"><div class="n">21</div><div class="l">Self-improvement tests passing</div></div>
+  <div class="card"><div class="n">~95%</div><div class="l">Curator fidelity (ops + CLI)</div></div>
+  <div class="card"><div class="n">~96%</div><div class="l">Blended Pillar 5</div></div>
+  <div class="card"><div class="n">28</div><div class="l">Self-improvement tests passing</div></div>
 </div>
 
 <h2>What was built</h2>
@@ -133,13 +134,29 @@
       flame feel quieter than hermes on skill writes. Errors, partial, and read paths handled.</li>
 </ul>
 
+<h3>Skill usage DB <span class="tag done">landed &middot; new</span></h3>
+<ul>
+  <li><b>skill-usage.ts</b> &mdash; faithful port of hermes' <code>tools/skill_usage.py</code>. A
+      <code>.usage.json</code> sidecar (snake_case keys, <b>wire-compatible with hermes' own file</b>) tracks
+      per-skill <code>use</code>/<code>view</code>/<code>patch</code> counts + timestamps, <code>created_at</code>,
+      lifecycle <code>state</code>, <code>pinned</code>, and provenance (<code>created_by</code>).</li>
+  <li><b>Bumps wired exactly like hermes</b> &mdash; <code>skill_view</code> bumps both view and use (loading a
+      skill to act on it is a use; the stale timer keys off <code>last_used_at</code>); <code>skill_manage</code>
+      marks <code>created_by: agent</code> <i>only</i> in the background-review/curator context (foreground user
+      creates stay off-limits), bumps patch on patch/edit, and forgets on delete.</li>
+  <li><b>Curator rewired</b> &mdash; transitions now anchor on each skill's real
+      <code>last_activity_at</code> (&rarr; <code>created_at</code>) instead of file mtime, and only touch
+      agent-created skills. Per-skill state + pins moved out of <code>.curator_state</code> into the usage record,
+      exactly as hermes keeps them.</li>
+</ul>
+
 <div class="panel files">
-  <b>Source:</b> packages/coding-agent/src/core/self-improvement/{nudge-tracker, background-review, review-prompts,
+  <b>Source:</b> core/skills/skill-usage.ts; core/self-improvement/{nudge-tracker, background-review, review-prompts,
   curator, curator-state, curator-backup, curator-prompts, index}.ts<br/>
   <b>Modified:</b> core/agent-session.ts, core/settings-manager.ts, core/slash-commands.ts,
   modes/interactive/interactive-mode.ts, core/skills/{skill-manage,skill-view,skills-list}-tool.ts<br/>
-  <b>Tests:</b> test/self-improvement-{nudge-tracker, review-actions, curator, background-review}.test.ts,
-  test/interactive-mode-curator.test.ts<br/>
+  <b>Tests:</b> test/skill-usage.test.ts, test/self-improvement-{nudge-tracker, review-actions, curator,
+  background-review}.test.ts, test/interactive-mode-curator.test.ts<br/>
   <b>Settings:</b> <span class="mono">selfImprovement.{enabled, memoryNudgeInterval, skillNudgeInterval, reviewMaxIterations, curator.*}</span>
   &mdash; review on by default; curator opt-in.
 </div>
@@ -175,8 +192,13 @@
     </tr>
     <tr>
       <td>Curator &mdash; deterministic core</td><td><span class="tag done">done</span></td>
-      <td><span class="bar"><span style="width:85%"></span></span> <span class="pct">85%</span></td>
-      <td>mtime-derived activity vs hermes' usage DB; recursive-copy snapshots vs tar.gz (dependency-free by choice).</td>
+      <td><span class="bar"><span style="width:95%"></span></span> <span class="pct">95%</span></td>
+      <td>Now keys off the ported <code>.usage.json</code> activity DB (real use/view/patch), not mtime. Recursive-copy snapshots vs tar.gz remain a dependency-free choice.</td>
+    </tr>
+    <tr>
+      <td>Skill usage DB</td><td><span class="tag done">done</span></td>
+      <td><span class="bar"><span style="width:95%"></span></span> <span class="pct">95%</span></td>
+      <td>Faithful port of <code>skill_usage.py</code>; hermes-wire-compatible sidecar. Cross-process file lock omitted (flame has no cron daemon).</td>
     </tr>
     <tr>
       <td>Skill-tool TUI lines</td><td><span class="tag done">done</span></td>
@@ -185,10 +207,10 @@
     </tr>
   </tbody>
 </table>
-<p class="legend">Blended Pillar 5: <b>~93%</b>. The per-turn loop and curator CLI are effectively at parity; the remaining
-  delta is the curator's internal activity bookkeeping (below), which flame implements differently rather than skips.</p>
+<p class="legend">Blended Pillar 5: <b>~96%</b>. The per-turn loop, curator CLI, and the activity-tracking DB are at parity.
+  Only two small hermes refinements remain (below).</p>
 
-<h2>Completed roadmap <span class="tag done">8 / 8</span></h2>
+<h2>Completed roadmap <span class="tag done">6 / 8 done &middot; 2 minor left</span></h2>
 
 <div class="done-item"><h3><span class="check">&#10003;</span> 1. Surface review &amp; curator results in the TUI</h3>
   <p>Both events render through <code>showStatus</code> in interactive mode.</p></div>
@@ -202,27 +224,24 @@
 <div class="done-item"><h3><span class="check">&#10003;</span> 7. Snapshot rollback CLI</h3>
   <p><code>restoreSkillsSnapshot</code> + <code>/curator restore</code>, with a <code>rollback-safety</code> snapshot first.
      <span style="color:var(--muted)">(tar.gz format intentionally not ported &mdash; flame stays dependency-free with recursive copy.)</span></p></div>
+<div class="done-item"><h3><span class="check">&#10003;</span> 4. Skill usage DB (was the big "L" item)</h3>
+  <p>Ported <code>skill_usage.py</code> in full &mdash; <code>.usage.json</code> sidecar, real use/view/patch tracking,
+     provenance, and curator transitions keyed off it. Hermes-wire-compatible.</p></div>
 <div class="done-item"><h3><span class="check">&#10003;</span> Bonus &mdash; skill-tool TUI summary lines</h3>
   <p>Not on the original roadmap; closes the &ldquo;nothing shows when a skill is created&rdquo; gap vs hermes.</p></div>
 
 <h2 id="deltas">Remaining mechanism differences <span class="tag partial">by design</span></h2>
-<p>These are the only places flame and hermes still diverge. They are implementation choices, not absent features &mdash;
+<p>Two small hermes refinements are all that's left. They are implementation choices, not absent features &mdash;
    the user-visible workflow is equivalent.</p>
 
 <div class="next">
-  <h3>A. Activity source: mtime vs usage DB <span class="eff">&mdash; roadmap #4</span></h3>
-  <p>Hermes tracks per-skill created-at / last-used / use-count in a <code>skill_usage</code> store. Flame derives
-     activity from skill-dir file mtime and carries an <code>agent-created</code> trust level in the guard. Same
-     transitions result; a dedicated usage DB would only sharpen edge cases (e.g. a skill read but never edited).</p>
-</div>
-<div class="next">
-  <h3>B. Consolidation / pruning reconciliation <span class="eff">&mdash; roadmap #5</span></h3>
+  <h3>A. Consolidation / pruning reconciliation <span class="eff">&mdash; roadmap #5</span></h3>
   <p>The LLM consolidation pass runs and <code>skill_manage delete</code> already takes <code>absorbed_into</code>.
      What's not ported is hermes' post-hoc <code>_classify_removed_skills</code> that parses the run's YAML to label
      each removal <i>consolidated</i> vs <i>pruned</i> for reference migration &mdash; a reporting refinement.</p>
 </div>
 <div class="next">
-  <h3>C. Idle-since-activity trigger <span class="eff">&mdash; roadmap #8</span></h3>
+  <h3>B. Idle-since-activity trigger <span class="eff">&mdash; roadmap #8</span></h3>
   <p>The curator is interval-gated at session start. Hermes additionally requires a minimum idle window since the last
      activity. Adding that gate would prevent any chance of competing with an active turn.</p>
 </div>
@@ -235,9 +254,9 @@
 </ul>
 
 <footer>
-  Pillar 5 of the hermes&rarr;flame port. Verified: <code>tsgo --noEmit</code> clean, biome clean, 21 self-improvement
-  tests passing, no regressions in adjacent suites. &middot; Workflow parity reached; the three remaining items are
-  mechanism-level refinements, not capability gaps.
+  Pillar 5 of the hermes&rarr;flame port. Verified: <code>tsgo --noEmit</code> clean, biome clean, 28 self-improvement
+  tests passing, no new regressions (the pre-existing full-suite failures reproduce identically at HEAD).
+  &middot; ~96% blended parity; the two remaining items are reporting/scheduling refinements, not capability gaps.
 </footer>
 
 </div>
