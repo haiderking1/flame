@@ -42,7 +42,9 @@ export {
 export {
 	type CuratorState,
 	defaultCuratorState,
+	idleSecondsSinceActivity,
 	loadCuratorState,
+	recordCuratorActivity,
 	type SkillLifecycleState,
 	saveCuratorState,
 	setCuratorPaused,

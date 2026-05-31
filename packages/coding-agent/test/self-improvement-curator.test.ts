@@ -10,6 +10,7 @@ import { getRecord, loadUsage, saveUsage, type UsageRecord } from "../src/core/s
 const SETTINGS: CuratorSettings = {
 	enabled: true,
 	intervalHours: 168,
+	minIdleHours: 2,
 	staleAfterDays: 30,
 	archiveAfterDays: 90,
 	maxBackups: 5,
@@ -146,6 +147,37 @@ describe("curator snapshot and restore", () => {
 		expect(existsSync(join(getSkillsDir(), "skill-a", "SKILL.md"))).toBe(true);
 		expect(existsSync(join(getSkillsDir(), "skill-c"))).toBe(false);
 		expect(existsSync(join(getSkillsDir(), "skill-b", "SKILL.md"))).toBe(true);
+	});
+});
+
+describe("curator idle gate", () => {
+	it("skips a scheduled run when the agent was recently active, runs once idle enough", async () => {
+		const {
+			maybeRunCurator,
+			saveCuratorState,
+			defaultCuratorState,
+		} = require("../src/core/self-improvement/index.ts");
+		await createManagedSkill("ancient", 120);
+
+		// Make the schedule gate pass: last run was 30 days ago (interval is 7 days).
+		const st = defaultCuratorState();
+		st.lastRunAt = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+		await saveCuratorState(st);
+
+		// Idle only 5 minutes, minIdleHours = 2 → defer.
+		const skipped = await maybeRunCurator({ settings: SETTINGS, idleForSeconds: 300 });
+		expect(skipped.ran).toBe(false);
+		expect(existsSync(join(getSkillsDir(), "ancient", "SKILL.md"))).toBe(true);
+
+		// Idle 3 hours → run.
+		const ran = await maybeRunCurator({ settings: SETTINGS, idleForSeconds: 3 * 3600 });
+		expect(ran.ran).toBe(true);
+	});
+
+	it("force bypasses the idle gate", async () => {
+		const { maybeRunCurator } = require("../src/core/self-improvement/index.ts");
+		const res = await maybeRunCurator({ settings: SETTINGS, force: true, idleForSeconds: 0 });
+		expect(res.ran).toBe(true);
 	});
 });
 

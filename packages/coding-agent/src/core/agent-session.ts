@@ -87,7 +87,13 @@ import {
 } from "./process-tasks.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
-import { maybeRunCurator, NudgeTracker, runBackgroundReview } from "./self-improvement/index.ts";
+import {
+	idleSecondsSinceActivity,
+	maybeRunCurator,
+	NudgeTracker,
+	recordCuratorActivity,
+	runBackgroundReview,
+} from "./self-improvement/index.ts";
 import type { BranchSummaryEntry, CompactionEntry, SessionManager } from "./session-manager.ts";
 import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.ts";
 import type { SettingsManager } from "./settings-manager.ts";
@@ -337,6 +343,8 @@ export class AgentSession {
 	private _pendingReviewMemory = false;
 	/** Guards against overlapping background reviews on this session. */
 	private _reviewRunning = false;
+	/** Last time we persisted curator activity (epoch ms); throttles the writes. */
+	private _lastCuratorActivityMs = 0;
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
@@ -1233,6 +1241,11 @@ export class AgentSession {
 			? this._nudgeTracker.onUserTurnStart()
 			: false;
 
+		// Record agent activity for the curator's idle gate (throttled to avoid
+		// per-prompt I/O). The next session's startup pass reads this to decide
+		// whether enough idle time has passed to run.
+		this._recordCuratorActivityThrottled();
+
 		preflightResult?.(true);
 		await this._runAgentPrompt(messages);
 
@@ -1321,6 +1334,21 @@ export class AgentSession {
 	 * No-op unless `selfImprovement.curator.enabled` is set. Fire-and-forget and
 	 * best-effort: it must never block startup or disturb the session.
 	 */
+	/** Persist curator activity, at most once per 60s, best-effort and non-blocking. */
+	private _recordCuratorActivityThrottled(): void {
+		if (!this.settingsManager.getCuratorSettings().enabled) {
+			return;
+		}
+		const now = Date.now();
+		if (now - this._lastCuratorActivityMs < 60_000) {
+			return;
+		}
+		this._lastCuratorActivityMs = now;
+		void recordCuratorActivity(now).catch(() => {
+			// best-effort
+		});
+	}
+
 	private async _maybeRunCuratorOnStartup(): Promise<void> {
 		const settings = this.settingsManager.getCuratorSettings();
 		if (!settings.enabled) {
@@ -1339,6 +1367,8 @@ export class AgentSession {
 				sessionId: this.agent.sessionId,
 				baseSystemPrompt: this._baseSystemPrompt,
 				guardAgentCreated: this.settingsManager.getSkillsGuardAgentCreated(),
+				// Idle gate: how long since the previous session's last activity.
+				idleForSeconds: idleSecondsSinceActivity(),
 			});
 			if (result.ran && result.summary && result.summary !== "no changes") {
 				// Skills changed on disk; refresh so the next turn's prompt reflects it.

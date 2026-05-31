@@ -45,6 +45,8 @@ const MS_PER_DAY = 24 * MS_PER_HOUR;
 export interface CuratorSettings {
 	enabled: boolean;
 	intervalHours: number;
+	/** Minimum hours of agent inactivity before a run is allowed. */
+	minIdleHours: number;
 	staleAfterDays: number;
 	archiveAfterDays: number;
 	maxBackups: number;
@@ -174,6 +176,12 @@ export interface MaybeRunCuratorParams {
 	force?: boolean;
 	/** Run in dry-run mode (simulation only, no disk writes or snapshots). */
 	dryRun?: boolean;
+	/**
+	 * Seconds the agent has been idle since its last activity. When provided, a
+	 * run is skipped unless idle ≥ `minIdleHours` — matching hermes' idle gate
+	 * so the curator never competes with active work. Undefined skips the gate.
+	 */
+	idleForSeconds?: number;
 }
 
 /**
@@ -193,6 +201,14 @@ export async function maybeRunCurator(params: MaybeRunCuratorParams): Promise<Cu
 			await saveCuratorState(state);
 		}
 		return { ran: false };
+	}
+
+	// Idle gate (hermes parity): only enforce when the caller measured idle time,
+	// and never for forced/manual runs. Defers when the agent was recently active.
+	if (!params.force && params.idleForSeconds !== undefined) {
+		if (params.idleForSeconds < params.settings.minIdleHours * 3600) {
+			return { ran: false };
+		}
 	}
 
 	try {

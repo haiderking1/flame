@@ -85,6 +85,8 @@ export interface CuratorSettings {
 	enabled?: boolean;
 	/** Hours between curator runs (default: 168 = 7 days). */
 	intervalHours?: number;
+	/** Minimum hours of agent inactivity before a run is allowed (default: 2). */
+	minIdleHours?: number;
 	/** Days of skill inactivity before it is marked stale (default: 30). */
 	staleAfterDays?: number;
 	/** Days of skill inactivity before a stale skill is archived (default: 90). */
@@ -746,6 +748,7 @@ export class SettingsManager {
 	getCuratorSettings(): {
 		enabled: boolean;
 		intervalHours: number;
+		minIdleHours: number;
 		staleAfterDays: number;
 		archiveAfterDays: number;
 		maxBackups: number;
@@ -755,6 +758,7 @@ export class SettingsManager {
 		return {
 			enabled: curator?.enabled ?? false,
 			intervalHours: curator?.intervalHours ?? 168,
+			minIdleHours: curator?.minIdleHours ?? 2,
 			staleAfterDays: curator?.staleAfterDays ?? 30,
 			archiveAfterDays: curator?.archiveAfterDays ?? 90,
 			maxBackups: curator?.maxBackups ?? 5,

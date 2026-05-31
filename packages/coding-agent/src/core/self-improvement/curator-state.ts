@@ -22,6 +22,8 @@ export interface CuratorState {
 	paused: boolean;
 	/** Total number of completed runs. */
 	runCount: number;
+	/** ISO timestamp of the last observed agent activity (drives the idle gate). */
+	lastActivityAt: string | null;
 }
 
 export function defaultCuratorState(): CuratorState {
@@ -30,6 +32,7 @@ export function defaultCuratorState(): CuratorState {
 		lastRunSummary: null,
 		paused: false,
 		runCount: 0,
+		lastActivityAt: null,
 	};
 }
 
@@ -53,6 +56,7 @@ export function loadCuratorState(): CuratorState {
 			lastRunSummary: typeof raw.lastRunSummary === "string" ? raw.lastRunSummary : base.lastRunSummary,
 			paused: typeof raw.paused === "boolean" ? raw.paused : base.paused,
 			runCount: typeof raw.runCount === "number" ? raw.runCount : base.runCount,
+			lastActivityAt: typeof raw.lastActivityAt === "string" ? raw.lastActivityAt : base.lastActivityAt,
 		};
 	} catch {
 		return defaultCuratorState();
@@ -71,4 +75,24 @@ export async function setCuratorPaused(paused: boolean): Promise<void> {
 	const state = loadCuratorState();
 	state.paused = paused;
 	await saveCuratorState(state);
+}
+
+/** Record that the agent was active now (drives the curator's idle gate). Best-effort. */
+export async function recordCuratorActivity(now: number = Date.now()): Promise<void> {
+	const state = loadCuratorState();
+	state.lastActivityAt = new Date(now).toISOString();
+	await saveCuratorState(state);
+}
+
+/** Seconds since the last recorded activity, or undefined when none recorded. */
+export function idleSecondsSinceActivity(now: number = Date.now()): number | undefined {
+	const { lastActivityAt } = loadCuratorState();
+	if (!lastActivityAt) {
+		return undefined;
+	}
+	const ms = Date.parse(lastActivityAt);
+	if (Number.isNaN(ms)) {
+		return undefined;
+	}
+	return Math.max(0, (now - ms) / 1000);
 }
