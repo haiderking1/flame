@@ -119,6 +119,7 @@ export interface Settings {
 	defaultModel?: string;
 	defaultThinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 	transport?: TransportSetting; // default: "auto"
+	swarmModel?: { provider: string; id: string }; // agent_swarm runs on this model instead of the main one; unset = same as main
 	steeringMode?: "all" | "one-at-a-time";
 	followUpMode?: "all" | "one-at-a-time";
 	theme?: string;
@@ -698,6 +699,18 @@ export class SettingsManager {
 	setTransport(transport: TransportSetting): void {
 		this.globalSettings.transport = transport;
 		this.markModified("transport");
+		this.save();
+	}
+
+	/** The model agent_swarm should run on, or undefined when it follows the main model. */
+	getSwarmModel(): { provider: string; id: string } | undefined {
+		return this.settings.swarmModel;
+	}
+
+	/** Persist (or clear, with undefined) the model agent_swarm runs on. Global scope. */
+	setSwarmModel(ref: { provider: string; id: string } | undefined): void {
+		this.globalSettings.swarmModel = ref;
+		this.markModified("swarmModel");
 		this.save();
 	}
 

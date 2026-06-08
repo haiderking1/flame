@@ -2580,6 +2580,16 @@ export class InteractiveMode {
 				await this.handleCuratorCommand(text);
 				return;
 			}
+			if (text === "/swarm-same-model") {
+				this.editor.setText("");
+				this.handleSwarmModelCommand("same");
+				return;
+			}
+			if (text === "/swarm-deepseek") {
+				this.editor.setText("");
+				this.handleSwarmModelCommand("deepseek");
+				return;
+			}
 			if (text === "/reload") {
 				this.editor.setText("");
 				await this.handleReloadCommand();
@@ -5248,6 +5258,53 @@ export class InteractiveMode {
 		this.session.setSessionName(name);
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new Text(theme.fg("dim", `Session name set: ${name}`), 1, 0));
+		this.ui.requestRender();
+	}
+
+	/**
+	 * Toggle which model the agent_swarm tool runs on. "same" reverts to the main
+	 * model (default); "deepseek" points the swarm at DeepSeek V4 Flash via OpenCode
+	 * so a smart brain model can offload the parallel grunt work to a cheap one.
+	 */
+	private handleSwarmModelCommand(mode: "same" | "deepseek"): void {
+		if (mode === "same") {
+			this.session.setSwarmModelOverride(undefined);
+			this.session.settingsManager.setSwarmModel(undefined);
+			this.chatContainer.addChild(new Spacer(1));
+			this.chatContainer.addChild(
+				new Text(`${theme.fg("success", "✓")} Swarm model: same as the main model (default).`, 1, 0),
+			);
+			this.ui.requestRender();
+			return;
+		}
+
+		const SWARM_DEEPSEEK_PROVIDER = "opencode-go";
+		const SWARM_DEEPSEEK_MODEL = "deepseek-v4-flash";
+		const model = this.session.modelRegistry.find(SWARM_DEEPSEEK_PROVIDER, SWARM_DEEPSEEK_MODEL);
+		if (!model) {
+			this.showWarning(`Couldn't find ${SWARM_DEEPSEEK_MODEL} (${SWARM_DEEPSEEK_PROVIDER}) in the model catalog.`);
+			this.ui.requestRender();
+			return;
+		}
+		if (!this.session.modelRegistry.hasConfiguredAuth(model)) {
+			this.showWarning(
+				`${SWARM_DEEPSEEK_PROVIDER} isn't authenticated. Run /login and add your OpenCode API key first.`,
+			);
+			this.ui.requestRender();
+			return;
+		}
+
+		this.session.setSwarmModelOverride(model);
+		this.session.settingsManager.setSwarmModel({ provider: model.provider, id: model.id });
+		const brain = this.session.model?.name ?? "the main model";
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(
+			new Text(
+				`${theme.fg("success", "✓")} Swarm model: ${theme.fg("success", `${model.name} (${model.provider})`)}. Brain stays on ${brain}. ${theme.fg("muted", "Persists across sessions.")}`,
+				1,
+				0,
+			),
+		);
 		this.ui.requestRender();
 	}
 

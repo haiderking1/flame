@@ -101,6 +101,7 @@ import { buildSkillsSystemPromptSync, expandSkillSlashCommand, SKILLS_GUIDANCE }
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
+import type { SwarmForkContext } from "./tools/agent-swarm.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import { createAllToolDefinitions, DEFAULT_ACTIVE_TOOL_NAMES } from "./tools/index.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
@@ -271,6 +272,15 @@ export class AgentSession {
 
 	private _scopedModels: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 
+	/**
+	 * When set, the `agent_swarm` tool runs its workers (and planner/verifier/judge)
+	 * on this model instead of the main "brain" model. Lets a smart, expensive model
+	 * orchestrate while a cheap model does the parallel grunt work. Undefined = same
+	 * model as the main chat (the default). Toggled via /swarm-deepseek and
+	 * /swarm-same-model.
+	 */
+	private _swarmModelOverride: Model<any> | undefined;
+
 	// Event subscription state
 	private _unsubscribeAgent?: () => void;
 	private _eventListeners: AgentSessionEventListener[] = [];
@@ -355,6 +365,13 @@ export class AgentSession {
 		this._customTools = config.customTools ?? [];
 		this._cwd = config.cwd;
 		this._modelRegistry = config.modelRegistry;
+		// Restore a persisted swarm-model override (e.g. cheap DeepSeek for the swarm
+		// while the main model stays the brain). Silently ignored if the model is no
+		// longer in the catalog.
+		const savedSwarmModel = this.settingsManager.getSwarmModel();
+		if (savedSwarmModel) {
+			this._swarmModelOverride = this._modelRegistry.find(savedSwarmModel.provider, savedSwarmModel.id);
+		}
 		this._extensionRunnerRef = config.extensionRunnerRef;
 		this._initialActiveToolNames = config.initialActiveToolNames;
 		this._allowedToolNames = config.allowedToolNames ? new Set(config.allowedToolNames) : undefined;
@@ -2614,6 +2631,49 @@ export class AgentSession {
 		this.setActiveToolsByName([...new Set(nextActiveToolNames)]);
 	}
 
+	/**
+	 * Snapshot the live parent agent into a {@link SwarmForkContext} for the
+	 * `agent_swarm` tool. Read lazily at launch time so each swarm inherits the
+	 * current model / auth / base system prompt — the same parity trick the
+	 * background-review fork uses, giving every worker provider prefix-cache hits.
+	 */
+	/** The model the swarm currently runs on, or undefined when it follows the main model. */
+	getSwarmModelOverride(): Model<any> | undefined {
+		return this._swarmModelOverride;
+	}
+
+	/**
+	 * Point the `agent_swarm` tool at a specific model (pass undefined to revert to
+	 * the main model). The inherited streamFn resolves the model's own provider auth,
+	 * so the swarm can run on a different provider than the main chat.
+	 */
+	setSwarmModelOverride(model: Model<any> | undefined): void {
+		this._swarmModelOverride = model;
+	}
+
+	private _buildSwarmForkContext(): SwarmForkContext {
+		// Run the swarm on the override model when one is set (e.g. cheap DeepSeek via
+		// OpenCode), otherwise inherit the main "brain" model. The streamFn takes the
+		// model as an argument and resolves its auth from the registry, so a different
+		// provider works without building a separate stream function.
+		const model = this._swarmModelOverride ?? this.model;
+		if (!model) {
+			throw new Error("agent_swarm is unavailable: no active model");
+		}
+		return {
+			model,
+			thinkingLevel: this.agent.state.thinkingLevel,
+			streamFn: this.agent.streamFn,
+			convertToLlm: this.agent.convertToLlm,
+			transport: this.agent.transport,
+			thinkingBudgets: this.agent.thinkingBudgets,
+			maxRetryDelayMs: this.agent.maxRetryDelayMs,
+			sessionId: this.agent.sessionId,
+			baseSystemPrompt: this._baseSystemPrompt,
+			cwd: this._cwd,
+		};
+	}
+
 	private _buildRuntime(options: {
 		activeToolNames?: string[];
 		flagValues?: Map<string, boolean | string>;
@@ -2635,6 +2695,7 @@ export class AgentSession {
 					process: { commandPrefix: shellCommandPrefix, shellPath },
 					memory: { store: this._memoryStore },
 					skill_manage: { guardAgentCreated: this.settingsManager.getSkillsGuardAgentCreated() },
+					agent_swarm: { getForkContext: () => this._buildSwarmForkContext() },
 				});
 
 		this._baseToolDefinitions = new Map(

@@ -5,6 +5,15 @@ export {
 	type MemoryToolInput,
 } from "../memory/memory-tool.ts";
 export {
+	type AgentSwarmToolDetails,
+	type AgentSwarmToolInput,
+	type AgentSwarmToolOptions,
+	createAgentSwarmTool,
+	createAgentSwarmToolDefinition,
+	type SwarmForkContext,
+	type SwarmWorkerResult,
+} from "./agent-swarm.ts";
+export {
 	type BashOperations,
 	type BashSpawnContext,
 	type BashSpawnHook,
@@ -119,8 +128,11 @@ import {
 } from "../skills/skill-manage-tool.ts";
 import { createSkillViewToolDefinition } from "../skills/skill-view-tool.ts";
 import { createSkillsListToolDefinition } from "../skills/skills-list-tool.ts";
+import { type AgentSwarmToolOptions, createAgentSwarmTool, createAgentSwarmToolDefinition } from "./agent-swarm.ts";
+import { createAntigravityTool, createAntigravityToolDefinition } from "./antigravity.ts";
 import { type BashToolOptions, createBashTool, createBashToolDefinition } from "./bash.ts";
 import { type BrowserToolOptions, createBrowserTool, createBrowserToolDefinition } from "./browser.ts";
+import { createClaudeCodeTool, createClaudeCodeToolDefinition } from "./claude-code.ts";
 import { createClipboardTool, createClipboardToolDefinition } from "./clipboard.ts";
 import { createDownloadTool, createDownloadToolDefinition } from "./download.ts";
 import { createEditTool, createEditToolDefinition, type EditToolOptions } from "./edit.ts";
@@ -129,12 +141,17 @@ import { createGrepTool, createGrepToolDefinition, type GrepToolOptions } from "
 import { createLsTool, createLsToolDefinition, type LsToolOptions } from "./ls.ts";
 import { createProcessTool, createProcessToolDefinition, type ProcessToolOptions } from "./process.ts";
 import { createReadTool, createReadToolDefinition, type ReadToolOptions } from "./read.ts";
+import { createTnrTool, createTnrToolDefinition } from "./tnr.ts";
 import { createWebSearchTool, createWebSearchToolDefinition, type WebSearchToolOptions } from "./web-search.ts";
 import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } from "./write.ts";
 
 export type Tool = AgentTool<any>;
 export type ToolDef = ToolDefinition<any, any>;
 export type ToolName =
+	| "agent_swarm"
+	| "claude_code"
+	| "antigravity"
+	| "tnr"
 	| "read"
 	| "bash"
 	| "edit"
@@ -152,6 +169,10 @@ export type ToolName =
 	| "skill_view"
 	| "skill_manage";
 export const allToolNames: Set<ToolName> = new Set([
+	"agent_swarm",
+	"claude_code",
+	"antigravity",
+	"tnr",
 	"read",
 	"bash",
 	"edit",
@@ -170,6 +191,10 @@ export const allToolNames: Set<ToolName> = new Set([
 	"skill_manage",
 ]);
 export const DEFAULT_ACTIVE_TOOL_NAMES: ToolName[] = [
+	"agent_swarm",
+	"claude_code",
+	"antigravity",
+	"tnr",
 	"read",
 	"bash",
 	"edit",
@@ -186,6 +211,7 @@ export const DEFAULT_ACTIVE_TOOL_NAMES: ToolName[] = [
 ];
 
 export interface ToolsOptions {
+	agent_swarm?: AgentSwarmToolOptions;
 	read?: ReadToolOptions;
 	bash?: BashToolOptions;
 	write?: WriteToolOptions;
@@ -204,8 +230,32 @@ export interface ToolsOptions {
 	skill_manage?: SkillManageToolOptions;
 }
 
+/**
+ * Resolve agent_swarm options, falling back to a stub whose fork context throws.
+ * The render path (tool-execution.ts) builds the definition only for its
+ * renderers and never calls execute, so the stub is harmless there; the owning
+ * AgentSession always supplies a real `getForkContext`.
+ */
+function swarmOptions(options?: ToolsOptions): AgentSwarmToolOptions {
+	return (
+		options?.agent_swarm ?? {
+			getForkContext: () => {
+				throw new Error("agent_swarm is unavailable: no parent agent fork context was provided");
+			},
+		}
+	);
+}
+
 export function createToolDefinition(toolName: ToolName, cwd: string, options?: ToolsOptions): ToolDef {
 	switch (toolName) {
+		case "agent_swarm":
+			return createAgentSwarmToolDefinition(swarmOptions(options));
+		case "claude_code":
+			return createClaudeCodeToolDefinition(cwd);
+		case "antigravity":
+			return createAntigravityToolDefinition(cwd);
+		case "tnr":
+			return createTnrToolDefinition(cwd);
 		case "read":
 			return createReadToolDefinition(cwd, options?.read);
 		case "bash":
@@ -245,6 +295,14 @@ export function createToolDefinition(toolName: ToolName, cwd: string, options?: 
 
 export function createTool(toolName: ToolName, cwd: string, options?: ToolsOptions): Tool {
 	switch (toolName) {
+		case "agent_swarm":
+			return createAgentSwarmTool(swarmOptions(options)) as Tool;
+		case "claude_code":
+			return createClaudeCodeTool(cwd);
+		case "antigravity":
+			return createAntigravityTool(cwd);
+		case "tnr":
+			return createTnrTool(cwd);
 		case "read":
 			return createReadTool(cwd, options?.read);
 		case "bash":
@@ -302,6 +360,10 @@ export function createReadOnlyToolDefinitions(cwd: string, options?: ToolsOption
 
 export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): Record<ToolName, ToolDef> {
 	return {
+		agent_swarm: createAgentSwarmToolDefinition(swarmOptions(options)),
+		claude_code: createClaudeCodeToolDefinition(cwd),
+		antigravity: createAntigravityToolDefinition(cwd),
+		tnr: createTnrToolDefinition(cwd),
 		read: createReadToolDefinition(cwd, options?.read),
 		bash: createBashToolDefinition(cwd, options?.bash),
 		edit: createEditToolDefinition(cwd, options?.edit),
@@ -341,6 +403,10 @@ export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[]
 
 export function createAllTools(cwd: string, options?: ToolsOptions): Record<ToolName, Tool> {
 	return {
+		agent_swarm: createAgentSwarmTool(swarmOptions(options)) as Tool,
+		claude_code: createClaudeCodeTool(cwd),
+		antigravity: createAntigravityTool(cwd),
+		tnr: createTnrTool(cwd),
 		read: createReadTool(cwd, options?.read),
 		bash: createBashTool(cwd, options?.bash),
 		edit: createEditTool(cwd, options?.edit),

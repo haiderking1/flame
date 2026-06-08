@@ -35,6 +35,11 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "new", description: "Start a new session" },
 	{ name: "compact", description: "Manually compact the session context" },
 	{ name: "curator", description: "Manage the inactivity curator (status, run, pin/unpin, pause/resume, restore)" },
+	{ name: "swarm-same-model", description: "Run agent_swarm on the same model as the main chat (default)" },
+	{
+		name: "swarm-deepseek",
+		description: "Run agent_swarm on DeepSeek V4 Flash (OpenCode) while the main model stays the brain",
+	},
 	{ name: "resume", description: "Resume a different session" },
 	{ name: "reload", description: "Reload keybindings, extensions, skills, prompts, and themes" },
 	{ name: "quit", description: `Quit ${APP_NAME}` },
