@@ -58,10 +58,13 @@ describe("DefaultPackageManager", () => {
 	let settingsManager: SettingsManager;
 	let packageManager: DefaultPackageManager;
 	let previousOfflineEnv: string | undefined;
+	let previousFlameHome: string | undefined;
 
 	beforeEach(() => {
 		previousOfflineEnv = process.env.FLAME_OFFLINE;
 		delete process.env.FLAME_OFFLINE;
+		previousFlameHome = process.env.FLAME_HOME;
+		delete process.env.FLAME_HOME;
 		tempDir = join(tmpdir(), `pm-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(tempDir, { recursive: true });
 		agentDir = join(tempDir, "agent");
@@ -80,6 +83,11 @@ describe("DefaultPackageManager", () => {
 			delete process.env.FLAME_OFFLINE;
 		} else {
 			process.env.FLAME_OFFLINE = previousOfflineEnv;
+		}
+		if (previousFlameHome === undefined) {
+			delete process.env.FLAME_HOME;
+		} else {
+			process.env.FLAME_HOME = previousFlameHome;
 		}
 		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
@@ -196,18 +204,29 @@ Content`,
 				writeFileSync(join(sharedPromptsDir, "shared.md"), "Shared prompt");
 				writeFileSync(join(sharedThemesDir, "shared.json"), JSON.stringify({ name: "shared-theme" }));
 
+				const repoRoot = join(tempDir, "repo");
+				mkdirSync(repoRoot, { recursive: true });
+				mkdirSync(join(repoRoot, ".flame"), { recursive: true });
+				mkdirSync(join(repoRoot, ".agents"), { recursive: true });
+
 				mkdirSync(join(agentDir), { recursive: true });
-				mkdirSync(join(tempDir, ".flame"), { recursive: true });
 				symlinkSync(sharedExtensionsDir, join(agentDir, "extensions"), "dir");
 				symlinkSync(sharedSkillsDir, join(agentDir, "skills"), "dir");
 				symlinkSync(sharedPromptsDir, join(agentDir, "prompts"), "dir");
 				symlinkSync(sharedThemesDir, join(agentDir, "themes"), "dir");
-				symlinkSync(sharedExtensionsDir, join(tempDir, ".flame", "extensions"), "dir");
-				symlinkSync(sharedSkillsDir, join(tempDir, ".flame", "skills"), "dir");
-				symlinkSync(sharedPromptsDir, join(tempDir, ".flame", "prompts"), "dir");
-				symlinkSync(sharedThemesDir, join(tempDir, ".flame", "themes"), "dir");
 
-				const result = await packageManager.resolve();
+				symlinkSync(sharedExtensionsDir, join(repoRoot, ".flame", "extensions"), "dir");
+				symlinkSync(sharedSkillsDir, join(repoRoot, ".agents", "skills"), "dir");
+				symlinkSync(sharedPromptsDir, join(repoRoot, ".flame", "prompts"), "dir");
+				symlinkSync(sharedThemesDir, join(repoRoot, ".flame", "themes"), "dir");
+
+				const pm = new DefaultPackageManager({
+					cwd: repoRoot,
+					agentDir,
+					settingsManager,
+				});
+
+				const result = await pm.resolve();
 
 				expect({
 					extensions: result.extensions.length,
@@ -297,11 +316,11 @@ Content`,
 			expect(skill?.metadata.baseDir).toBe(agentDir);
 		});
 
-		it("should use the project .pi dir as baseDir for project .pi skills", async () => {
-			const projectBaseDir = join(tempDir, ".flame");
-			const skillPath = join(projectBaseDir, "skills", "project-pi", "SKILL.md");
-			mkdirSync(join(projectBaseDir, "skills", "project-pi"), { recursive: true });
-			writeFileSync(skillPath, "---\nname: project-pi\ndescription: project pi\n---\n");
+		it("should use the project .agents dir as baseDir for project .agents skills", async () => {
+			const projectBaseDir = join(tempDir, ".agents");
+			const skillPath = join(projectBaseDir, "skills", "project-agents", "SKILL.md");
+			mkdirSync(join(projectBaseDir, "skills", "project-agents"), { recursive: true });
+			writeFileSync(skillPath, "---\nname: project-agents\ndescription: project agents\n---\n");
 
 			const result = await packageManager.resolve();
 			const skill = result.skills.find((r) => r.path === skillPath);
@@ -533,10 +552,10 @@ Content`,
 			expect(result.skills.some((r) => r.path.includes("venv") && r.enabled)).toBe(false);
 		});
 
-		it("should not apply parent .gitignore to .pi auto-discovery", async () => {
-			writeFileSync(join(tempDir, ".gitignore"), ".flame\n");
+		it("should not apply parent .gitignore to .agents auto-discovery", async () => {
+			writeFileSync(join(tempDir, ".gitignore"), ".agents\n");
 
-			const skillDir = join(tempDir, ".flame", "skills", "auto-skill");
+			const skillDir = join(tempDir, ".agents", "skills", "auto-skill");
 			mkdirSync(skillDir, { recursive: true });
 			const skillPath = join(skillDir, "SKILL.md");
 			writeFileSync(skillPath, "---\nname: auto-skill\ndescription: Auto\n---\nContent");

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { relative, resolve, sep } from "node:path";
 import { parseFrontmatter } from "../../utils/frontmatter.ts";
 import { atomicWrite } from "../memory/atomic-write.ts";
 import { SKILLS_PROMPT_CACHE_MAX, SKILLS_SNAPSHOT_VERSION } from "./constants.ts";
@@ -60,7 +60,7 @@ function loadSkillsSnapshot(skillsDir: string): SkillsPromptSnapshot | null {
 }
 
 async function writeSkillsSnapshot(
-	skillsDir: string,
+	_skillsDir: string,
 	manifest: Record<string, [number, number]>,
 	skillEntries: SkillSnapshotEntry[],
 	categoryDescriptions: Record<string, string>,

@@ -8,17 +8,21 @@ import {
 
 describe("skills pillar preprocessing", () => {
 	it("substitutes FLAME_SKILL_DIR when skill dir provided", () => {
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: testing template substitution
 		const result = substituteTemplateVars("Path: ${FLAME_SKILL_DIR}", "/tmp/skill", undefined);
 		expect(result).toBe("Path: /tmp/skill");
 	});
 
 	it("substitutes FLAME_SESSION_ID when session id provided", () => {
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: testing template substitution
 		const result = substituteTemplateVars("Session: ${FLAME_SESSION_ID}", undefined, "sess-123");
 		expect(result).toBe("Session: sess-123");
 	});
 
 	it("leaves unresolved tokens in place", () => {
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: testing template substitution
 		const result = substituteTemplateVars("Session: ${FLAME_SESSION_ID}", undefined, undefined);
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: testing template substitution
 		expect(result).toBe("Session: ${FLAME_SESSION_ID}");
 	});
 
@@ -44,6 +48,7 @@ describe("skills pillar preprocessing", () => {
 	});
 
 	it("preprocessSkillContent applies template vars before optional shell", () => {
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: testing template substitution
 		const result = preprocessSkillContent("Dir=${FLAME_SKILL_DIR}", "/my/skill", undefined, {
 			templateVars: true,
 			inlineShell: false,

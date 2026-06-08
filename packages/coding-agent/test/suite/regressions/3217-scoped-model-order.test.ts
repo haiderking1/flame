@@ -7,14 +7,20 @@ import { initTheme } from "../../../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../../../src/utils/ansi.ts";
 import { createHarness, type Harness } from "../harness.ts";
 
+let resolveRender: (() => void) | undefined;
+
 function createFakeTui(): TUI {
 	return {
-		requestRender: () => {},
+		requestRender: () => {
+			resolveRender?.();
+		},
 	} as unknown as TUI;
 }
 
 async function waitForAsyncRender(): Promise<void> {
-	await new Promise((resolve) => setTimeout(resolve, 0));
+	await new Promise<void>((resolve) => {
+		resolveRender = resolve;
+	});
 }
 
 describe("issue #3217 scoped model ordering", () => {

@@ -1,13 +1,7 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, type Stats, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { INVISIBLE_CHARS } from "../memory/threat-patterns.ts";
-import {
-	getSkillGuardThreatPatternCount,
-	HERMES_THREAT_PATTERN_COUNT,
-	SKILL_GUARD_THREAT_PATTERNS,
-	type SkillGuardSeverity,
-	type SkillThreatPattern,
-} from "./guard-patterns.ts";
+import { SKILL_GUARD_THREAT_PATTERNS, type SkillGuardSeverity } from "./guard-patterns.ts";
 
 export {
 	getSkillGuardThreatPatternCount,
@@ -217,7 +211,7 @@ function checkStructure(skillDir: string): SkillGuardFinding[] {
 		}
 		for (const entry of entries) {
 			const full = join(dir, entry);
-			let st;
+			let st: Stats;
 			try {
 				st = statSync(full);
 			} catch {
@@ -299,7 +293,7 @@ export function scanSkill(skillPath: string, source = "community"): SkillScanRes
 		}
 		for (const entry of entries) {
 			const full = join(dir, entry);
-			let st;
+			let st: Stats;
 			try {
 				st = statSync(full);
 			} catch {

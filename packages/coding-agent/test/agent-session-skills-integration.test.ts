@@ -69,6 +69,7 @@ describe("AgentSession skills integration", () => {
 		expect(view.success).toBe(true);
 		const skillDir = String(view.skill_dir);
 		expect(String(view.content)).toContain(skillDir);
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: testing template substitution
 		expect(String(view.content)).not.toContain("${FLAME_SKILL_DIR}");
 	});
 });

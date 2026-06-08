@@ -45,7 +45,7 @@ describe("issue #2781 skill collision precedence: user skills should override pa
 	}
 
 	function createProjectSkill(name: string, description: string): string {
-		const skillDir = join(cwd, ".flame", "skills", name);
+		const skillDir = join(cwd, ".agents", "skills", name);
 		mkdirSync(skillDir, { recursive: true });
 		const skillPath = join(skillDir, "SKILL.md");
 		writeFileSync(skillPath, `---\nname: ${name}\ndescription: ${description}\n---\nProject skill content`);

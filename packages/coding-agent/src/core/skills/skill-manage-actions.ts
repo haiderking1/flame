@@ -470,7 +470,7 @@ async function deleteSkill(
 		return { success: false, error: skillNotFoundError(name) };
 	}
 
-	if (absorbedInto !== undefined && absorbedInto.trim()) {
+	if (absorbedInto?.trim()) {
 		const targetName = absorbedInto.trim();
 		if (targetName === name) {
 			return { success: false, error: `absorbed_into='${targetName}' cannot equal the skill being deleted.` };
@@ -492,7 +492,7 @@ async function deleteSkill(
 		pruneEmptyCategoryDir(skillDir);
 		invalidateCache();
 		let message = `Skill '${name}' deleted.`;
-		if (absorbedInto !== undefined && absorbedInto.trim()) {
+		if (absorbedInto?.trim()) {
 			message += ` Content absorbed into '${absorbedInto.trim()}'.`;
 		}
 		return { success: true, message };

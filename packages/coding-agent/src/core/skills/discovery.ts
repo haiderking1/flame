@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { type Dirent, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import ignore from "ignore";
 import { parseFrontmatter } from "../../utils/frontmatter.ts";
@@ -92,7 +92,7 @@ export function* iterSkillIndexFiles(skillsDir: string, filename: string): Gener
 	const matches: string[] = [];
 
 	function walk(dir: string): void {
-		let entries;
+		let entries: Dirent[];
 		try {
 			entries = readdirSync(dir, { withFileTypes: true });
 		} catch {

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { AgentTool } from "@earendil-works/flame-agent-core";
 import { fauxAssistantMessage, fauxToolCall, type Model } from "@earendil-works/flame-ai";
 import { Type } from "typebox";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PromptTemplate } from "../../src/core/prompt-templates.ts";
 import { createSyntheticSourceInfo } from "../../src/core/source-info.ts";
 import { createTestResourceLoader } from "../utilities.ts";
@@ -13,8 +13,18 @@ import { createHarness, getMessageText, type Harness } from "./harness.ts";
 describe("AgentSession prompt characterization", () => {
 	const harnesses: Harness[] = [];
 	const tempDirs: string[] = [];
+	let previousFlameHome: string | undefined;
+
+	beforeEach(() => {
+		previousFlameHome = process.env.FLAME_HOME;
+	});
 
 	afterEach(() => {
+		if (previousFlameHome === undefined) {
+			delete process.env.FLAME_HOME;
+		} else {
+			process.env.FLAME_HOME = previousFlameHome;
+		}
 		while (harnesses.length > 0) {
 			harnesses.pop()?.cleanup();
 		}
@@ -145,10 +155,21 @@ describe("AgentSession prompt characterization", () => {
 
 	it("expands skill commands before sending the prompt", async () => {
 		const tempDir = join(tmpdir(), `pi-skill-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-		mkdirSync(tempDir, { recursive: true });
+		const skillsDir = join(tempDir, "skills");
+		mkdirSync(skillsDir, { recursive: true });
 		tempDirs.push(tempDir);
-		const skillPath = join(tempDir, "test-skill.md");
-		writeFileSync(skillPath, "# Test Skill\n\nUse the skill body.");
+		const skillPath = join(skillsDir, "test.md");
+		writeFileSync(
+			skillPath,
+			`---
+name: test
+description: Test skill
+---
+# Test Skill
+
+Use the skill body.`,
+		);
+		process.env.FLAME_HOME = tempDir;
 
 		const resourceLoader = {
 			...createTestResourceLoader(),
@@ -185,7 +206,7 @@ describe("AgentSession prompt characterization", () => {
 
 		await harness.session.prompt("/skill:test explain this");
 
-		expect(expandedPrompt).toContain('<skill name="test" location="');
+		expect(expandedPrompt).toContain('[IMPORTANT: The user has invoked the "test" skill.');
 		expect(expandedPrompt).toContain("Use the skill body.");
 		expect(expandedPrompt).toContain("explain this");
 	});

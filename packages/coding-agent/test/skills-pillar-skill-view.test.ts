@@ -96,11 +96,13 @@ describe("skills pillar skill-view", () => {
 	it("substitutes FLAME_SKILL_DIR when preprocessing enabled", () => {
 		mkdirSync(join(tempHome, "skills", "vars"), { recursive: true });
 		const skillDir = join(tempHome, "skills", "vars");
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: testing template substitution
 		writeFileSync(join(skillDir, "SKILL.md"), "---\nname: vars\ndescription: Vars\n---\nDir is ${FLAME_SKILL_DIR}\n");
 
 		const result = executeSkillView({ name: "vars" });
 		expect(result.success).toBe(true);
 		expect(String(result.content)).toContain(skillDir);
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: testing template substitution
 		expect(String(result.content)).not.toContain("${FLAME_SKILL_DIR}");
 	});
 });

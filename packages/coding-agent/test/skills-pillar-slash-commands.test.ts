@@ -23,10 +23,9 @@ describe("skills pillar slash commands", () => {
 	it("expandSkillSlashCommand returns hermes-style activation banner", () => {
 		const skillDir = join(tempHome, "skills", "demo");
 		mkdirSync(skillDir, { recursive: true });
-		writeFileSync(
-			join(skillDir, "SKILL.md"),
-			"---\nname: demo\ndescription: Demo\n---\nRun ${FLAME_SKILL_DIR}/scripts/foo.sh\n",
-		);
+		// biome-ignore lint/suspicious/noTemplateCurlyInString: testing template substitution
+		const content = "---\nname: demo\ndescription: Demo\n---\nRun ${FLAME_SKILL_DIR}/scripts/foo.sh\n";
+		writeFileSync(join(skillDir, "SKILL.md"), content);
 
 		const msg = expandSkillSlashCommand("demo", "extra user note");
 		expect(msg).not.toBeNull();

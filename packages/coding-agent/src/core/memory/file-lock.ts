@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+import { promises as fs, type Stats } from "node:fs";
 import { dirname } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -33,7 +33,7 @@ async function acquireLock(lockPath: string): Promise<void> {
 			if (code !== "EEXIST") throw err;
 		}
 
-		let stat;
+		let stat: Stats;
 		try {
 			stat = await fs.stat(lockPath);
 		} catch {

@@ -1,6 +1,7 @@
-import { homedir } from "os";
-import { join, resolve } from "path";
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ResourceDiagnostic } from "../src/core/diagnostics.ts";
 import { formatSkillsForPrompt, loadSkills, loadSkillsFromDir, type Skill } from "../src/core/skills.ts";
 import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
@@ -27,6 +28,22 @@ function createTestSkill(options: {
 }
 
 describe("skills", () => {
+	const originalFlameHome = process.env.FLAME_HOME;
+	let tempHome: string;
+
+	beforeEach(() => {
+		tempHome = mkdtempSync(join(tmpdir(), "flame-skills-test-"));
+		process.env.FLAME_HOME = tempHome;
+	});
+
+	afterEach(() => {
+		if (originalFlameHome === undefined) {
+			delete process.env.FLAME_HOME;
+		} else {
+			process.env.FLAME_HOME = originalFlameHome;
+		}
+		rmSync(tempHome, { recursive: true, force: true });
+	});
 	describe("loadSkillsFromDir", () => {
 		it("should load a valid skill", () => {
 			const { skills, diagnostics } = loadSkillsFromDir({
