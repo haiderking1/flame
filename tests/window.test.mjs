@@ -17,6 +17,7 @@ import { checkWorkspace } from "./helpers/workspace.mjs";
 import { checkSidebar } from "./helpers/sidebar.mjs";
 import { checkSidebarRestore } from "./helpers/sidebarRestore.mjs";
 import { checkProjects } from "./helpers/projects.mjs";
+import { checkProjectFilter } from "./helpers/projectFilter.mjs";
 import { checkComposerSubmission } from "./helpers/composerSubmission.mjs";
 
 for (const mode of ["production", "development"]) {
@@ -133,6 +134,7 @@ test(`${mode}: composer window${mode === "development" ? " with live updates" : 
   await checkResponsive({ evaluate, send: (method, params) => send(method, params, sessionId) });
   await mkdir(join(profile, 'folders', 'child'), { recursive: true });
   await checkProjects({ evaluate, send: (method, params) => send(method, params, sessionId), folder: join(profile, 'folders') });
+  await checkProjectFilter({ evaluate, send: (method, params) => send(method, params, sessionId), folder: join(profile, 'folders') });
   if (mode === "production") {
     await checkComposer({ evaluate, send: (method, params) => send(method, params, sessionId) });
   } else {

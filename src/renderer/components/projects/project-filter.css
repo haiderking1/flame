@@ -1,0 +1,18 @@
+.project-filter { position: fixed; inset: auto; margin: 0; padding: 0; width: max-content; min-width: 0; max-width: min(288px, calc(100vw - 16px)); max-height: 368px; overflow: hidden; border: 1px solid #ffffff14; border-radius: 10px; background: rgb(17 17 17 / 94%); backdrop-filter: blur(16px); color: #f5f5f5; box-shadow: 0 18px 44px -18px #000c; font-size: 14px; line-height: 20px; -webkit-app-region: no-drag; }
+.project-filter:popover-open { display: flex; flex-direction: column; }
+.project-filter__search { min-width: 0; flex-shrink: 0; padding: 10px 12px 0; }
+.project-filter__search > div { position: relative; border-bottom: 1px solid #ffffff14; padding-bottom: 6px; }
+.project-filter__search > div:focus-within { border-color: #ffffff38; }
+.project-filter__search svg { position: absolute; top: 6px; left: 0; width: 16px; height: 16px; color: #777; opacity: .55; pointer-events: none; }
+.project-filter__search input { display: block; width: 100%; min-width: 0; height: 26px; padding: 0 0 0 20px; border: 0; outline: none; background: transparent; color: inherit; font: inherit; line-height: 26px; }
+.project-filter__search input::placeholder { color: #818181; }
+.project-filter__list { min-height: 0; overflow: auto; padding: 4px; scrollbar-width: thin; scrollbar-color: #ffffff14 transparent; }
+.project-filter__option { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 4px 8px; border-radius: 6px; cursor: pointer; user-select: none; }
+.project-filter__option[aria-selected="true"] { background: #ffffff14; }
+.project-filter__option[data-highlighted] { background: #ffffff0a; }
+.project-filter__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-filter .project-filter__settings { display: grid; place-items: center; width: 20px; height: 20px; margin-left: auto; padding: 0; border: 0; background: transparent; flex-shrink: 0; opacity: .5; cursor: default; }
+.project-filter .project-filter__settings svg { width: 14px; height: 14px; color: #818181; }
+.project-filter__status { padding: 8px; margin: 0; color: #818181; font-size: 12px; }
+.project-filter__status button { color: inherit; background: transparent; border: 0; text-decoration: underline; cursor: pointer; }
+.project-filter__status button:focus-visible { outline: 1px solid #ffffff38; }

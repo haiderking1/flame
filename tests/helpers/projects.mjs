@@ -8,9 +8,9 @@ export async function checkProjects({ evaluate, send, folder }) {
     assert.fail(`Timed out: ${expression}. UI: ${await evaluate('document.body.innerText')}`);
   };
   await evaluate(`(() => { const toggle = document.querySelector('.app-shell > .sidebar-toggle'); if (toggle.getAttribute('aria-expanded') === 'false') toggle.click(); })()`);
-  await wait("document.querySelector('[aria-label=\"New project\"]') !== null");
+  await wait("document.querySelector('.sidebar-threads__empty')?.textContent.includes('No projects yet')");
   const open = async () => {
-    await evaluate("document.querySelector('[aria-label=\"New project\"]').click()");
+    await evaluate("(document.querySelector('.sidebar-threads__empty button') ?? document.querySelector('[aria-label=\"New project\"]')).click()");
     await wait("document.querySelector('.project-picker')?.open");
     await evaluate("document.querySelector('.project-picker__source').click()");
     await wait("document.querySelector('[aria-label=\"Folder path\"]') !== null");
@@ -29,26 +29,39 @@ export async function checkProjects({ evaluate, send, folder }) {
   await path(`${folder}/does-not-exist/`);
   await wait("document.querySelector('.project-picker [role=alert]')?.textContent.includes('no longer exists')");
   await path(`${folder}/`);
-  await wait("document.querySelector('[role=option] button')?.textContent.includes('child')");
+  await wait("document.querySelector('.project-picker [role=option] button')?.textContent.includes('child')");
   await evaluate("document.querySelector('[aria-label=\"Folder path\"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))");
   await wait("document.querySelector('[aria-label=\"Folder path\"]').value.includes('/child/')");
   await wait("document.querySelector('.project-picker__body')?.textContent.includes('No visible subfolders')");
   await evaluate("document.querySelector('[aria-label=\"Folder path\"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }))");
   await wait("!document.querySelector('.project-picker')");
-  await wait("document.querySelector('.project-list button')?.title.endsWith('/child')");
-  assert.equal(await evaluate("document.querySelector('.project-list button').getAttribute('aria-current')"), 'true');
+  await wait("document.querySelector('.project-filter [role=option][title]')?.title.endsWith('/child')");
+  assert.equal(await evaluate("document.querySelector('.sidebar-threads__empty').textContent"), 'No threads yet');
+  assert.equal(await evaluate("document.querySelector('.project-list')"), null);
+  const newProject = await evaluate(`(() => {
+    const bounds = document.querySelector('[aria-label="New project"]').getBoundingClientRect();
+    return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  })()`);
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...newProject });
+  await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  assert.deepEqual(await evaluate(`(() => {
+    const button = document.querySelector('[aria-label="New project"]');
+    return { hovered: button.matches(':hover'), background: getComputedStyle(button).backgroundColor,
+      cursor: getComputedStyle(button).cursor, icon: getComputedStyle(button.querySelector('svg')).color };
+  })()`), { hovered: true, background: 'rgba(255, 255, 255, 0.04)', cursor: 'pointer', icon: 'rgb(245, 245, 245)' });
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 100 });
   // Re-adding the same directory selects the existing project, never duplicates it.
   await open();
   await path(`${folder}/child/`);
   await wait("document.querySelector('.project-picker__body')?.textContent.includes('No visible subfolders')");
   await evaluate("document.querySelector('[aria-label=\"Folder path\"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }))");
   await wait("!document.querySelector('.project-picker')");
-  assert.equal(await evaluate("document.querySelectorAll('.project-list button').length"), 1);
+  assert.equal(await evaluate("document.querySelectorAll('.project-filter [role=option][title]').length"), 1);
   await evaluate('window.__beforeProjectReload = true');
   await send('Page.reload');
   await wait("!window.__beforeProjectReload && document.readyState === 'complete' && document.querySelector('.app-shell > .sidebar-toggle') !== null");
   await evaluate(`(() => { const toggle = document.querySelector('.app-shell > .sidebar-toggle'); if (toggle.getAttribute('aria-expanded') === 'false') toggle.click(); })()`);
-  await wait("document.querySelector('.project-list button')?.title.endsWith('/child')");
+  await wait("document.querySelector('.project-filter [role=option][title]')?.title.endsWith('/child')");
   // Real Escape cancellation restores focus to the triggering control.
   await evaluate("document.querySelector('[aria-label=\"New project\"]').focus()");
   await open();
