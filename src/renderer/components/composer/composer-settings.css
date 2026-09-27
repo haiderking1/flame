@@ -23,6 +23,16 @@
   white-space: nowrap;
 }
 
+.composer-settings__control:not(:disabled) { cursor: pointer; }
+
+.composer-settings__control:not(:disabled):hover,
+.composer-settings__control:focus-visible,
+.composer-settings__control[aria-expanded="true"] {
+  outline: none;
+  background: #ffffff08;
+  color: #dedede;
+}
+
 .composer-settings__control:disabled {
   opacity: 1;
   cursor: default;

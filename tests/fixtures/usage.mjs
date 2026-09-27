@@ -6,6 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createWindow } from '../../dist/main/window.js';
 import { startServer } from '../../dist/backend/server.js';
 import { CodexUsageClient } from '../../dist/backend/usage/client.js';
+import { CodexModelsClient } from '../../dist/backend/models/client.js';
 
 void app.whenReady().then(async () => {
   let reads = 0, credits = 2, posts = 0;
@@ -18,7 +19,8 @@ void app.whenReady().then(async () => {
   const portReady = new Promise((resolve) => { ready = resolve; });
   const abort = new AbortController();
   const running = Effect.runPromise(Effect.scoped(startServer({ filename: join(app.getPath('userData'), 'usage.sqlite'), token: 'test-token', origin: 'file://',
-    openBrowser: async () => assert.fail('Usage must not start OAuth'), usageClient: new FakeUsage(), ready })), { signal: abort.signal }).catch(() => {});
+    openBrowser: async () => assert.fail('Usage must not start OAuth'), usageClient: new FakeUsage(),
+    modelsClient: new CodexModelsClient(async () => Response.json({ models: [] })), ready })), { signal: abort.signal }).catch(() => {});
   const port = await portReady;
   ipcMain.handle('flame:connection', () => `ws://127.0.0.1:${port}/rpc?token=test-token`);
   const window = await createWindow();

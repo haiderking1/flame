@@ -46,7 +46,7 @@ export function Composer({ onSend }: ComposerProps) {
     <form className="composer" aria-label="Message composer" aria-busy={sending} onSubmit={submit}>
       <textarea
         ref={textarea}
-        className="composer__input"
+        className="composer__input flame-scrollbar"
         aria-label="Message"
         aria-describedby={hintId}
         placeholder="Ask for changes, send follow-ups, or attach images"

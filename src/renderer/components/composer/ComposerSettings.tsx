@@ -1,40 +1,27 @@
+import { ModelPicker } from "./models/ModelPicker";
+import { useModelCatalog } from "./models/useModelCatalog";
+import { useModelChoice } from "./models/useModelChoice";
+import { ThinkingPicker } from "./thinking/ThinkingPicker";
 import "./composer-settings.css";
 
-function Chevron() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 export function ComposerSettings() {
-  return (
-    <div className="composer-settings" role="group" aria-label="Model settings">
-      <button
-        className="composer-settings__control composer-settings__model"
-        type="button"
-        disabled
-        aria-label="Select model"
-        title="Model selection will be available when an agent is connected"
-      >
-        <svg className="composer-settings__icon" width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-          <path d="m10 2 7 4v8l-7 4-7-4V6l7-4Z M3 6l7 4 7-4 M10 10v8" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-        </svg>
-        <span className="composer-settings__label">Select model</span>
-        <Chevron />
-      </button>
-      <span className="composer-settings__divider" aria-hidden="true" />
-      <button
-        className="composer-settings__control"
-        type="button"
-        disabled
-        aria-label="Thinking level: Medium"
-        title="Thinking levels will depend on the selected model"
-      >
-        <span>Medium</span>
-        <Chevron />
-      </button>
-    </div>
-  );
+  const catalog = useModelCatalog();
+  const choice = useModelChoice(catalog.accountKey);
+  const selected = catalog.models.find((model) => model.id === catalog.selection?.modelId);
+  return <div className="composer-settings" role="group" aria-label="Model settings">
+    <ModelPicker key={catalog.accountKey ?? "disconnected"} models={catalog.models} selectedId={selected?.id ?? null}
+      onSelect={async (modelId) => {
+        if (!catalog.accountKey) throw new Error("No connected account");
+        await choice.submit({ type: "model", accountKey: catalog.accountKey, modelId });
+      }} emptyMessage={catalog.emptyMessage} error={choice.error ?? catalog.error} busy={choice.busy} />
+    <span className="composer-settings__divider" aria-hidden="true" />
+    <ThinkingPicker key={`${catalog.accountKey ?? ""}:${selected?.id ?? ""}`} model={selected} effort={catalog.selection?.effort ?? null}
+      serviceTier={catalog.selection?.serviceTier ?? "default"} onSelectTier={async (serviceTier) => {
+        if (!catalog.accountKey || !selected) throw new Error("No selected model");
+        await choice.submit({ type: "tier", accountKey: catalog.accountKey, modelId: selected.id, serviceTier });
+      }} busy={choice.busy} error={choice.error} onSelect={async (effort) => {
+        if (!catalog.accountKey || !selected) throw new Error("No selected model");
+        await choice.submit({ type: "thinking", accountKey: catalog.accountKey, modelId: selected.id, effort });
+      }} />
+  </div>;
 }

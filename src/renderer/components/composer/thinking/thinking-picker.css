@@ -1,0 +1,12 @@
+.thinking-picker { position: fixed; inset: auto; margin: 0; padding: 0; width: min(184px, calc(100vw - 16px)); box-sizing: border-box; border: 1px solid #ffffff0c; border-radius: 12px; background: #171717f5; color: #ededed; box-shadow: 0 12px 40px #0007; backdrop-filter: blur(16px); visibility: hidden; overflow: hidden; }
+.thinking-picker:popover-open { display: flex; flex-direction: column; }
+.thinking-picker__heading { flex-shrink: 0; margin: 0; padding: 10px 6px 6px; color: #858585; font-size: 12px; line-height: 18px; font-weight: 400; }
+.thinking-picker__list { min-height: 0; padding: 0 4px 4px; overflow-y: auto; overscroll-behavior: contain; }
+.thinking-picker__option { display: flex; align-items: center; gap: 5px; width: 100%; min-height: 28px; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: #dedede; text-align: left; font: inherit; font-size: 13px; line-height: 20px; cursor: pointer; }
+.thinking-picker__option > span { min-width: 0; overflow-wrap: anywhere; }
+.thinking-picker__option:hover, .thinking-picker__option:focus-visible, .thinking-picker__option[aria-checked="true"] { outline: none; background: #ffffff0a; }
+.thinking-picker__option[aria-disabled="true"] { cursor: default; opacity: .65; }
+.thinking-picker__default { flex-shrink: 0; padding: 0 4px; border: 1px solid #ffffff0c; border-radius: 4px; background: #ffffff04; color: #aaa; font-size: 10px; line-height: 16px; font-weight: 400; }
+.thinking-picker__tiers { margin-top: 8px; padding-top: 2px; border-top: 1px solid #ffffff0a; }
+.thinking-picker__tier-description { display: block; color: #858585; font-size: 11px; line-height: 16px; font-weight: 400; }
+.thinking-picker__error { flex-shrink: 0; margin: 0; padding: 8px 10px; border-top: 1px solid #ffffff0a; color: #aaa; font-size: 11px; line-height: 16px; overflow-wrap: anywhere; }

@@ -1,4 +1,5 @@
 @import "./fonts/fonts.css";
+@import "./styles/scrollbar.css";
 
 :root {
   color-scheme: dark;
