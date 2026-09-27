@@ -8,6 +8,15 @@ export async function checkResponsive({ evaluate, send }) {
     assert.ok(Math.abs(await evaluate('innerWidth') - width) <= 2);
   };
   const toggle = "document.querySelector('.app-shell > .sidebar-toggle')";
+  await viewport(1200);
+  const desktopWidth = await evaluate("document.querySelector('#workspace-sidebar').getBoundingClientRect().width");
+  await evaluate(`${toggle}.click()`);
+  await settle();
+  for (const width of [750, 1200, 600, 1200]) {
+    await viewport(width);
+    assert.equal(await evaluate(`${toggle}.getAttribute('aria-expanded')`), 'false', 'Resizing must preserve a collapsed sidebar');
+    assert.equal(await evaluate("document.querySelector('#workspace-sidebar').getBoundingClientRect().width"), 0);
+  }
   let drawerNaturalWidth;
   for (const width of [750, 600, 486, 320, 208]) {
     await viewport(width);
@@ -38,7 +47,7 @@ export async function checkResponsive({ evaluate, send }) {
     await settle();
   }
   await viewport(1200);
-  const desktopWidth = await evaluate("document.querySelector('#workspace-sidebar').getBoundingClientRect().width");
+  assert.equal(await evaluate(`${toggle}.getAttribute('aria-expanded')`), 'false', 'Closing the drawer must also keep the desktop sidebar closed');
   assert.equal(await evaluate("Math.round(document.querySelector('.workspace__composer').getBoundingClientRect().width)"), 736);
   await viewport(750);
   assert.equal(await evaluate("document.querySelector('.sidebar-drawer').open"), false);
@@ -56,7 +65,16 @@ export async function checkResponsive({ evaluate, send }) {
   assert.equal(await evaluate("document.querySelector('.sidebar-drawer').open"), false);
   assert.equal(await evaluate(`document.activeElement === ${toggle}`), true);
   await viewport(1200);
+  assert.equal(await evaluate(`${toggle}.getAttribute('aria-expanded')`), 'false');
+  await evaluate(`${toggle}.click()`);
+  await settle();
   assert.ok(Math.abs(await evaluate("document.querySelector('#workspace-sidebar').getBoundingClientRect().width") - desktopWidth) < 1);
+  await viewport(750);
+  assert.equal(await evaluate("document.querySelector('.sidebar-drawer').open"), true, 'An explicitly opened sidebar stays open across the breakpoint');
+  await viewport(1200);
+  assert.equal(await evaluate(`${toggle}.getAttribute('aria-expanded')`), 'true');
+  await evaluate(`${toggle}.click()`);
+  await settle();
 
   for (const [width, padding] of [[630, '12px'], [650, '20px']]) {
     await viewport(width);

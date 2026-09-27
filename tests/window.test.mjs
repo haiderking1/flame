@@ -120,6 +120,11 @@ test(`${mode}: composer window${mode === "development" ? " with live updates" : 
   await send('Emulation.setDeviceMetricsOverride', { width: 2200, height: 1400, deviceScaleFactor: 1, mobile: false }, sessionId);
   await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
   await checkFonts(evaluate);
+  await evaluate(`(() => {
+    const toggle = document.querySelector('.app-shell > .sidebar-toggle');
+    if (toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+  })()`);
+  await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
   await checkWorkspace(evaluate);
   await checkSidebar({ evaluate, send: (method, params) => send(method, params, sessionId) });
   await checkSidebarRestore({ evaluate, send: (method, params) => send(method, params, sessionId) });

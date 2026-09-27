@@ -11,12 +11,10 @@ import { useWindowTitlebar } from "./hooks/useWindowTitlebar";
 export function App() {
   useWindowTitlebar();
   const [diffOpen, setDiffOpen] = useState(false);
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const mobile = useMediaQuery("(max-width: 767px)");
-  const sidebarOpen = mobile ? mobileSidebarOpen : sidebarExpanded;
-  const toggleSidebar = () => mobile ? setMobileSidebarOpen((open) => !open) : setSidebarExpanded((open) => !open);
-  const closeSidebar = () => setMobileSidebarOpen(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => !mobile);
+  const toggleSidebar = () => setSidebarOpen((open) => !open);
+  const closeSidebar = () => setSidebarOpen(false);
   const diffButton = useRef<HTMLButtonElement>(null);
   function closeDiff() {
     setDiffOpen(false);
