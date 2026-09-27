@@ -1,0 +1,2 @@
+.provider-connection-status { position: absolute; top: -1px; right: -1px; width: 6px; height: 6px; border-radius: 50%; background: #ef6464; box-shadow: 0 0 0 2px #101010; }
+.provider-connection-status[data-connected="true"] { background: #4ade80; }

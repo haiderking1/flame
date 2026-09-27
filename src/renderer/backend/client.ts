@@ -2,10 +2,10 @@ import { Context, Effect, Layer } from "effect";
 import { Atom } from "effect/unstable/reactivity";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import { Socket } from "effect/unstable/socket";
-import { ProjectRpc } from "@contracts/projects";
+import { BackendRpc } from "@contracts/backend";
 
 declare global { interface Window { flame: { connection(): Promise<string> } } }
-const makeClient = RpcClient.make(ProjectRpc);
+const makeClient = RpcClient.make(BackendRpc);
 export class Backend extends Context.Service<Backend, Effect.Success<typeof makeClient>>()("flame/Backend") {}
 const socket = Socket.layerWebSocket(Effect.promise(() => window.flame.connection()), { openTimeout: "5 seconds" }).pipe(
   Layer.provide(Socket.layerWebSocketConstructorGlobal),

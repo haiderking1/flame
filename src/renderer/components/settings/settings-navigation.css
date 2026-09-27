@@ -1,0 +1,6 @@
+.settings-navigation { padding: 16px 8px; min-width: 0; }
+.settings-navigation button { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; color: #858585; text-align: left; font: inherit; font-size: 14px; line-height: 20px; cursor: pointer; }
+.settings-navigation button[aria-current="page"] { background: #ffffff0a; color: #ededed; }
+.settings-navigation button + button { margin-top: 4px; }
+.settings-navigation button svg { flex-shrink: 0; }
+.settings-navigation button:hover, .settings-navigation button:focus-visible { outline: none; background: #ffffff10; }

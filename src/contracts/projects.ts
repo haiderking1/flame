@@ -6,7 +6,7 @@ export const Project = Schema.Struct({ id: Schema.String, name: Schema.String, p
 export type Project = typeof Project.Type;
 export const Directory = Schema.Struct({ name: Schema.String, path: Path });
 export const BrowseResult = Schema.Struct({
-  path: Path, parent: Schema.NullOr(Path), entries: Schema.Array(Directory), truncated: Schema.Boolean,
+  path: Path, homePath: Path, parent: Schema.NullOr(Path), entries: Schema.Array(Directory), truncated: Schema.Boolean,
 });
 export type BrowseResult = typeof BrowseResult.Type;
 export class ProjectError extends Schema.TaggedError<ProjectError>()("ProjectError", {

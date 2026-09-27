@@ -18,6 +18,7 @@ import { checkSidebar } from "./helpers/sidebar.mjs";
 import { checkSidebarRestore } from "./helpers/sidebarRestore.mjs";
 import { checkProjects } from "./helpers/projects.mjs";
 import { checkProjectFilter } from "./helpers/projectFilter.mjs";
+import { checkSettings } from "./helpers/settings.mjs";
 import { checkComposerSubmission } from "./helpers/composerSubmission.mjs";
 
 for (const mode of ["production", "development"]) {
@@ -37,7 +38,17 @@ test(`${mode}: composer window${mode === "development" ? " with live updates" : 
     env.FLAME_RENDERER_URL = server.resolvedUrls.local[0];
   }
   const profile = await mkdtemp(join(tmpdir(), "flame-test-profile-"));
-  const child = spawn(electron, [".", "--remote-debugging-pipe", `--user-data-dir=${profile}`], {
+  env.HOME = profile;
+  env.USERPROFILE = profile;
+  const authPath = join(profile, '.flame', 'agent', 'auth.json');
+  if (mode === 'development') {
+    await mkdir(join(profile, '.flame', 'agent'), { recursive: true, mode: 0o700 });
+    await writeFile(authPath, JSON.stringify({ 'openai-codex': {
+      type: 'oauth', access: 'fake-access-token', refresh: 'fake-refresh-token', expires: Date.now() + 3_600_000,
+      accountId: 'test-account', email: 'test@example.com', plan: 'plus',
+    }, other: { preserved: true } }), { mode: 0o600 });
+  }
+  const child = spawn(electron, [".", "--ozone-platform=headless", "--remote-debugging-pipe", `--user-data-dir=${profile}`], {
     cwd: fileURLToPath(new URL("../", import.meta.url)),
     stdio: ["ignore", "ignore", "pipe", "pipe", "pipe"],
     env,
@@ -135,6 +146,7 @@ test(`${mode}: composer window${mode === "development" ? " with live updates" : 
   await mkdir(join(profile, 'folders', 'child'), { recursive: true });
   await checkProjects({ evaluate, send: (method, params) => send(method, params, sessionId), folder: join(profile, 'folders') });
   await checkProjectFilter({ evaluate, send: (method, params) => send(method, params, sessionId), folder: join(profile, 'folders') });
+  await checkSettings({ evaluate, send: (method, params) => send(method, params, sessionId), savedAuthPath: mode === 'development' ? authPath : undefined });
   if (mode === "production") {
     await checkComposer({ evaluate, send: (method, params) => send(method, params, sessionId) });
   } else {

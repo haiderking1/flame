@@ -31,7 +31,13 @@ export async function checkProjects({ evaluate, send, folder }) {
   await path(`${folder}/`);
   await wait("document.querySelector('.project-picker [role=option] button')?.textContent.includes('child')");
   await evaluate("document.querySelector('[aria-label=\"Folder path\"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))");
-  await wait("document.querySelector('[aria-label=\"Folder path\"]').value.includes('/child/')");
+  await wait("document.querySelector('[aria-label=\"Folder path\"]').value === '~/folders/child/'");
+  await wait("document.querySelector('.project-picker__body')?.textContent.includes('No visible subfolders')");
+  await evaluate("document.querySelector('[aria-label=\"Folder path\"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }))");
+  await wait("document.querySelector('[aria-label=\"Folder path\"]').value === '~/folders/'");
+  await wait("document.querySelector('.project-picker [role=option] button')?.textContent.includes('child')");
+  await evaluate("document.querySelector('.project-picker [role=option] button').click()");
+  await wait("document.querySelector('[aria-label=\"Folder path\"]').value === '~/folders/child/'");
   await wait("document.querySelector('.project-picker__body')?.textContent.includes('No visible subfolders')");
   await evaluate("document.querySelector('[aria-label=\"Folder path\"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }))");
   await wait("!document.querySelector('.project-picker')");

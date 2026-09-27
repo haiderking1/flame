@@ -4,7 +4,16 @@ import { Effect } from "effect";
 import { NodeHttpServer } from "@effect/platform-node";
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
-import { ProjectRpc } from "../contracts/projects.js";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { BackendRpc } from "../contracts/backend.js";
+import { AuthStore } from "./auth/store.js";
+import { CodexAuth } from "./auth/service.js";
+import { authHandlers } from "./auth/handlers.js";
+import { UsageStore } from "./usage/store.js";
+import { CodexUsage } from "./usage/service.js";
+import type { CodexUsageClient } from "./usage/client.js";
+import { usageHandlers } from "./usage/handlers.js";
 import { ProjectStore } from "./projects/store.js";
 import { projectHandlers } from "./projects/handlers.js";
 
@@ -16,10 +25,17 @@ export function authorizedRequest(url: string, host: string | undefined, origin:
   return parsed.pathname === "/rpc" && supplied.length === secret.length && timingSafeEqual(supplied, secret);
 }
 
-export const startServer = (options: { filename: string; token: string; origin: string; ready: (port: number) => void }) => Effect.gen(function* () {
+export const startServer = (options: { filename: string; token: string; origin: string; openBrowser: (url: string) => Promise<void>; usageClient?: CodexUsageClient; ready: (port: number) => void }) => Effect.gen(function* () {
   const store = yield* Effect.acquireRelease(Effect.sync(() => new ProjectStore(options.filename)), (store) => Effect.sync(() => store.close()));
-  const rpc = yield* RpcServer.toHttpEffectWebsocket(ProjectRpc).pipe(
-    Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
+  const auth = yield* Effect.acquireRelease(Effect.promise(async () => {
+    const auth = new CodexAuth({ store: new AuthStore(join(homedir(), ".flame", "agent")), openBrowser: options.openBrowser });
+    await auth.initialize();
+    return auth;
+  }), (auth) => Effect.promise(() => auth.close()));
+  const usageStore = yield* Effect.acquireRelease(Effect.sync(() => new UsageStore(options.filename)), (store) => Effect.sync(() => store.close()));
+  const usage = yield* Effect.acquireRelease(Effect.sync(() => new CodexUsage(auth, usageStore, options.usageClient)), (usage) => Effect.promise(() => usage.close()));
+  const rpc = yield* RpcServer.toHttpEffectWebsocket(BackendRpc).pipe(
+    Effect.provide(usageHandlers(usage)), Effect.provide(authHandlers(auth)), Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
   );
   const server = yield* NodeHttpServer.make(createServer, {
     host: "127.0.0.1", port: 0, gracefulShutdownTimeout: "2 seconds", websocket: { maxPayload: 64 * 1024 },

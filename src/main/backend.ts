@@ -1,4 +1,5 @@
-import { app, utilityProcess } from "electron";
+import { app, shell, utilityProcess } from "electron";
+import { allowedOAuthUrl } from "./oauthBrowser.js";
 import { randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -11,6 +12,13 @@ export async function launchBackend(onUnexpectedExit: () => void) {
   const devUrl = !app.isPackaged ? process.env.FLAME_RENDERER_URL : undefined;
   const child = utilityProcess.fork(fileURLToPath(new URL("../backend/entry.js", import.meta.url)), [], { serviceName: "Flame backend", stdio: "pipe" });
   child.stderr?.on("data", (data: Buffer) => console.error(data.toString()));
+  child.on("message", (message: unknown) => {
+    const data = message as { type?: string; id?: string; url?: unknown } | null;
+    if (data?.type !== "open-browser" || typeof data.id !== "string") return;
+    const reply = (ok: boolean) => { if (child.pid) child.postMessage({ type: "browser-result", id: data.id, ok }); };
+    if (!allowedOAuthUrl(data.url)) { reply(false); return; }
+    void shell.openExternal(data.url).then(() => reply(true), () => reply(false));
+  });
   let stopping = false;
   let started = false;
   child.on("exit", () => { if (started && !stopping) onUnexpectedExit(); });

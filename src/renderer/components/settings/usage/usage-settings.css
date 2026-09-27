@@ -1,0 +1,20 @@
+.usage-settings { width: 100%; max-width: 960px; margin-inline: auto; }
+.usage-settings > h1 { margin: 0 0 16px; color: #aaa; font-size: 14px; line-height: 20px; font-weight: 500; }
+.usage-card { overflow: hidden; border: 1px solid #ffffff08; border-radius: 16px; background: #ffffff02; }
+.usage-card__header { display: flex; align-items: center; gap: 12px; padding: 16px; }
+.usage-card__header h2 { margin: 0; font-size: 14px; font-weight: 500; }
+.usage-card__header > button { margin-left: auto; }
+.usage-card__logo { position: relative; width: 20px; height: 20px; flex-shrink: 0; overflow: hidden; }
+.usage-card__logo img { position: absolute; width: 30px; height: 30px; left: -5px; top: -5px; max-width: none; }
+.usage-card__section { padding: 20px 16px; border-top: 1px solid #ffffff06; }
+.usage-card__line, .usage-card__banked { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.usage-card h3 { margin: 0; font-size: 13px; font-weight: 500; }
+.usage-card__line > span { font-size: 12px; color: #aaa; }
+.usage-card p { margin: 8px 0 0; color: #858585; font-size: 12px; line-height: 18px; }
+.usage-meter { height: 5px; border-radius: 999px; background: #ffffff0a; overflow: hidden; margin-top: 14px; }
+.usage-meter > div { height: 100%; border-radius: inherit; background: #3268ed; }
+.usage-card button { padding: 5px 9px; border: 1px solid #ffffff10; border-radius: 7px; background: transparent; color: #aaa; font: inherit; font-size: 12px; line-height: 18px; cursor: pointer; max-width: 100%; }
+.usage-card button:not(:disabled):hover, .usage-card button:focus-visible { outline: none; background: #ffffff0a; color: #ededed; }
+.usage-card button:disabled { opacity: .45; cursor: default; }
+.usage-card .usage-card__updated { padding: 0 16px 12px; margin: 0; color: #666; font-size: 11px; }
+.usage-settings__message { color: #aaa; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }

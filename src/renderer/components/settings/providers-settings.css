@@ -1,0 +1,24 @@
+.providers-settings { width: 100%; max-width: 960px; margin-inline: auto; }
+.providers-settings > h1 { margin: 0 0 16px; color: #aaa; font-size: 14px; line-height: 20px; font-weight: 500; }
+.provider-list { overflow: hidden; border: 1px solid #ffffff08; border-radius: 16px; background: #ffffff02; }
+.provider-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 72px; padding: 12px 16px; }
+.provider-row + .provider-row { border-top: 1px solid #ffffff06; }
+.provider-row__identity { display: flex; align-items: flex-start; gap: 12px; flex: 1; min-width: 0; }
+.provider-row__logo { position: relative; display: block; flex-shrink: 0; width: 20px; height: 20px; }
+.provider-row__logo-mark { position: absolute; inset: 0; overflow: hidden; }
+/* The supplied SVG includes whitespace around its mark. Crop it visually without changing the asset. */
+.provider-row__logo img { position: absolute; width: 30px; height: 30px; max-width: none; left: -5px; top: -5px; }
+.provider-row__text { min-width: 0; }
+.provider-row h2 { margin: 0; color: #ededed; font-size: 14px; line-height: 20px; font-weight: 500; }
+.provider-row p { margin: 2px 0 0; color: #818181cc; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.provider-row__actions { display: flex; flex-shrink: 0; align-items: center; gap: 8px; }
+.provider-row__action { padding: 4px 6px; border: 0; border-radius: 5px; background: transparent; color: #aaa; font: inherit; font-size: 12px; cursor: pointer; }
+.provider-row__action:hover, .provider-row__action:focus-visible { outline: none; background: #ffffff0a; color: #ededed; }
+.provider-auth-error { margin: 0; padding: 0 16px 12px 48px; color: #ef9696; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.provider-row__switch { position: relative; flex-shrink: 0; width: 30px; height: 18px; padding: 2px; border: 1px solid #ffffff14; border-radius: 999px; background: #ffffff0d; cursor: default; }
+.provider-row__switch:not(:disabled) { cursor: pointer; }
+.provider-row__switch:not(:disabled):hover, .provider-row__switch:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff14; }
+.provider-row__switch[aria-checked="true"] { background: #3268ed; border-color: transparent; }
+.provider-row__switch[aria-checked="true"] > span { transform: translateX(12px); background: #101010; }
+.provider-row__switch > span { display: block; width: 12px; height: 12px; border-radius: 50%; background: #737373; }
+@media (max-width: 639px) { .provider-row { padding-inline: 12px; } }

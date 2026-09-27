@@ -25,7 +25,7 @@ export function FolderBrowser({ onBack, onAdded }: { onBack(): void; onAdded(pro
   const index = Math.min(selected, Math.max(0, entries.length - 1));
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => { document.getElementById(`folder-option-${index}`)?.scrollIntoView({ block: "nearest" }); }, [index, query, data]);
-  function navigate(path: string) { setQuery(directoryQuery(path)); setSelected(0); input.current?.focus(); }
+  function navigate(path: string) { setQuery(directoryQuery(path, data?.homePath)); setSelected(0); input.current?.focus(); }
   async function submit() {
     if (!data || busy.current || parsed.filter) return;
     busy.current = true; setSaving(true);

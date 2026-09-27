@@ -5,9 +5,13 @@ import { SidebarToolbar } from "./SidebarToolbar";
 import { SidebarBrand } from "./SidebarBrand";
 import "./sidebar.css";
 import { SidebarDrawer } from "./SidebarDrawer";
+import { SidebarFooter } from "./SidebarFooter";
+import { SettingsNavigation, type SettingsSection } from "../settings/SettingsNavigation";
 
-export function Sidebar({ expanded, mobile = false, onClose, onNewProject }: {
+export function Sidebar({ expanded, mobile = false, onClose, onNewProject, settings, onSettings, onBack, settingsSection, onSettingsSection }: {
   expanded: boolean; mobile?: boolean; onClose(): void; onNewProject(): void;
+  settings: boolean; onSettings(): void; onBack(): void;
+  settingsSection: SettingsSection; onSettingsSection(section: SettingsSection): void;
 }) {
   const [projectScope, setProjectScope] = useProjectScope();
   const { width, minimum, maximum, resizing, handleProps } = useSidebarResize();
@@ -16,8 +20,11 @@ export function Sidebar({ expanded, mobile = false, onClose, onNewProject }: {
       <div className="sidebar__header">
         {!mobile && <SidebarBrand />}
       </div>
-      <SidebarToolbar onNewProject={onNewProject} scope={projectScope} onScopeChange={setProjectScope} />
-      <SidebarThreads scope={projectScope} onNewProject={onNewProject} />
+      {settings ? <SettingsNavigation section={settingsSection} onSelect={(section) => { onSettingsSection(section); if (mobile) onClose(); }} /> : <>
+        <SidebarToolbar onNewProject={onNewProject} scope={projectScope} onScopeChange={setProjectScope} />
+        <SidebarThreads scope={projectScope} onNewProject={onNewProject} />
+      </>}
+      <SidebarFooter settings={settings} onClick={settings ? onBack : onSettings} />
       {!mobile && <div className="sidebar__resize" role="separator" tabIndex={0}
         aria-label="Resize sidebar" aria-orientation="vertical" aria-controls="workspace-sidebar"
         aria-valuemin={minimum} aria-valuemax={maximum} aria-valuenow={width}

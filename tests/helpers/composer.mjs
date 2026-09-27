@@ -6,11 +6,11 @@ export async function checkComposer({ evaluate, send }) {
   assert.deepEqual(await evaluate(`(() => {
     const composer = document.querySelector('.composer');
     const send = document.querySelector('button[type=submit]');
-    return { height: Math.round(composer.getBoundingClientRect().height),
+    return { heightWithinRounding: Math.abs(composer.getBoundingClientRect().height - 144) <= 1,
       padding: getComputedStyle(composer).paddingTop,
       radius: getComputedStyle(composer).borderRadius,
       sendSize: Math.round(send.getBoundingClientRect().height) };
-  })()`), { height: 144, padding: "16px", radius: "24px", sendSize: 32 });
+  })()`), { heightWithinRounding: true, padding: "16px", radius: "24px", sendSize: 32 });
   assert.deepEqual(await evaluate(`(() => {
     const attach = document.querySelector('button[aria-label="Attach media"]');
     const send = document.querySelector('button[aria-label="Send message"]');

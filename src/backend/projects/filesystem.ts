@@ -40,5 +40,6 @@ export async function browseDirectory(input: string, signal?: AbortSignal): Prom
     if (isDirectory) entries.push({ name: entry.name, path: child });
   }
   entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }) || a.name.localeCompare(b.name));
-  return { path, parent: dirname(path) === path ? null : dirname(path), entries, truncated };
+  const homePath = await realpath(homedir()).catch(() => homedir());
+  return { path, homePath, parent: dirname(path) === path ? null : dirname(path), entries, truncated };
 }

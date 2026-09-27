@@ -55,10 +55,13 @@ export async function checkSidebar({ evaluate, send }) {
     const start = await state();
     const x = Math.max(1, Math.min(await evaluate('innerWidth - 1'), start.x + delta));
     await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: start.x, y: start.y });
-    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: start.x, y: start.y, button: 'left', clickCount: 1 });
+    await settle();
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: start.x, y: start.y, button: 'left', buttons: 1, clickCount: 1 });
+    await settle();
+    assert.equal(await evaluate("document.querySelector('.sidebar').dataset.resizing"), 'true');
     await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y: start.y, button: 'left', buttons: 1 });
     await settle();
-    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y: start.y, button: 'left', clickCount: 1 });
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y: start.y, button: 'left', buttons: 0, clickCount: 1 });
     await settle();
     assert.equal(await evaluate("document.querySelector('.sidebar').dataset.resizing"), 'false');
   }
