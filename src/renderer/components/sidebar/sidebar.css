@@ -1,8 +1,20 @@
 .sidebar {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
   flex: 0 0 auto;
   background: #0b0b0b;
   border-right: 1px solid #202020;
+}
+
+.sidebar[hidden] {
+  display: none;
+}
+
+.sidebar__header {
+  flex: 0 0 calc(var(--titlebar-top) + var(--titlebar-height));
 }
 
 .sidebar__resize {

@@ -8,6 +8,35 @@ export async function checkResponsive({ evaluate, send }) {
     assert.ok(Math.abs(await evaluate('innerWidth') - width) <= 2);
   };
   const toggle = "document.querySelector('.app-shell > .sidebar-toggle')";
+  let drawerNaturalWidth;
+  for (const width of [750, 600, 486, 320, 208]) {
+    await viewport(width);
+    await evaluate(`${toggle}.click()`);
+    await settle();
+    const drawerWidth = await evaluate("document.querySelector('.sidebar-drawer').getBoundingClientRect().width");
+    if (drawerNaturalWidth === undefined) {
+      drawerNaturalWidth = drawerWidth;
+      assert.ok(drawerWidth >= 280 && drawerWidth <= 380, `Drawer should be content-sized, not viewport-wide: ${drawerWidth}`);
+    }
+    assert.ok(Math.abs(drawerWidth - Math.min(drawerNaturalWidth, await evaluate('innerWidth - 12'))) < 1,
+      `Drawer must retain its natural width and only shrink to fit at ${width}px`);
+    assert.ok(await evaluate(`(() => {
+      const drawer = document.querySelector('.sidebar-drawer').getBoundingClientRect();
+      const sidebar = document.querySelector('#workspace-sidebar').getBoundingClientRect();
+      const toolbar = document.querySelector('.sidebar-toolbar').getBoundingClientRect();
+      const actions = document.querySelector('.sidebar-toolbar__actions').getBoundingClientRect();
+      const input = document.querySelector('.sidebar-toolbar__search input').getBoundingClientRect();
+      const header = document.querySelector('.sidebar__header').getBoundingClientRect();
+      return Math.abs(sidebar.top - drawer.top) < 1 &&
+        Math.abs(sidebar.bottom - drawer.bottom) < 1 &&
+        Math.abs(toolbar.top - header.bottom) < 1 &&
+        actions.right <= drawer.right && input.right <= actions.left &&
+        !document.querySelector('.sidebar-brand') &&
+        document.querySelector('.sidebar-drawer').scrollHeight <= innerHeight + 1;
+    })()`), `Drawer header, search, and actions must fit at ${width}px`);
+    await evaluate("document.querySelector('.sidebar-drawer').dispatchEvent(new Event('cancel', { cancelable: true }))");
+    await settle();
+  }
   await viewport(1200);
   const desktopWidth = await evaluate("document.querySelector('#workspace-sidebar').getBoundingClientRect().width");
   assert.equal(await evaluate("Math.round(document.querySelector('.workspace__composer').getBoundingClientRect().width)"), 736);
@@ -20,7 +49,7 @@ export async function checkResponsive({ evaluate, send }) {
     const drawer = document.querySelector('.sidebar-drawer');
     return drawer.open && drawer.contains(document.activeElement) &&
       !drawer.querySelector('[role=separator]') &&
-      Math.abs(drawer.getBoundingClientRect().width - (innerWidth - 12)) < 1;
+      drawer.getBoundingClientRect().width < innerWidth * .6;
   })()`), 'Mobile sidebar should be a focus-contained, non-resizable overlay');
   await evaluate("document.querySelector('.sidebar-drawer').dispatchEvent(new Event('cancel', { cancelable: true }))");
   await settle();

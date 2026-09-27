@@ -8,7 +8,9 @@ export function Sidebar({ expanded, mobile = false, onClose }: { expanded: boole
   const { width, minimum, maximum, resizing, handleProps } = useSidebarResize();
   const content = (
     <aside hidden={!expanded} id="workspace-sidebar" className="sidebar" aria-label="Sidebar" style={mobile ? undefined : { width }} data-resizing={resizing}>
-      <SidebarBrand />
+      <div className="sidebar__header">
+        {!mobile && <SidebarBrand />}
+      </div>
       <SidebarToolbar />
       {!mobile && <div className="sidebar__resize" role="separator" tabIndex={0}
         aria-label="Resize sidebar" aria-orientation="vertical" aria-controls="workspace-sidebar"

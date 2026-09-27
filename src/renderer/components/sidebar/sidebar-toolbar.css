@@ -3,8 +3,8 @@
   align-items: center;
   gap: 4px;
   min-width: 0;
+  flex-shrink: 0;
   padding: 8px;
-  margin-top: calc(var(--titlebar-top) + var(--titlebar-height));
   color: #858585;
 }
 
@@ -26,6 +26,7 @@
 }
 
 .sidebar-toolbar__search input {
+  flex: 1;
   width: 100%;
   min-width: 0;
   padding: 0;
