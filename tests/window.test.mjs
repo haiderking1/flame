@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
@@ -16,10 +16,11 @@ import { checkResponsive } from "./helpers/responsive.mjs";
 import { checkWorkspace } from "./helpers/workspace.mjs";
 import { checkSidebar } from "./helpers/sidebar.mjs";
 import { checkSidebarRestore } from "./helpers/sidebarRestore.mjs";
+import { checkProjects } from "./helpers/projects.mjs";
 import { checkComposerSubmission } from "./helpers/composerSubmission.mjs";
 
 for (const mode of ["production", "development"]) {
-test(`${mode}: composer window${mode === "development" ? " with live updates" : ""}`, { timeout: 20_000 }, async (t) => {
+test(`${mode}: composer window${mode === "development" ? " with live updates" : ""}`, { timeout: 35_000 }, async (t) => {
   let root;
   let server;
   const env = { ...process.env };
@@ -47,6 +48,7 @@ test(`${mode}: composer window${mode === "development" ? " with live updates" : 
   t.after(async () => {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
     await exited;
+    if (!t.passed) console.error(diagnostics);
     await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
@@ -129,6 +131,8 @@ test(`${mode}: composer window${mode === "development" ? " with live updates" : 
   await checkSidebar({ evaluate, send: (method, params) => send(method, params, sessionId) });
   await checkSidebarRestore({ evaluate, send: (method, params) => send(method, params, sessionId) });
   await checkResponsive({ evaluate, send: (method, params) => send(method, params, sessionId) });
+  await mkdir(join(profile, 'folders', 'child'), { recursive: true });
+  await checkProjects({ evaluate, send: (method, params) => send(method, params, sessionId), folder: join(profile, 'folders') });
   if (mode === "production") {
     await checkComposer({ evaluate, send: (method, params) => send(method, params, sessionId) });
   } else {

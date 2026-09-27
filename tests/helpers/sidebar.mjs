@@ -36,13 +36,28 @@ export async function checkSidebar({ evaluate, send }) {
     const toolbar = document.querySelector('.sidebar-toolbar');
     const input = toolbar.querySelector('input');
     const buttons = [...toolbar.querySelectorAll('button')];
-    return { search: input.placeholder, disabled: input.disabled && buttons.every(button => button.disabled),
+    return { search: input.placeholder, disabled: input.disabled && buttons.filter(button => button.getAttribute('aria-label') !== 'New project').every(button => button.disabled),
+      canAddProject: !buttons.find(button => button.getAttribute('aria-label') === 'New project').disabled,
       labels: buttons.map(button => button.getAttribute('aria-label')),
       fits: toolbar.scrollWidth <= toolbar.clientWidth && input.getBoundingClientRect().width > 40,
       fontSize: getComputedStyle(input).fontSize,
       buttonSize: Math.round(buttons[0].getBoundingClientRect().width) };
-  })()`), { search: 'Search', disabled: true, labels: ['Select project', 'New project', 'New thread'],
+  })()`), { search: 'Search', disabled: true, canAddProject: true, labels: ['Select project', 'New project', 'New thread'],
     fits: true, fontSize: '14px', buttonSize: 28 });
+  const newProject = await evaluate(`(() => {
+    const bounds = document.querySelector('[aria-label="New project"]').getBoundingClientRect();
+    return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  })()`);
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...newProject });
+  await settle();
+  assert.deepEqual(await evaluate(`(() => {
+    const button = document.querySelector('[aria-label="New project"]');
+    return { hovered: button.matches(':hover'), background: getComputedStyle(button).backgroundColor,
+      cursor: getComputedStyle(button).cursor, icon: getComputedStyle(button.querySelector('svg')).color };
+  })()`), { hovered: true, background: 'rgba(255, 255, 255, 0.04)', cursor: 'pointer', icon: 'rgb(245, 245, 245)' });
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 100 });
+  await settle();
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('[aria-label=\"New project\"]')).backgroundColor"), 'rgba(0, 0, 0, 0)');
   await key('ArrowLeft');
   assert.equal((await state()).width, initial.min);
   await key('End');

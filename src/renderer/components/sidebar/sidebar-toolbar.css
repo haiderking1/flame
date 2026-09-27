@@ -64,3 +64,19 @@
   opacity: 1;
   cursor: default;
 }
+
+.sidebar-toolbar__actions button:enabled {
+  cursor: pointer;
+}
+
+.sidebar-toolbar__actions button:enabled:hover,
+.sidebar-toolbar__actions button:enabled:focus-visible {
+  outline: none;
+  background: #ffffff0a;
+  color: #f5f5f5;
+}
+
+.sidebar-toolbar__actions button:enabled:hover svg,
+.sidebar-toolbar__actions button:enabled:focus-visible svg {
+  color: inherit;
+}

@@ -24,8 +24,15 @@
     "vite": "8.3.1"
   },
   "trustedDependencies": ["electron"],
+  "overrides": {
+    "@effect/platform-node-shared": "4.0.0-rc.115"
+  },
   "dependencies": {
+    "@effect/atom-react": "4.0.0-rc.115",
+    "@effect/platform-node": "4.0.0-rc.115",
+    "effect": "4.0.0-rc.115",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "scheduler": "0.27.0"
   }
 }

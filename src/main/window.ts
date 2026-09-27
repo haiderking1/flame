@@ -18,6 +18,7 @@ export async function createWindow(): Promise<BrowserWindow> {
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
+      preload: fileURLToPath(new URL("./bootstrap.cjs", import.meta.url)),
       zoomFactor: 1.2 ** INITIAL_ZOOM_LEVEL,
       nodeIntegration: false,
       contextIsolation: true,

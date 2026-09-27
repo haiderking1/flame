@@ -3,8 +3,8 @@
     "target": "ES2023",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "rootDir": "src/main",
-    "outDir": "dist/main",
+    "rootDir": "src",
+    "outDir": "dist",
     "strict": true,
     "noEmitOnError": true,
     "noUnusedLocals": true,
@@ -12,5 +12,5 @@
     "verbatimModuleSyntax": true,
     "types": ["node"]
   },
-  "include": ["src/main/**/*.ts"]
+  "include": ["src/main/**/*.ts", "src/main/**/*.cts", "src/backend/**/*.ts", "src/contracts/**/*.ts"]
 }

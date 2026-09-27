@@ -15,7 +15,7 @@ export async function startDevServer(
       transformIndexHtml(html) {
         // Development only: Vite's WebSocket, CSS, and React Refresh preamble.
         return html
-          .replace("default-src 'none';", "default-src 'none'; connect-src 'self' ws://127.0.0.1:*;")
+          .replace("connect-src ws://127.0.0.1:*;", "connect-src 'self' ws://127.0.0.1:*;")
           .replace("style-src 'self';", "style-src 'self' 'unsafe-inline';")
           .replace("script-src 'self';", "script-src 'self' 'unsafe-inline';");
       },

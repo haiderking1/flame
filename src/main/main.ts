@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, session } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, session } from "electron";
+import { launchBackend } from "./backend.js";
 import { createWindow } from "./window.js";
 import { installApplicationMenu } from "./applicationMenu.js";
 
@@ -20,6 +21,20 @@ void app.whenReady().then(async () => {
     callback(false);
   });
   session.defaultSession.setPermissionCheckHandler(() => false);
+
+  const backend = await launchBackend(() => handleStartupError(new Error("The backend stopped unexpectedly. Restart Flame to reconnect.")));
+  ipcMain.handle("flame:connection", (event) => {
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    if (!owner || event.senderFrame !== event.sender.mainFrame) throw new Error("Untrusted bootstrap request");
+    return backend.url;
+  });
+  let stopping = false;
+  app.on("before-quit", (event) => {
+    if (stopping) return;
+    event.preventDefault();
+    stopping = true;
+    void backend.stop().finally(() => app.quit());
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

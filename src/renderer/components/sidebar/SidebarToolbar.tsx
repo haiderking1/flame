@@ -9,7 +9,7 @@ function Icon({ children }: { children: ReactNode }) {
   );
 }
 
-export function SidebarToolbar() {
+export function SidebarToolbar({ onNewProject }: { onNewProject(): void }) {
   return (
     <div className="sidebar-toolbar" role="group" aria-label="Projects and threads">
       <label className="sidebar-toolbar__search" title="Thread search is not connected yet">
@@ -20,7 +20,7 @@ export function SidebarToolbar() {
         <button type="button" aria-label="Select project" title="Project selection is not connected yet" disabled>
           <Icon><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /></Icon>
         </button>
-        <button type="button" aria-label="New project" title="New project is not connected yet" disabled>
+        <button type="button" aria-label="New project" title="New project" onClick={onNewProject}>
           <Icon><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z M9 13h6m-3-3v6" /></Icon>
         </button>
         <button type="button" aria-label="New thread" title="New thread is not connected yet" disabled>
