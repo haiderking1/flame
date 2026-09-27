@@ -1,0 +1,29 @@
+:root {
+  --titlebar-height: 52px;
+  --titlebar-top: 0px;
+  --titlebar-left: 12px;
+  --titlebar-right: 12px;
+}
+
+:root.native-titlebar {
+  --titlebar-height: env(titlebar-area-height, 52px);
+  --titlebar-top: env(titlebar-area-y, 0px);
+  --titlebar-left: calc(env(titlebar-area-x, 0px) + 12px);
+  --titlebar-right: calc(100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px) + 12px);
+}
+
+.window-titlebar {
+  position: absolute;
+  z-index: 1;
+  top: var(--titlebar-top);
+  left: 0;
+  right: 0;
+  height: var(--titlebar-height);
+  -webkit-app-region: drag;
+}
+
+.sidebar-toggle,
+.workspace-actions nav,
+.sidebar__resize {
+  -webkit-app-region: no-drag;
+}

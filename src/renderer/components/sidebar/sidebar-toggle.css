@@ -1,0 +1,27 @@
+.sidebar-toggle {
+  position: absolute;
+  top: calc(var(--titlebar-top) + (var(--titlebar-height) - 28px) / 2);
+  left: calc(var(--titlebar-left) + 1px);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #858585;
+  cursor: pointer;
+}
+
+.sidebar-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.sidebar-toggle:hover {
+  color: #ededed;
+  background: #1c1c1c;
+}

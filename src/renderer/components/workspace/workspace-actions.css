@@ -1,0 +1,54 @@
+.workspace-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  height: var(--titlebar-height);
+  flex-shrink: 0;
+  padding: 0 calc(var(--titlebar-right) + 1px) 0 12px;
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.workspace-actions nav {
+  display: flex;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.workspace-actions nav button {
+  width: 28px;
+  height: 28px;
+}
+
+.workspace-actions button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.workspace-actions button,
+.diff-panel__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #858585;
+  cursor: pointer;
+}
+
+.workspace-actions button:enabled:hover,
+.workspace-actions button[aria-expanded="true"],
+.diff-panel__close:hover {
+  color: #ededed;
+  background: #1c1c1c;
+}
+
+.workspace-actions button:disabled {
+  opacity: 1;
+  cursor: default;
+}

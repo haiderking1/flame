@@ -1,0 +1,14 @@
+.sidebar-brand {
+  position: absolute;
+  top: calc(var(--titlebar-top) + (var(--titlebar-height) - 28px) / 2);
+  left: calc(var(--titlebar-left) + 40px);
+  display: flex;
+  align-items: center;
+  height: 28px;
+  color: #ededed;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.35px;
+  user-select: none;
+}

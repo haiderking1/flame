@@ -1,0 +1,59 @@
+.composer-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.composer-actions button {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+}
+
+.composer-actions__attach {
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  color: #858585;
+}
+
+.composer-actions__send {
+  width: 32px;
+  height: 32px;
+  background: #3563d0;
+  color: #e4eaff;
+  cursor: pointer;
+}
+
+.composer-actions__send:hover:not(:disabled) {
+  background: #4474e4;
+}
+
+.composer-actions button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.composer-actions__send:disabled {
+  background: #284b9f;
+  color: #8b9ec9;
+}
+
+@container composer (max-width: 280px) {
+  .composer-actions {
+    gap: 4px;
+  }
+
+  .composer-actions__attach {
+    width: 28px;
+  }
+
+  .composer-actions__send {
+    width: 32px;
+    height: 32px;
+  }
+}
