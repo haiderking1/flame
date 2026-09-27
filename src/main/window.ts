@@ -10,6 +10,8 @@ export async function createWindow(): Promise<BrowserWindow> {
   const window = new BrowserWindow({
     width: 1200,
     height: 800,
+    minWidth: 840,
+    minHeight: 620,
     title: "Flame",
     ...windowTitlebarOptions(),
     backgroundColor: "#0b0b0b",

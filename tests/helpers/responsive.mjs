@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 
 export async function checkResponsive({ evaluate, send }) {
   const settle = () => evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
-  const viewport = async (width) => {
-    await send('Emulation.setDeviceMetricsOverride', { width: Math.ceil(width * 1.728), height: 1400, deviceScaleFactor: 1, mobile: false });
+  const viewport = async (width, height = 810) => {
+    await send('Emulation.setDeviceMetricsOverride', { width: Math.ceil(width * 1.728), height: Math.ceil(height * 1.728), deviceScaleFactor: 1, mobile: false });
     await settle();
     assert.ok(Math.abs(await evaluate('innerWidth') - width) <= 2);
   };
@@ -58,4 +58,26 @@ export async function checkResponsive({ evaluate, send }) {
   assert.ok(await evaluate("document.querySelector('.composer').scrollWidth <= document.querySelector('.composer').clientWidth + 1"));
   await evaluate("document.querySelector('.workspace__composer').style.removeProperty('width')");
   await settle();
+
+  // Exercise widths below native window limits too: tiling compositors can
+  // override size hints, and browser zoom further reduces the CSS viewport.
+  for (const [width, height] of [[486, 359], [240, 600], [127, 588], [240, 150]]) {
+    await viewport(width, height);
+    assert.ok(await evaluate(`(() => {
+      const root = document.documentElement;
+      const shell = document.querySelector('.app-shell').getBoundingClientRect();
+      const toggle = document.querySelector('.app-shell > .sidebar-toggle svg').getBoundingClientRect();
+      return root.scrollWidth <= innerWidth + 1 && root.scrollHeight <= innerHeight + 1 &&
+        Math.abs(root.clientWidth - innerWidth) <= 1 && Math.abs(root.clientHeight - innerHeight) <= 1 &&
+        Math.abs(shell.height - innerHeight) < 1 && toggle.top >= 0;
+    })()`), 'Tiny windows must not scroll the page or displace the titlebar');
+    if (height >= 359) {
+      assert.ok(await evaluate(`(() => {
+        const chat = document.querySelector('.workspace__chat').getBoundingClientRect();
+        const composer = document.querySelector('.workspace__composer').getBoundingClientRect();
+        return Math.abs((composer.top + composer.bottom) - (chat.top + chat.bottom)) < 2;
+      })()`), 'Empty composer must stay vertically centered in the chat');
+    }
+  }
+  await viewport(1200);
 }

@@ -7,6 +7,7 @@ import { zoomWindow } from '../../dist/main/windowZoom.js';
 void app.whenReady().then(async () => {
   installApplicationMenu();
   const window = await createWindow();
+  assert.deepEqual(window.getMinimumSize(), [840, 620]);
   const contents = window.webContents;
   const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 0.01, `${actual} should equal ${expected}`);
   if (process.argv.includes('--verify-restored')) {
