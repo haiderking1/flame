@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
-import { app, ipcMain } from 'electron';
+import { app, ipcMain, shell } from 'electron';
+import { checkSettlement } from '../helpers/settlement.mjs';
+import { checkSessionSidebar } from '../helpers/sessionSidebar.mjs';
+import { markdownSample, checkMarkdown } from '../helpers/markdown.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { join } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { Effect } from 'effect';
 import { createWindow } from '../../dist/main/window.js';
 import { startServer } from '../../dist/backend/server.js';
@@ -19,6 +23,7 @@ void app.whenReady().then(async () => {
   const projects = new ProjectStore(filename);
   const a = projects.add(join(app.getPath('userData'), 'Project A'));
   const b = projects.add(join(app.getPath('userData'), 'Project B'));
+  mkdirSync(a.path, { recursive: true }); mkdirSync(b.path, { recursive: true });
   const repository = new SessionRepository(join(app.getPath('userData'), 'projects'), projects);
   const modelsClient = new CodexModelsClient(async () => Response.json({ models: ['Alpha', 'Beta'].map((name, priority) => ({
     slug: name.toLowerCase(), display_name: name, priority, visibility: 'list', default_reasoning_level: 'high',
@@ -31,7 +36,17 @@ void app.whenReady().then(async () => {
   let inferenceCalls = 0;
   const inferenceClient = new CodexInferenceClient(async (_url, options) => {
     const call = ++inferenceCalls;
-    const prompt = JSON.parse(options.body).input.at(-1).content[0].text;
+    const input = JSON.parse(options.body).input;
+    const prompt = [...input].reverse().find(item => item.role === 'user')?.content?.[0]?.text;
+    if ((prompt === 'Hello from B' && !input.some(item => item.type === 'function_call_output')) || prompt === 'Stop this') {
+      const command = prompt === 'Stop this' ? 'printf bash-running; sleep 60' : 'printf x >> flame-ui-marker; printf bash-ui-output';
+      const item = { type: 'function_call', name: 'bash', call_id: `ui_bash_${call}`, arguments: JSON.stringify({ command, background: false }) };
+      const commentary = { type: 'message', role: 'assistant', phase: 'commentary', content: [{ type: 'output_text', text: 'Checking the project before answering.' }] };
+      return new Response([ { type: 'response.output_item.done', output_index: 0, item: commentary },
+        { type: 'response.output_item.done', output_index: 1, item },
+        { type: 'response.completed', response: { status: 'completed', output: [] } }
+      ].map(event => `data: ${JSON.stringify(event)}\n\n`).join(''));
+    }
     let cancelled = false;
     const stream = new ReadableStream({
       start(controller) {
@@ -39,12 +54,12 @@ void app.whenReady().then(async () => {
         const delta = (text) => emit({ type: 'response.output_text.delta', output_index: 0, delta: text });
         void (async () => {
           if (prompt === 'Stop this') { delta('Partial answer.\n\nUnfinished'); return; }
-          const text = 'First paragraph.\n\nPending words continued.\n\n```ts\nconst value = 1;\n```\n';
+          const text = 'First paragraph.\n\nPending words continued.\n\n```ts\nconst value = 1;\n```\n' + markdownSample;
           delta('First paragraph.\n\nPending words'); await delay(800);
           if (cancelled) return;
           delta(' continued.\n\n```ts\nconst value = 1;\n'); await delay(800);
           if (cancelled) return;
-          delta('```\n');
+          delta('```\n' + markdownSample);
           emit({ type: 'response.output_item.done', output_index: 0, item: { id: `msg_${call}`, type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] } });
           emit({ type: 'response.completed', response: { status: 'completed', output: [] } });
           controller.close();
@@ -69,12 +84,15 @@ void app.whenReady().then(async () => {
   };
   const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const type = async (selector, value, replace = false) => {
+    window.focus(); window.webContents.focus();
     await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`);
     if (replace) {
+      await evaluate(`window.flameClearFinished = false; document.querySelector(${JSON.stringify(selector)}).addEventListener('keyup', function cleared(event) { if (event.key === 'Backspace') { window.flameClearFinished = true; this.removeEventListener('keyup', cleared); } }); true`);
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'A', modifiers: ['control'] });
       window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'A', modifiers: ['control'] });
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Backspace' });
       window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Backspace' });
+      await wait(`window.flameClearFinished && document.querySelector(${JSON.stringify(selector)}).value === ''`);
     }
     if (value) await window.webContents.insertText(value);
   };
@@ -119,18 +137,54 @@ void app.whenReady().then(async () => {
     await type('textarea', 'Hello from B');
     await click('[aria-label="Send message"]');
     await wait("document.querySelector('.session-message p')?.textContent === 'Hello from B' && document.querySelector('textarea').value === ''");
-    await wait("document.querySelector('.session-message--assistant p')?.textContent === 'First paragraph.\\n\\n'");
+    await wait("[...document.querySelectorAll('.work-group__commentary')].at(-1)?.textContent.trim() === 'First paragraph.'");
     assert.ok(!await evaluate("document.querySelector('.session-history').textContent.includes('Pending words')"));
     const resumed = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
     window.webContents.reload(); await resumed;
-    await wait("!!document.querySelector('.session-message--assistant')");
-    assert.equal(inferenceCalls, 1, 'renderer reload resumes the active response without replay');
-    await wait("document.querySelector('.session-message--assistant p')?.textContent.includes('Pending words continued.')");
+    await wait("!!document.querySelector('.work-group__commentary')");
+    assert.equal(inferenceCalls, 2, 'renderer reload resumes the active response without replay');
+    await wait("document.querySelector('.work-group__heading')?.textContent.includes('Ran command')");
+    assert.equal(readFileSync(join(a.path, 'flame-ui-marker'), 'utf8'), 'x');
+    await wait("[...document.querySelectorAll('.work-group__commentary')].some(node => node.textContent.includes('Pending words continued.'))");
     assert.ok(!await evaluate("document.querySelector('.session-history').textContent.includes('const value')"), 'an open code fence remains buffered');
-    await wait("document.querySelector('.session-message--assistant p')?.textContent.includes('const value') && !document.querySelector('textarea').readOnly && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
+    await wait("document.querySelector('.session-message--assistant .markdown-code pre')?.textContent.includes('const value') && !document.querySelector('textarea').readOnly && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
+    await wait("document.querySelector('.work-group__heading')?.getAttribute('aria-expanded') === 'false'");
+    assert.equal(await evaluate("document.querySelectorAll('.work-group').length"), 1, 'work stays in its response instead of a separate job list');
+    assert.ok(!await evaluate("document.querySelector('.session-message--assistant p').textContent.includes('Checking the project')"), 'commentary is not duplicated into the final answer');
+    await click('.work-group__heading');
+    assert.ok(await evaluate("document.querySelector('.work-group__steps').firstElementChild.textContent.includes('Checking the project')"), 'narration precedes its tool call');
+    await click('.work-tool__toggle');
+    await wait("document.querySelector('.work-tool__output')?.textContent.includes('bash-ui-output')");
+    if (process.env.FLAME_UI_CAPTURE_DIR) {
+      await delay(150); // Let the compositor paint the expanded state before capture.
+      mkdirSync(process.env.FLAME_UI_CAPTURE_DIR, { recursive: true });
+      writeFileSync(join(process.env.FLAME_UI_CAPTURE_DIR, 'work-expanded.png'), (await window.webContents.capturePage()).toPNG());
+    }
+    await click('.work-group__heading');
+    if (process.env.FLAME_UI_CAPTURE_DIR) {
+      await delay(150);
+      writeFileSync(join(process.env.FLAME_UI_CAPTURE_DIR, 'work-collapsed.png'), (await window.webContents.capturePage()).toPNG());
+    }
     assert.equal(repository.use(sessionB, (db) => db.history(null)).entries.filter((entry) => entry.kind === 'user').length, 1);
     assert.equal(repository.use(sessionB, (db) => db.turns.snapshot()).status, 'completed');
-    assert.equal(await evaluate("document.querySelector('.session-message--assistant > span').textContent"), 'Flame', 'successful streamed replies must not show failed');
+    assert.ok(await evaluate("document.querySelector('.session-message--assistant').getAttribute('aria-label') === 'Flame' && !document.querySelector('.session-message--assistant > span, .session-message--user > span')"), 'authors are accessible without visible role headers');
+    assert.ok(await evaluate("(() => { const bubble = document.querySelector('.session-message--user').getBoundingClientRect(); const column = document.querySelector('.session-history__content').getBoundingClientRect(); return Math.abs(bubble.right - column.right) < 1 && bubble.width <= column.width * .8 + 1; })()"), 'user bubbles fit their content on the right');
+    await checkMarkdown({ evaluate, wait, click });
+    if (process.env.FLAME_UI_CAPTURE_DIR) {
+      await evaluate("document.querySelector('.session-history').scrollTop = 0");
+      await delay(150);
+      writeFileSync(join(process.env.FLAME_UI_CAPTURE_DIR, 'markdown.png'), (await window.webContents.capturePage()).toPNG());
+    }
+    const openExternal = shell.openExternal, opened = [];
+    shell.openExternal = async url => { opened.push(url); };
+    try {
+      await click('.markdown a[href="https://example.com/docs"]');
+      for (let i = 0; !opened.length && i < 50; i++) await delay(20);
+      assert.deepEqual(opened, ['https://example.com/docs']);
+      await evaluate("window.open('file:///etc/passwd'); window.open('javascript:void(0)')");
+      await delay(50);
+      assert.equal(opened.length, 1, 'only web links can leave the app');
+    } finally { shell.openExternal = openExternal; }
     await checkFloatingComposer({ evaluate, type, wait, resize: (width) => window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height: 1400, deviceScaleFactor: 1, mobile: false }) });
     assert.ok(await evaluate("!document.querySelector('.session-heading') && !document.querySelector('.workspace__chat h1')"), 'the session header is removed');
     assert.ok(await evaluate("!document.querySelector('.session-history').textContent.includes('Model settings:')"), 'settings events never appear as messages');
@@ -151,10 +205,12 @@ void app.whenReady().then(async () => {
     window.webContents.reload(); await reloaded;
     await wait("document.querySelector('textarea')?.value === 'A pending draft' && document.querySelector('.composer-settings__label')?.textContent === 'Alpha'");
     assert.equal(await evaluate("document.querySelector('.session-message p').textContent"), 'First draft');
+    assert.ok(await evaluate("document.querySelector('.markdown h2')?.textContent === 'Summary' && document.querySelector('.markdown-code pre')?.textContent.includes('const value')"), 'saved answers keep Markdown after reload');
     assert.equal(repository.use(sessionB, (db) => db.read()).settings.modelId, 'beta');
     await type('textarea', 'Stop this', true);
     await click('[aria-label="Send message"]');
     await wait("!!document.querySelector('.composer-actions__send[aria-label=\"Stop response\"]')");
+    await wait("!!document.querySelector('.work-tools[data-running=true]')");
     await click('.composer-actions__send[aria-label="Stop response"]');
     await wait("document.querySelector('.session-history').textContent.includes('Response stopped') && !document.querySelector('textarea').readOnly");
     assert.equal(repository.use(sessionA, (db) => db.turns.snapshot()).status, 'cancelled');
@@ -172,6 +228,18 @@ void app.whenReady().then(async () => {
     assert.equal(repository.list().sessions.length, 2);
     const sessionC = await create(b.id);
     assert.equal(sessionC.projectId, b.id);
+    if (process.env.FLAME_UI_CAPTURE_DIR) {
+      await wait("!document.querySelector('[aria-label=\"Options for First draft\"]').disabled");
+      await evaluate("document.querySelector('[aria-label=\"Options for First draft\"]').click()");
+      await wait("!!document.querySelector('.session-menu')");
+      await delay(150);
+      assert.ok(await evaluate("!!document.querySelector('.session-menu')"), 'thread menu remains open');
+      writeFileSync(join(process.env.FLAME_UI_CAPTURE_DIR, 'session-sidebar.png'), (await window.webContents.capturePage()).toPNG());
+      await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape',bubbles:true}))");
+    }
+    await checkSettlement({ evaluate, wait, click, type, repository, active: sessionC, inactive: sessionB,
+      reload: async () => { const loaded = new Promise(resolve => window.webContents.once('did-finish-load', resolve)); window.webContents.reload(); await loaded; } });
+    await checkSessionSidebar({ evaluate, wait, click, type, repository, active: sessionC, inactive: sessionB });
     assert.equal(repository.list().warnings.length, 0);
     assert.ok(await evaluate("!document.body.textContent.includes('Saved locally') && !document.body.textContent.includes('Tools are not connected')"));
   } finally { window.destroy(); abort.abort(); await running; projects.close(); }

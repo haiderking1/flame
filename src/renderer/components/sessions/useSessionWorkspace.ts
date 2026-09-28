@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAtomSet } from "@effect/atom-react";
 import type { ModelSelection } from "@contracts/models";
-import { fitsSessionText, SessionError, type SessionDocument, type SessionLocation, type SessionPage } from "@contracts/sessions";
+import { fitsSessionText, SessionError, type SessionDocument, type SessionLocation, type SessionPage, type SessionSummary } from "@contracts/sessions";
 import { changeSession, createSession, deleteSession, readSession, sessionErrorMessage, sessionHistory } from "../../backend/sessions";
 import { startTurn } from "../../backend/turns";
 import { useTurnState } from "./useTurnState";
@@ -33,11 +33,11 @@ export function useSessionWorkspace() {
   const restoredTurn = useRef("");
   const pendingCreate = useRef<SessionLocation | null>(null);
   function adopt(value: SessionDocument) { current.current = value; setDocument(value); }
-  function enqueue<T>(work: () => Promise<T>): Promise<T> {
+  function enqueue<T>(work: () => Promise<T>, reportError = true): Promise<T> {
     setPending((value) => value + 1);
     const result = queue.current.then(work);
     queue.current = result.then(() => {}, () => {});
-    return result.catch((error) => { setError(sessionErrorMessage(error)); throw error; })
+    return result.catch((error) => { if (reportError) setError(sessionErrorMessage(error)); throw error; })
       .finally(() => setPending((value) => value - 1));
   }
   function mutate(input: Change) {
@@ -120,15 +120,23 @@ export function useSessionWorkspace() {
       });
     } catch { setError("Changes saved, but history could not be loaded. Reload saved state to retry."); }
   }
-  async function deleteCurrent() {
-    clearTimeout(timer.current);
-    await enqueue(async () => {
-      const target = current.current;
-      if (!target) return;
-      await remove({ projectId: target.projectId, sessionId: target.sessionId, revision: target.revision });
-      current.current = null; setDocument(null); text.current = ""; setDraft("");
-      setPage({ entries: [], nextBefore: null }); rememberActiveSession(null); pendingSend.current = null; setError(null);
-    });
+  function editSession(target: SessionSummary, action: { type: "rename"; title: string } | { type: "settle"; settled: boolean } | { type: "delete" }) {
+    return enqueue(async () => {
+      const active = current.current;
+      const isActive = active?.projectId === target.projectId && active.sessionId === target.sessionId;
+      const location = { projectId: target.projectId, sessionId: target.sessionId, revision: isActive ? active.revision : target.revision };
+      if (action.type !== "delete") {
+        const saved = await change({ ...location, ...action });
+        if (isActive) adopt(saved);
+      } else {
+        await remove(location);
+        if (isActive) {
+          clearTimeout(timer.current);
+          current.current = null; setDocument(null); text.current = ""; setDraft("");
+          setPage({ entries: [], nextBefore: null }); rememberActiveSession(null); pendingSend.current = null; setError(null);
+        }
+      }
+    }, false);
   }
   async function loadOlder() {
     const target = current.current;
@@ -179,8 +187,10 @@ export function useSessionWorkspace() {
   }, [turnState.turn?.id, turnState.turn?.status, turnState.turn?.revision, pending, transitioning, document?.revision]);
   return { document, page, draft, error, transitioning, turn: turnState.turn, running: turnState.running,
     stop: () => turnState.stop().catch((error) => { setError(sessionErrorMessage(error)); }), busy: pending > 0 || transitioning, dirty: !!document && draft !== document.draft,
-    editDraft, open, newSession, send, deleteCurrent, loadOlder, reload, flushDraft,
-    rename: (title: string) => mutate({ type: "rename", title }),
+    editDraft, open, newSession, send, loadOlder, reload, flushDraft,
+    renameSession: (target: SessionSummary, title: string) => editSession(target, { type: "rename", title }),
+    settleSession: (target: SessionSummary, settled: boolean) => editSession(target, { type: "settle", settled }),
+    deleteSession: (target: SessionSummary) => editSession(target, { type: "delete" }),
     configure: async (accountKey: string, settings: ModelSelection) => {
       const saved = await mutate({ type: "configure", accountKey, settings });
       await refreshHistory(saved);

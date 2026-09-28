@@ -58,7 +58,7 @@ test('failed response persistence preserves the checkpoint, blocks replay, and r
   assert.equal(h.sessions.history(h.location, null).entries.length, 1, 'failed assistant insert rolled back');
   await h.turns.close(); h.raw.exec('DROP TRIGGER fail_answer');
   const restarted = new Turns(h.sessions, h.auth, h.models, { run: async () => { calls++; throw new Error('no replay'); } });
-  assert.equal(restarted.snapshot(h.location).text, 'Durable paragraph.\n\n');
+  assert.equal(restarted.snapshot(h.location).text, 'Durable paragraph.\n\nFinal answer.');
   assert.equal(restarted.snapshot(h.location).status, 'interrupted');
   await restarted.start(h.input); assert.equal(calls, 1); await restarted.close();
 });

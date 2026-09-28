@@ -1,0 +1,5 @@
+.thinking-label { color: #888; }
+.thinking-label--active { color: transparent; background: linear-gradient(90deg, #808080 40%, #b0b0b0 46%, #f5f5f5 50%, #b0b0b0 54%, #808080 60%); background-size: 300% 100%; background-clip: text; -webkit-background-clip: text; animation: thinking-sweep 2s linear infinite; }
+@keyframes thinking-sweep { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+@media (prefers-reduced-motion: reduce) { .thinking-label--active { animation: none; background: none; color: #aaa; } }
+@media (forced-colors: active) { .thinking-label--active { animation: none; background: none; color: CanvasText; } }

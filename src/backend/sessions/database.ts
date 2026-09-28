@@ -1,3 +1,4 @@
+import { workActivity } from "../turns/work-activity.js";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { Schema } from "effect";
@@ -7,12 +8,16 @@ import { checkDatabase, missing, storageError } from "./files.js";
 import { initializeSession } from "./schema.js";
 import { migrateSession } from "./migrations.js";
 import { TurnStore } from "./turn-store.js";
+import { migrateBash } from "./bash-migration.js";
+import { migrateSettlement } from "./settlement-migration.js";
+import { BashStore } from "../bash/store.js";
 
 const conflict = () => new SessionError({ code: "CONFLICT", message: "This session changed elsewhere. Reopen it before saving again. Your unsaved text has been kept." });
 const invalid = (message: string) => new SessionError({ code: "INVALID", message });
 export class SessionDatabase {
   private readonly db: DatabaseSync;
   readonly turns: TurnStore;
+  readonly jobs: BashStore;
   constructor(filename: string, private readonly location: SessionLocation, settings?: ModelSelection | null) {
     checkDatabase(filename);
     this.db = new DatabaseSync(filename);
@@ -22,15 +27,18 @@ export class SessionDatabase {
       if (version === 0 && settings !== undefined) {
         this.db.exec("PRAGMA journal_mode=WAL;");
         initializeSession(this.db, location, settings);
-      } else if (version !== 1 && version !== 2) throw storageError();
-      this.read(true);
+      } else if (version !== 1 && version !== 2 && version !== 3 && version !== 4) throw storageError();
+      this.read(true, version !== 4);
       if (version === 0 || version === 1) migrateSession(this.db);
+      if (version === 0 || version === 1 || version === 2) migrateBash(this.db);
+      if (version !== 4) migrateSettlement(this.db);
+      this.jobs = new BashStore(this.db, () => this.read());
       this.turns = new TurnStore(this.db, () => this.read(), (work) => this.transaction(work), (revision, id, text) => this.append(revision, id, text));
     } catch (error) { this.db.close(); throw error; }
   }
-  read(includeDeleted = false): SessionDocument {
+  read(includeDeleted = false, legacy = false): SessionDocument {
     const row = this.db.prepare(`SELECT id AS sessionId, project_id AS projectId, title, created_at AS createdAt,
-      updated_at AS updatedAt, revision, draft, settings, deleted, leaf_id AS leafId FROM session WHERE singleton = 1`).get();
+      updated_at AS updatedAt, revision, draft, settings, deleted, leaf_id AS leafId, ${legacy ? "NULL" : "settled_at"} AS settledAt FROM session WHERE singleton = 1`).get();
     if (!row || row.sessionId !== this.location.sessionId || row.projectId !== this.location.projectId) throw storageError();
     if (!includeDeleted && row.deleted === 1) throw missing();
     return Schema.decodeUnknownSync(SessionDocument)({ ...row, settings: JSON.parse(String(row.settings)) });
@@ -52,6 +60,7 @@ export class SessionDatabase {
       if (this.db.prepare("SELECT deleted FROM session WHERE singleton=1").get()?.deleted === 1) return;
       this.expect(revision);
       this.turns.assertIdle();
+      if (this.jobs.list().some(job => job.status === "running" || job.status === "claimed")) throw invalid("Stop running Bash jobs before deleting this session.");
       this.db.prepare("UPDATE session SET deleted=1, revision=revision+1 WHERE singleton=1").run();
     });
   }
@@ -70,6 +79,18 @@ export class SessionDatabase {
       this.expect(revision);
       this.turns.assertIdle();
       this.db.prepare("UPDATE session SET title=?, custom_title=1, revision=revision+1, updated_at=? WHERE singleton=1").run(title, Date.now());
+      return this.read();
+    });
+  }
+  settle(revision: number, settled: boolean) {
+    return this.transaction(() => {
+      const current = this.expect(revision);
+      if (settled) {
+        this.turns.assertIdle();
+        if (this.jobs.list().some(job => job.status === "running" || job.status === "claimed")) throw invalid("Stop running Bash jobs before settling this session.");
+      }
+      if ((current.settledAt !== null) === settled) return current;
+      this.db.prepare("UPDATE session SET settled_at=?, revision=revision+1 WHERE singleton=1").run(settled ? Date.now() : null);
       return this.read();
     });
   }
@@ -100,7 +121,7 @@ export class SessionDatabase {
       const current = this.expect(revision);
       this.turns.assertIdle();
       this.entry(current, "user", text, current.settings, requestId);
-      this.db.prepare("UPDATE session SET draft=CASE WHEN draft=? THEN '' ELSE draft END, title=CASE WHEN custom_title=0 THEN ? ELSE title END, custom_title=1 WHERE singleton=1")
+      this.db.prepare("UPDATE session SET settled_at=NULL, draft=CASE WHEN draft=? THEN '' ELSE draft END, title=CASE WHEN custom_title=0 THEN ? ELSE title END, custom_title=1 WHERE singleton=1")
         .run(text, text.trim().split(/\r?\n/)[0]!.replace(/\s+/g, " ").slice(0, 120).replace(/[\uD800-\uDBFF]$/, ""));
       return this.read();
     });
@@ -115,9 +136,13 @@ export class SessionDatabase {
     const rows = this.db.prepare(`WITH RECURSIVE chain AS (
       SELECT *, 0 AS depth FROM entries WHERE id=?
       UNION ALL SELECT e.*, c.depth+1 FROM entries e JOIN chain c ON e.id=c.parent_id WHERE c.depth < 29
-    ) SELECT id, parent_id AS parentId, created_at AS createdAt, kind, text, settings,
-      (SELECT status FROM turns WHERE entry_id=chain.id) AS turnStatus FROM chain ORDER BY depth DESC`).all(tip);
-    const entries = rows.map((row) => Schema.decodeUnknownSync(SessionEntry)({ ...row, settings: JSON.parse(String(row.settings)) }));
+    ) SELECT c.id, c.parent_id AS parentId, c.created_at AS createdAt, c.kind, c.text, c.settings,
+      t.status AS turnStatus, t.id AS turnId, t.output AS output, t.created_at AS startedAt
+      FROM chain c LEFT JOIN turns t ON t.entry_id=c.id ORDER BY c.depth DESC`).all(tip);
+    const entries = rows.map((row) => {
+      const activity = row.turnId ? workActivity(String(row.turnId), String(row.text), JSON.parse(String(row.output)), String(row.turnStatus), Number(row.startedAt), Number(row.createdAt)) : undefined;
+      return Schema.decodeUnknownSync(SessionEntry)({ ...row, settings: JSON.parse(String(row.settings)), ...(activity ? { activity } : {}) });
+    });
     return { entries, nextBefore: entries[0]?.parentId ? entries[0].id : null };
   }
   close() { this.db.close(); }

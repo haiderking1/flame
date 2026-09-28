@@ -6,9 +6,13 @@ const fail = (message: string): never => { throw new InferenceFailure(message); 
 const limit = (value: unknown) => {
   if (Buffer.byteLength(JSON.stringify(value)) > 8 * 1024 * 1024) fail("The response exceeded Flame's storage limit.");
 };
-function messageText(raw: unknown): string {
+function messageText(raw: unknown, tools = false): string {
   const item = object(raw);
   if (item.type === "reasoning") return "";
+  if (tools && item.type === "function_call") {
+    if (!["bash", "bash_job"].includes(String(item.name)) || typeof item.call_id !== "string" || !item.call_id || item.call_id.length > 256 || typeof item.arguments !== "string" || Buffer.byteLength(item.arguments) > 64 * 1024) return fail("OpenAI returned an invalid tool call.");
+    return "";
+  }
   if (item.type !== "message" || item.role !== "assistant" || !Array.isArray(item.content)) return fail("OpenAI returned an unsupported response item. Tools are not connected yet.");
   return item.content.map((rawPart) => {
     const part = object(rawPart);
@@ -22,9 +26,10 @@ function messageText(raw: unknown): string {
 // Keep those items (including opaque reasoning) until an explicit success event.
 export class ResponseOutput {
   private items = new Map<number, Record<string, unknown>>();
+  constructor(private readonly tools = false) {}
   record(index: unknown, raw: unknown) {
     if (typeof index !== "number" || !Number.isSafeInteger(index) || index < 0 || index >= 1000) return fail("OpenAI returned an invalid output index.");
-    messageText(raw);
+    messageText(raw, this.tools);
     this.items.set(index, object(raw));
     limit([...this.items.values()]);
   }
@@ -45,7 +50,7 @@ export class ResponseOutput {
       this.record(slot, { ...(existing?.[1] ?? this.items.get(slot)), ...item });
     });
     const output: unknown[] = [...this.items].sort(([a], [b]) => a - b).map(([, item]) => item);
-    let text = output.map(messageText).filter(Boolean).join("\n\n");
+    let text = output.map(item => messageText(item, this.tools)).filter(Boolean).join("\n\n");
     if (!text.trim() && streamedText.trim()) {
       // Some success envelopes contain only metadata. Deltas are still real
       // provider text; success is established by the terminal event, not EOF.
@@ -53,7 +58,9 @@ export class ResponseOutput {
       output.push({ type: "message", role: "assistant", content: [{ type: "output_text", text: streamedText, annotations: [] }] });
       text = streamedText;
     }
-    if (!text.trim()) return fail("OpenAI finished without an assistant message.");
+    if (!text.trim() && !output.some(item => this.tools && object(item).type === "function_call")) return fail("OpenAI finished without an assistant message.");
+    const ids = output.filter(item => object(item).type === "function_call").map(item => object(item).call_id);
+    if (new Set(ids).size !== ids.length || ids.length > 16) return fail("OpenAI returned duplicate or excessive tool calls.");
     if (Buffer.byteLength(text) > 1024 * 1024) return fail("The response exceeded Flame's storage limit.");
     limit(output);
     return { text, output };

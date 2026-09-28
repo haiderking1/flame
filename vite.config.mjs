@@ -7,6 +7,7 @@ export default defineConfig({
   base: "./",
   resolve: { alias: { "@contracts": fileURLToPath(new URL("./src/contracts/", import.meta.url)) } },
   plugins: [react()],
+  worker: { format: "es" },
   build: {
     outDir: fileURLToPath(new URL("./dist/renderer/", import.meta.url)),
     emptyOutDir: true,

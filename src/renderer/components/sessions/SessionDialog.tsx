@@ -18,7 +18,7 @@ export function SessionDialog({ title, busy, error, onClose, onSubmit, action, d
       {error && <p role="alert">{error}</p>}
       <div className="session-dialog__actions">
         <button ref={cancel} type="button" disabled={busy} onClick={onClose}>Cancel</button>
-        <button type="submit" disabled={busy} data-destructive={destructive || undefined}>{busy ? "Saving…" : action}</button>
+        <button type="submit" disabled={busy} data-destructive={destructive || undefined}>{busy ? destructive ? "Deleting…" : "Saving…" : action}</button>
       </div>
     </form>
   </dialog>;

@@ -1,3 +1,4 @@
+import { workActivity } from "../turns/work-activity.js";
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { Schema } from "effect";
@@ -14,7 +15,10 @@ export class TurnStore {
     this.read();
     const row = id ? this.db.prepare("SELECT *, entry_id AS entryId FROM turns WHERE id=?").get(id)
       : this.db.prepare("SELECT *, entry_id AS entryId FROM turns ORDER BY created_at DESC, rowid DESC LIMIT 1").get();
-    return row ? Schema.decodeUnknownSync(TurnSnapshot)(row) : null;
+    if (!row) return null;
+    const finished = row.entryId ? this.db.prepare("SELECT created_at FROM entries WHERE id=?").get(String(row.entryId)) : null;
+    const activity = workActivity(String(row.id), String(row.text), JSON.parse(String(row.output)), String(row.status), Number(row.created_at), finished ? Number(finished.created_at) : null);
+    return Schema.decodeUnknownSync(TurnSnapshot)({ ...row, ...(activity ? { activity } : {}) });
   }
   assertIdle() {
     if (this.db.prepare("SELECT 1 FROM turns WHERE status='running'").get()) throw turnInvalid("Stop the active response before changing this session.");
@@ -34,6 +38,27 @@ export class TurnStore {
       return document;
     });
   }
+  backgroundStart(id: string, settings: ModelSelection, accountKey: string, output: unknown[]) {
+    return this.transaction(() => {
+      this.assertIdle();
+      let current = this.read();
+      if (current.settledAt !== null) {
+        this.db.prepare("UPDATE session SET settled_at=NULL, revision=revision+1, updated_at=? WHERE singleton=1").run(Date.now());
+        current = this.read();
+      }
+      const prior = this.db.prepare("SELECT user_id FROM turns ORDER BY created_at DESC,rowid DESC LIMIT 1").get();
+      if (!prior) throw turnInvalid("No prior user request for this background notification.");
+      this.db.prepare("INSERT INTO turns(id,user_id,status,settings,account_key,output,revision,created_at) VALUES (?,?,'running',?,?,?,?,?)")
+        .run(id, String(prior.user_id), JSON.stringify(settings), accountKey, JSON.stringify(output), current.revision, Date.now());
+      return current;
+    });
+  }
+  progress(id: string, text: string, output: unknown[]) {
+    const encoded = JSON.stringify(output);
+    if (Buffer.byteLength(encoded) > 8 * 1024 * 1024) throw turnInvalid("Agent history exceeds 8 MiB. Start a new session.");
+    this.checkpoint(id, text);
+    this.db.prepare("UPDATE turns SET output=? WHERE id=? AND status='running'").run(encoded, id);
+  }
   checkpoint(id: string, text: string) {
     this.read();
     if (Buffer.byteLength(text) > 1024 * 1024) throw turnInvalid("The response exceeded Flame's 1 MiB response limit.");
@@ -45,7 +70,7 @@ export class TurnStore {
       const turn = this.db.prepare("SELECT * FROM turns WHERE id=? AND status='running'").get(id);
       if (!turn) return current;
       let entryId: string | null = null;
-      if (text) {
+      if (text || output.length) {
         entryId = randomUUID();
         this.db.prepare("INSERT INTO entries VALUES (?,?,?,'assistant',?,?,NULL)")
           .run(entryId, current.leafId, Date.now(), text, String(turn.settings));
@@ -72,8 +97,8 @@ export class TurnStore {
         repaired = true;
       }
       if (repaired) this.db.prepare("UPDATE session SET revision=revision+1 WHERE singleton=1").run();
-      const turn = this.db.prepare("SELECT id,text FROM turns WHERE status='running'").get();
-      if (turn) this.finish(String(turn.id), "interrupted", String(turn.text), "Flame stopped before this response finished. It was not replayed.");
+      const turn = this.db.prepare("SELECT id,text,output FROM turns WHERE status='running'").get();
+      if (turn) this.finish(String(turn.id), "interrupted", String(turn.text), "Flame stopped before this response finished. It was not replayed.", JSON.parse(String(turn.output)));
       return this.read();
     });
   }

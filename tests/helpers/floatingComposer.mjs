@@ -44,6 +44,7 @@ export async function checkFloatingComposer({ evaluate, type, wait, resize }) {
   await evaluate(`(() => { const message = document.querySelector('.session-message--assistant p');
     message.style.minHeight = '1200px'; const pane = document.querySelector('.session-history'); pane.scrollTop = pane.scrollHeight; })()`);
   await type('textarea', Array.from({ length: 20 }, (_, i) => 'draft line ' + i).join('\n'), true);
+  await wait(`document.querySelector('textarea').value.includes('draft line 19') && document.querySelector('.composer').getBoundingClientRect().height > ${initial.height + 20}`);
   await wait("document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
   await wait("parseFloat(getComputedStyle(document.querySelector('.session-history')).paddingBottom) >= document.querySelector('.workspace__composer').getBoundingClientRect().height + 15");
   const expanded = await dimensions();

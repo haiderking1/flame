@@ -18,6 +18,7 @@ export function sessionHandlers(sessions: Sessions) {
     "sessions.history": (input) => work(() => sessions.history(input, input.before)),
     "sessions.draft": (input) => work(() => sessions.draft(input, input.revision, input.draft)),
     "sessions.rename": (input) => work(() => sessions.rename(input, input.revision, input.title)),
+    "sessions.settle": (input) => work(() => sessions.settle(input, input.revision, input.settled)),
     "sessions.append": (input) => work(() => sessions.append(input, input.revision, input.requestId, input.text)),
     "sessions.configure": (input) => work(() => sessions.configure(input, input.revision, input.accountKey,
       { modelId: input.modelId, effort: input.effort, serviceTier: input.serviceTier })),

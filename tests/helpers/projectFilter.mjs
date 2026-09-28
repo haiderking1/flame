@@ -43,7 +43,7 @@ export async function checkProjectFilter({ evaluate, send, folder }) {
   await wait("!document.querySelector('.project-filter').matches(':popover-open') && document.querySelector('.sidebar-threads__empty').textContent === 'No threads in child yet'");
   assert.equal(await evaluate("document.querySelector('.project-list')"), null);
   assert.equal(await evaluate("document.activeElement?.getAttribute('aria-label')"), 'Filter threads by project: child');
-  assert.equal(await evaluate("document.querySelector('[aria-label^=\"Filter threads by project\"] .project-icon')?.textContent"), 'CH');
+  assert.equal(await evaluate("document.querySelector('[aria-label^=\"Filter threads by project\"] .project-icon')?.textContent"), 'CD');
   await evaluate('window.__beforeScopeReload = true');
   await send('Page.reload');
   await wait("!window.__beforeScopeReload && document.querySelector('.sidebar-threads__empty')?.textContent === 'No threads in child yet'");

@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import { fileURLToPath } from "node:url";
 import { INITIAL_ZOOM_LEVEL, windowTitlebarOptions } from "./windowAppearance.js";
+import { installExternalLinks } from "./externalLinks.js";
 import { trackWindowZoom, refreshZoomLayout } from "./windowZoom.js";
 
 const rendererPath = fileURLToPath(new URL("../renderer/index.html", import.meta.url));
@@ -29,7 +30,7 @@ export async function createWindow(): Promise<BrowserWindow> {
   });
 
   trackWindowZoom(window);
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  installExternalLinks(window);
   window.webContents.on("will-navigate", (event, url) => {
     // Vite reloads this same URL when the HTML changes.
     if (!devUrl || url !== devUrl) event.preventDefault();

@@ -1,0 +1,48 @@
+.markdown { min-width: 0; color: #d8d8d8; font-size: 14px; line-height: 1.625; overflow-wrap: anywhere; white-space: normal; }
+.markdown.markdown p, .markdown ul, .markdown ol, .markdown blockquote, .markdown .markdown-table, .markdown .markdown-code { margin: 12px 0; }
+.markdown.markdown p { color: inherit; font: inherit; white-space: normal; }
+.markdown.markdown > :first-child { margin-top: 0; }
+.markdown.markdown > :last-child { margin-bottom: 0; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 { color: #eee; font-weight: 600; line-height: 1.35; margin: 22px 0 9px; }
+.markdown h1 { font-size: 20px; }
+.markdown h2 { font-size: 18px; }
+.markdown h3 { font-size: 16px; }
+.markdown h4, .markdown h5, .markdown h6 { font-size: 14px; }
+.markdown strong { color: #eee; font-weight: 600; }
+.markdown ul, .markdown ol { padding-left: 24px; }
+.markdown ul { list-style: disc; }
+.markdown ul ul { list-style: circle; }
+.markdown ul ul ul { list-style: square; }
+.markdown ol { list-style: decimal; font-variant-numeric: tabular-nums; }
+.markdown li + li { margin-top: 4px; }
+.markdown li > ul, .markdown li > ol, .markdown.markdown li > p { margin-block: 5px; }
+.markdown .task-list-item { list-style: none; }
+.markdown input[type="checkbox"] { margin: 0 7px 0 -21px; accent-color: #7895cf; vertical-align: middle; }
+.markdown a { color: #8aaff0; text-decoration: none; }
+.markdown a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.markdown a:focus-visible, .markdown button:focus-visible { outline: 1px solid #7895cf; outline-offset: 3px; border-radius: 3px; }
+.markdown blockquote { border-left: 2px solid #ffffff24; padding: 0 14px; color: #999; }
+.markdown hr { margin: 22px 0; height: 1px; border: 0; background: #ffffff15; }
+.markdown code, .markdown pre { font-family: "JetBrains Mono Nerd", monospace; font-size: 12px; }
+.markdown :not(pre) > code { padding: 2px 5px; border: 1px solid #ffffff0d; border-radius: 5px; color: #ddd; background: #ffffff07; box-decoration-break: clone; }
+.markdown .markdown-code { overflow: hidden; border: 1px solid #ffffff0e; border-radius: 10px; background: #111; }
+.markdown-code__header { display: flex; align-items: center; gap: 12px; min-height: 34px; padding: 4px 12px; color: #888; font-size: 11px; }
+.markdown-code__actions { display: flex; gap: 5px; margin-left: auto; }
+.markdown-code__actions button { display: grid; place-items: center; width: 25px; height: 25px; padding: 5px; border: 0; border-radius: 4px; background: transparent; color: #888; cursor: pointer; }
+.markdown-code__actions button:hover, .markdown-code__actions button[aria-pressed="true"] { color: #ddd; background: #ffffff0a; }
+.markdown-code__actions svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.markdown-code__feedback:empty { display: none; }
+.markdown-code__feedback { font-size: 10px; }
+.markdown .markdown-code pre { margin: 0; padding: 5px 14px 14px; overflow-x: auto; line-height: 1.65; white-space: pre; color: #ddd; }
+.markdown-code pre code { padding: 0; border: 0; background: none; font: inherit; }
+.markdown-code[data-wrap="true"] pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.markdown-table { overflow-x: auto; max-width: 100%; }
+.markdown table { border-collapse: collapse; width: 100%; min-width: max-content; font-size: 12px; overflow-wrap: normal; }
+.markdown th, .markdown td { padding: 8px 12px; border-bottom: 1px solid #ffffff12; max-width: 420px; }
+.markdown th { text-align: left; color: #ddd; font-weight: 600; }
+.markdown td { color: #aaa; }
+.markdown .markdown-image { font-size: 12px; }
+.markdown [data-footnotes] { border-top: 1px solid #ffffff12; margin-top: 20px; padding-top: 10px; color: #999; font-size: 11px; }
+@media (prefers-reduced-motion: no-preference) {
+  .markdown[data-streaming] > * { transition: opacity 250ms ease-out; @starting-style { opacity: 0; } }
+}

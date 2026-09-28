@@ -2,11 +2,12 @@ import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import { SessionDocument, SessionError, SessionId, SessionLocation, fitsSessionText } from "./sessions.js";
 
+import { WorkActivity } from "./work.js";
 import { TurnStatus } from "./turn-status.js";
 export { TurnStatus } from "./turn-status.js";
 export const TurnSnapshot = Schema.Struct({
   id: SessionId, status: TurnStatus, text: Schema.String, message: Schema.NullOr(Schema.String),
-  revision: Schema.Number, entryId: Schema.NullOr(SessionId),
+  revision: Schema.Number, entryId: Schema.NullOr(SessionId), activity: Schema.optionalKey(WorkActivity),
 });
 export type TurnSnapshot = typeof TurnSnapshot.Type;
 export const TurnRpc = RpcGroup.make(

@@ -20,9 +20,10 @@
   overscroll-behavior: contain;
 }
 .session-history__content { width: 100%; max-width: var(--chat-max-width); margin-inline: auto; }
-.session-message { padding: 14px 12px; margin: 0 0 12px; border: 1px solid #ffffff08; border-radius: 10px; background: #ffffff03; }
-.session-message > span { color: #777; font-size: 11px; }
-.session-message p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: #ddd; font-size: 13px; line-height: 1.65; }
+.session-message { min-width: 0; margin: 0 0 16px; }
+.session-message--user { width: fit-content; max-width: 80%; margin-left: auto; padding: 12px; border-radius: 16px; background: #1b1b1b; color: #e5e5e5; }
+.session-message--user > p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.625; }
+.session-message--assistant { padding: 2px 4px; }
 .session-status { margin: 0 0 8px; color: #777; font-size: 11px; }
 .session-error { margin-bottom: 8px; color: #baa5a2; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .session-error button { margin-left: 8px; }

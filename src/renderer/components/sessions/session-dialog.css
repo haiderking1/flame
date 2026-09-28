@@ -1,7 +1,7 @@
 .session-dialog { width: min(400px, calc(100vw - 32px)); box-sizing: border-box; padding: 20px; border: 1px solid #ffffff15; border-radius: 12px; background: #171717; color: #ddd; box-shadow: 0 20px 60px #0008; }
 .session-dialog::backdrop { background: #0008; }
 .session-dialog h2 { margin: 0 0 16px; font-size: 16px; font-weight: 500; }
-.session-dialog p { color: #999; font-size: 12px; line-height: 1.6; }
+.session-dialog p { overflow-wrap: anywhere; color: #999; font-size: 12px; line-height: 1.6; }
 .session-dialog label { display: grid; gap: 8px; color: #aaa; font-size: 12px; }
 .session-dialog input, .session-dialog select { min-width: 0; width: 100%; box-sizing: border-box; border: 1px solid #ffffff18; border-radius: 6px; background: #101010; color: #ddd; padding: 9px; font: inherit; }
 .session-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }

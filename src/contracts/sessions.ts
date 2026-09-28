@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { WorkActivity } from "./work.js";
 import { TurnStatus } from "./turn-status.js";
 import { ModelSelection, ServiceTier } from "./models.js";
 
@@ -11,7 +12,7 @@ const Text = Schema.String.check(Schema.makeFilter(fitsSessionText));
 const Revision = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
 const Title = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(160));
 export const SessionSummary = Schema.Struct({
-  ...SessionLocation.fields, title: Title, createdAt: Schema.Number, updatedAt: Schema.Number, revision: Revision,
+  ...SessionLocation.fields, title: Title, createdAt: Schema.Number, updatedAt: Schema.Number, revision: Revision, settledAt: Schema.NullOr(Revision),
 });
 export type SessionSummary = typeof SessionSummary.Type;
 export const SessionDocument = Schema.Struct({
@@ -20,6 +21,7 @@ export const SessionDocument = Schema.Struct({
 export type SessionDocument = typeof SessionDocument.Type;
 export const SessionEntry = Schema.Struct({
   id: SessionId, parentId: Schema.NullOr(SessionId), createdAt: Schema.Number, turnStatus: Schema.optionalKey(Schema.NullOr(TurnStatus)),
+  activity: Schema.optionalKey(WorkActivity),
   kind: Schema.Literals(["user", "settings", "assistant"]), text: Schema.NullOr(Schema.String.check(Schema.isMaxLength(1024 * 1024))), settings: Schema.NullOr(ModelSelection),
 });
 export type SessionEntry = typeof SessionEntry.Type;
@@ -37,6 +39,7 @@ export const SessionRpc = RpcGroup.make(
   Rpc.make("sessions.history", { payload: { ...SessionLocation.fields, before: Schema.NullOr(SessionId) }, success: SessionPage, error: SessionError }),
   Rpc.make("sessions.draft", { payload: { ...edit, draft: Text }, success: SessionDocument, error: SessionError }),
   Rpc.make("sessions.rename", { payload: { ...edit, title: Title }, success: SessionDocument, error: SessionError }),
+  Rpc.make("sessions.settle", { payload: { ...edit, settled: Schema.Boolean }, success: SessionDocument, error: SessionError }),
   Rpc.make("sessions.append", { payload: { ...edit, requestId: SessionId, text: Text }, success: SessionDocument, error: SessionError }),
   Rpc.make("sessions.configure", { payload: { ...edit, accountKey: Schema.String, modelId: Schema.String,
     effort: Schema.NullOr(Schema.String), serviceTier: ServiceTier }, success: SessionDocument, error: SessionError }),

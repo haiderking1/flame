@@ -28,8 +28,6 @@
   display: block;
   width: 100%;
   field-sizing: content;
-  /* Reference editor: 78px border box with 4px padding and -4px margins.
-     Our padding-free textarea occupies the equivalent 70px layout height. */
   min-height: 70px;
   max-height: min(200px, 40dvh);
   padding: 0;

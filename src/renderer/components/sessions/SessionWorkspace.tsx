@@ -3,7 +3,7 @@ import { Composer } from "../composer/Composer";
 import { useSessions } from "./SessionContext";
 import { SessionDialog } from "./SessionDialog";
 import "./session-workspace.css";
-import { TurnResponse } from "./TurnResponse";
+import { SessionTimeline } from "./work/SessionTimeline";
 import { useComposerOverlay } from "./useComposerOverlay";
 import { useHistoryScroll } from "./useHistoryScroll";
 
@@ -21,13 +21,10 @@ export function SessionWorkspace() {
     <div ref={history} hidden={!active} className="session-history flame-scrollbar" role="region" aria-label="Session history">
       <div className="session-history__content">
       {sessions.page.nextBefore && <button className="session-history__older" disabled={sessions.busy} onClick={() => { void sessions.loadOlder().catch(() => {}); }}>Load earlier messages</button>}
-      {sessions.page.entries.filter((entry) => entry.kind !== "settings").map((entry) =>
-        <article key={entry.id} className={`session-message${entry.kind === "assistant" ? " session-message--assistant" : ""}`}><span>{entry.kind === "user" ? "You" : `Flame${entry.turnStatus && entry.turnStatus !== "completed" ? ` · ${entry.turnStatus}` : ""}`}</span><p>{entry.text}</p></article>)}
-      <TurnResponse turn={sessions.turn} revision={active?.revision ?? 0} />
+      {active && <SessionTimeline key={`${active.projectId}:${active.sessionId}`} location={active} entries={sessions.page.entries} turn={sessions.turn} revision={active.revision} />}
       </div>
     </div>
     <div ref={composer} className="workspace__composer" data-save-state={saveState}>
-      {!active && <p className="session-status" role="status">Create or open a session to start</p>}
       {sessions.error && <div className="session-error" role="alert">{sessions.error}
         {active && <button disabled={sessions.busy} onClick={() => { void sessions.reload().catch(() => {}); }}>Reload saved state</button>}
         {sessions.dirty && <><button disabled={sessions.busy} onClick={() => { void sessions.flushDraft().catch(() => {}); }}>Retry save</button>
