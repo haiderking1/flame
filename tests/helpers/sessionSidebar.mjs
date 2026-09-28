@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export async function checkSessionSidebar({ evaluate, wait, click, type, repository, active, inactive }) {
+export async function checkSessionSidebar({ evaluate, wait, click, pointerClick, type, repository, active, inactive }) {
   const options = title => `[aria-label="Options for ${title}"]`;
   async function menu(title) {
     await wait(`!!document.querySelector(${JSON.stringify(options(title))}) && !document.querySelector(${JSON.stringify(options(title))}).disabled`);
@@ -25,6 +25,18 @@ export async function checkSessionSidebar({ evaluate, wait, click, type, reposit
   })()`), 'cards have project/time, title, and a loaded 14px provider SVG footer');
   await type('textarea', 'Keep this draft', true);
   await wait("document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
+  await wait("!document.querySelector('[aria-label=\"Options for Hello from B\"]').disabled");
+  await pointerClick(options('Hello from B'));
+  await wait("!!document.querySelector('.session-menu')");
+  await pointerClick(options('Hello from B'));
+  await wait("!document.querySelector('.session-menu')");
+  assert.equal(await evaluate("document.querySelector('[aria-label=\"Options for Hello from B\"]').getAttribute('aria-expanded')"), 'false', 'second pointer click closes rather than reopening');
+  assert.equal(await evaluate("getComputedStyle(document.activeElement).outlineStyle"), 'none', 'pointer focus leaves no outline');
+  await pointerClick(options('Hello from B'));
+  await wait("!!document.querySelector('.session-menu')");
+  await pointerClick('textarea');
+  await wait("!document.querySelector('.session-menu')");
+  assert.equal(await evaluate('document.activeElement.tagName'), 'TEXTAREA', 'outside pointer dismissal preserves the clicked focus target');
   await menu('Hello from B');
   assert.equal(await evaluate('document.activeElement.textContent'), 'Rename');
   await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowDown',bubbles:true}))");

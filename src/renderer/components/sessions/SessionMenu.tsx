@@ -1,9 +1,9 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import "./session-menu.css";
 
-export function SessionMenu({ id, x, y, settled, onSettle, onClose, onRename, onDelete }: {
-  id: string; x: number; y: number; settled: boolean; onSettle(): void; onClose(restoreFocus: boolean): void; onRename(): void; onDelete(): void;
+export function SessionMenu({ id, x, y, trigger, settled, onSettle, onClose, onRename, onDelete }: {
+  id: string; x: number; y: number; trigger: RefObject<HTMLButtonElement | null>; settled: boolean; onSettle(): void; onClose(restoreFocus: boolean): void; onRename(): void; onDelete(): void;
 }) {
   const menu = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -12,7 +12,10 @@ export function SessionMenu({ id, x, y, settled, onSettle, onClose, onRename, on
     element.style.left = `${Math.max(8, Math.min(x, innerWidth - bounds.width - 8))}px`;
     element.style.top = `${Math.max(8, Math.min(y, innerHeight - bounds.height - 8))}px`;
     element.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
-    const outside = (event: PointerEvent) => { if (!element.contains(event.target as Node)) onClose(false); };
+    const outside = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!element.contains(target) && !trigger.current?.contains(target)) onClose(false);
+    };
     const repositioned = (event: Event) => { if (!element.contains(event.target as Node)) onClose(false); };
     document.addEventListener("pointerdown", outside, true);
     window.addEventListener("resize", repositioned);
@@ -24,7 +27,10 @@ export function SessionMenu({ id, x, y, settled, onSettle, onClose, onRename, on
     };
   }, []);
   return createPortal(<div id={id} ref={menu} className="session-menu" role="menu" aria-label="Thread options"
-    onBlur={event => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) onClose(false); }}
+    onBlur={event => {
+      const target = event.relatedTarget as Node | null;
+      if (target && !event.currentTarget.contains(target) && !trigger.current?.contains(target)) onClose(false);
+    }}
     onKeyDown={event => {
       if (event.key === "Escape" || event.key === "Tab") {
         if (event.key === "Escape") event.preventDefault();

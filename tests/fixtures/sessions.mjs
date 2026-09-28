@@ -83,6 +83,12 @@ void app.whenReady().then(async () => {
     assert.fail(`Timed out: ${code}\n${await evaluate("document.body.innerText")}`);
   };
   const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  const pointerClick = async selector => {
+    const point = await evaluate(`(() => { const element = document.querySelector(${JSON.stringify(selector)}); element.scrollIntoView({block:'nearest'}); const box = element.getBoundingClientRect(); return {x:box.left + box.width / 2, y:box.top + box.height / 2}; })()`);
+    await window.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });
+    await window.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point });
+    await window.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point });
+  };
   const type = async (selector, value, replace = false) => {
     window.focus(); window.webContents.focus();
     await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`);
@@ -239,7 +245,7 @@ void app.whenReady().then(async () => {
     }
     await checkSettlement({ evaluate, wait, click, type, repository, active: sessionC, inactive: sessionB,
       reload: async () => { const loaded = new Promise(resolve => window.webContents.once('did-finish-load', resolve)); window.webContents.reload(); await loaded; } });
-    await checkSessionSidebar({ evaluate, wait, click, type, repository, active: sessionC, inactive: sessionB });
+    await checkSessionSidebar({ evaluate, wait, click, pointerClick, type, repository, active: sessionC, inactive: sessionB });
     assert.equal(repository.list().warnings.length, 0);
     assert.ok(await evaluate("!document.body.textContent.includes('Saved locally') && !document.body.textContent.includes('Tools are not connected')"));
   } finally { window.destroy(); abort.abort(); await running; projects.close(); }

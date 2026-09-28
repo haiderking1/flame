@@ -20,6 +20,7 @@ export function SessionRow({ session, project, now, onOpened, onDelete }: {
   const pending = useRef(false);
   const opener = useRef<HTMLElement | null>(null);
   const row = useRef<HTMLButtonElement>(null);
+  const optionsButton = useRef<HTMLButtonElement>(null);
   const menuId = useId();
   const active = workspace.document?.projectId === session.projectId && workspace.document.sessionId === session.sessionId;
   function startRename() {
@@ -87,13 +88,13 @@ export function SessionRow({ session, project, now, onOpened, onDelete }: {
       onClick={() => { void toggleSettled(); }}>
       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d={session.settledAt === null ? "m3 8 3 3 7-7" : "M6 4 2 8l4 4M2 8h7a4 4 0 0 1 4 4"} /></svg>
       {session.settledAt === null && <span>Settle</span>}
-    </button><button type="button" className="session-list__options" aria-label={`Options for ${session.title}`} aria-haspopup="menu" aria-expanded={!!menu} aria-controls={menu ? menuId : undefined}
+    </button><button ref={optionsButton} type="button" className="session-list__options" aria-label={`Options for ${session.title}`} aria-haspopup="menu" aria-expanded={!!menu} aria-controls={menu ? menuId : undefined}
       disabled={workspace.busy} onClick={event => {
         if (menu) { closeMenu(true); return; }
         const bounds = event.currentTarget.getBoundingClientRect(); opener.current = event.currentTarget;
         setMenu({ x: bounds.right - 128, y: bounds.bottom + 4 });
       }}><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1" /><circle cx="8" cy="8" r="1" /><circle cx="13" cy="8" r="1" /></svg></button></div>}
     {error && <p id={`${menuId}-error`} className="session-list__warning" role="alert">{error}</p>}
-    {menu && <SessionMenu id={menuId} {...menu} settled={session.settledAt !== null} onSettle={() => { void toggleSettled(); }} onClose={closeMenu} onRename={startRename} onDelete={() => onDelete(session)} />}
+    {menu && <SessionMenu id={menuId} {...menu} trigger={optionsButton} settled={session.settledAt !== null} onSettle={() => { void toggleSettled(); }} onClose={closeMenu} onRename={startRename} onDelete={() => onDelete(session)} />}
   </div>;
 }

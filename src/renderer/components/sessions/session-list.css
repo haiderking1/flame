@@ -1,4 +1,6 @@
 .session-list { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow-y: auto; padding: 4px 8px; }
+.session-list:focus { outline: none; }
+.session-list:focus-visible { outline: 1px solid #ffffff20; outline-offset: -1px; }
 .session-list__row { flex-shrink: 0; position: relative; margin-bottom: 4px; border-radius: 6px; }
 .session-list__item { display: block; width: 100%; height: 78px; padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: #888; text-align: left; font: inherit; cursor: pointer; }
 .session-list__row:hover .session-list__item { background: #ffffff08; color: #ddd; }
@@ -8,7 +10,7 @@
 .session-list__project { display: flex; align-items: center; gap: 6px; height: 20px; min-width: 0; color: #888; font-size: 12px; font-weight: 400; }
 .session-list__project-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-list__time { min-width: 32px; flex-shrink: 0; text-align: right; font-weight: 400; font-variant-numeric: tabular-nums; }
-.session-list__row:hover .session-list__time, .session-list__row:focus-within .session-list__time, .session-list__row[data-menu-open] .session-list__time { visibility: hidden; }
+.session-list__row:hover .session-list__time, .session-list__row:has(:focus-visible) .session-list__time, .session-list__row[data-menu-open] .session-list__time { visibility: hidden; }
 .session-list__project .project-icon { flex: 0 0 16px; width: 16px; height: 16px; font-size: 8px; border-radius: 3px; }
 .session-list__title { display: block; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 400; line-height: 20px; }
 .session-list__item[aria-current] .session-list__title, .session-list__item[aria-current] .session-list__project-name { font-weight: 500; }
@@ -17,9 +19,9 @@
 .session-list__actions { position: absolute; right: 8px; top: 8px; display: flex; align-items: center; gap: 2px; opacity: 0; pointer-events: none; }
 .session-list__options, .session-list__settle { display: flex; align-items: center; justify-content: center; gap: 4px; height: 20px; padding: 0 4px; border: 0; border-radius: 4px; background: transparent; color: #999; font: inherit; font-size: 12px; cursor: pointer; }
 .session-list__options { width: 24px; }
-.session-list__row:hover .session-list__actions, .session-list__row:focus-within .session-list__actions, .session-list__row[data-menu-open] .session-list__actions { opacity: 1; pointer-events: auto; }
-.session-list__row:not([data-settled]):is(:hover, :focus-within, [data-menu-open]) .session-list__project { padding-right: 88px; }
-.session-list__row:not([data-settled]):is(:hover, :focus-within, [data-menu-open]) .session-list__time { display: none; }
+.session-list__row:hover .session-list__actions, .session-list__row:has(:focus-visible) .session-list__actions, .session-list__row[data-menu-open] .session-list__actions { opacity: 1; pointer-events: auto; }
+.session-list__row:not([data-settled]):is(:hover, :has(:focus-visible), [data-menu-open]) .session-list__project { padding-right: 88px; }
+.session-list__row:not([data-settled]):is(:hover, :has(:focus-visible), [data-menu-open]) .session-list__time { display: none; }
 .session-list__settle:hover { color: #eee; background: #ffffff0d; }
 .session-list__settle:focus-visible { outline: 1px solid #ffffff60; }
 .session-list__settle:disabled { cursor: default; opacity: .5; }
