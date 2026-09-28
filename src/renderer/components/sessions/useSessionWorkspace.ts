@@ -24,6 +24,7 @@ export function useSessionWorkspace() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
+  const [awaitingMessageHistory, setAwaitingMessageHistory] = useState(false);
   const current = useRef<SessionDocument | null>(null);
   const text = useRef("");
   const queue = useRef(Promise.resolve());
@@ -70,7 +71,7 @@ export function useSessionWorkspace() {
     timer.current = setTimeout(() => { void flushDraft().catch(() => {}); }, 400);
   }
   async function open(location: SessionLocation) {
-    if (navigating.current) return;
+    if (navigating.current) return false;
     navigating.current = true; setTransitioning(true);
     try {
       await flushDraft();
@@ -81,6 +82,7 @@ export function useSessionWorkspace() {
         pendingSend.current = null; rememberActiveSession(location); setError(null);
       });
     } finally { navigating.current = false; setTransitioning(false); }
+    return true;
   }
   async function newSession(projectId: string) {
     if (navigating.current) return;
@@ -99,6 +101,11 @@ export function useSessionWorkspace() {
     } finally { navigating.current = false; setTransitioning(false); }
   }
   async function send(message: string) {
+    setAwaitingMessageHistory(true);
+    try { await submitMessage(message); }
+    finally { setAwaitingMessageHistory(false); }
+  }
+  async function submitMessage(message: string) {
     const previous = pendingSend.current;
     if (!(previous?.sessionId === current.current?.sessionId && previous?.projectId === current.current?.projectId && previous?.text === message)) {
       await flushDraft();
@@ -185,7 +192,7 @@ export function useSessionWorkspace() {
       void reload().catch(() => {});
     }
   }, [turnState.turn?.id, turnState.turn?.status, turnState.turn?.revision, pending, transitioning, document?.revision]);
-  return { document, page, draft, error, transitioning, turn: turnState.turn, running: turnState.running,
+  return { document, page, draft, error, transitioning, turn: awaitingMessageHistory ? null : turnState.turn, running: turnState.running,
     stop: () => turnState.stop().catch((error) => { setError(sessionErrorMessage(error)); }), busy: pending > 0 || transitioning, dirty: !!document && draft !== document.draft,
     editDraft, open, newSession, send, loadOlder, reload, flushDraft,
     renameSession: (target: SessionSummary, title: string) => editSession(target, { type: "rename", title }),

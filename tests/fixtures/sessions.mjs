@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { app, ipcMain, shell } from 'electron';
+import { checkEmptyChat } from '../helpers/emptyChat.mjs';
 import { checkSettlement } from '../helpers/settlement.mjs';
 import { checkSessionSidebar } from '../helpers/sessionSidebar.mjs';
 import { markdownSample, checkMarkdown } from '../helpers/markdown.mjs';
@@ -106,10 +107,9 @@ void app.whenReady().then(async () => {
     const count = repository.list().sessions.length;
     await wait("!document.querySelector('[aria-label=\"New thread\"]').disabled");
     await click('[aria-label="New thread"]');
-    await wait("!!document.querySelector('.session-dialog[open] select')");
-    await evaluate(`(() => { const select = document.querySelector('.session-dialog select'); select.value = ${JSON.stringify(projectId)}; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-    await click('.session-dialog button[type=submit]');
-    await wait("!document.querySelector('.session-dialog') && !!document.querySelector('.session-history:not([hidden])') && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
+    await wait("!!document.querySelector('.new-session-dialog[open] [role=option]')");
+    await click(`.new-session-dialog [role=option][id$="-${projectId}"]`);
+    await wait("!document.querySelector('.new-session-dialog') && document.querySelector('textarea')?.readOnly === false && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
     assert.equal(repository.list().sessions.length, count + 1);
     return repository.list().sessions.find((session) => session.title === 'New session' && session.projectId === projectId && session.sessionId !== sessionA?.sessionId);
   };
@@ -123,7 +123,9 @@ void app.whenReady().then(async () => {
   try {
     await wait("document.querySelectorAll('.model-picker__option').length === 2 && !!document.querySelector('[aria-label=\"New thread\"]')");
     assert.equal(await evaluate("document.querySelector('textarea').readOnly"), true);
+    await checkEmptyChat(evaluate);
     sessionA = await create(a.id);
+    await checkEmptyChat(evaluate);
     await model('Alpha');
     await click('.composer-settings__thinking');
     await wait("document.querySelector('.thinking-picker').matches(':popover-open')");
@@ -136,6 +138,11 @@ void app.whenReady().then(async () => {
     await type('textarea', 'First draft');
     await wait("document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
     assert.equal(repository.use(sessionA, (db) => db.read()).draft, 'First draft');
+    await checkEmptyChat(evaluate);
+    if (process.env.FLAME_UI_CAPTURE_DIR) {
+      mkdirSync(process.env.FLAME_UI_CAPTURE_DIR, { recursive: true });
+      writeFileSync(join(process.env.FLAME_UI_CAPTURE_DIR, 'empty-chat.png'), (await window.webContents.capturePage()).toPNG());
+    }
     const sessionB = await create(a.id);
     assert.equal(await evaluate("document.querySelector('textarea').value"), '');
     assert.equal(repository.use(sessionB, (db) => db.read()).settings, null, 'session choices do not leak into new sessions');
@@ -143,11 +150,13 @@ void app.whenReady().then(async () => {
     await type('textarea', 'Hello from B');
     await click('[aria-label="Send message"]');
     await wait("document.querySelector('.session-message p')?.textContent === 'Hello from B' && document.querySelector('textarea').value === ''");
+    assert.equal(await evaluate("!!document.querySelector('.session-empty__heading')"), false, 'first message removes the empty heading');
     await wait("[...document.querySelectorAll('.work-group__commentary')].at(-1)?.textContent.trim() === 'First paragraph.'");
     assert.ok(!await evaluate("document.querySelector('.session-history').textContent.includes('Pending words')"));
     const resumed = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
     window.webContents.reload(); await resumed;
     await wait("!!document.querySelector('.work-group__commentary')");
+    assert.equal(await evaluate("!!document.querySelector('.session-empty__heading')"), false, 'existing conversation stays docked after reload');
     assert.equal(inferenceCalls, 2, 'renderer reload resumes the active response without replay');
     await wait("document.querySelector('.work-group__heading')?.textContent.includes('Ran command')");
     assert.equal(readFileSync(join(a.path, 'flame-ui-marker'), 'utf8'), 'x');

@@ -1,0 +1,16 @@
+.workspace__composer[data-empty] { position: relative; }
+.session-empty__heading {
+  position: absolute;
+  inset-inline: 0;
+  bottom: calc(100% + 32px);
+  margin: 0;
+  text-align: center;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 400;
+  letter-spacing: -.025em;
+  color: #e5e5e5;
+}
+@media (min-width: 640px) {
+  .session-empty__heading { font-size: 30px; line-height: 36px; }
+}

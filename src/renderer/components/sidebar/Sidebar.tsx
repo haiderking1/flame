@@ -2,7 +2,6 @@ import { useState } from "react";
 import { NewSessionDialog } from "../sessions/NewSessionDialog";
 import { useSessions } from "../sessions/SessionContext";
 import { SidebarThreads } from "./SidebarThreads";
-import { useProjectScope } from "./useProjectScope";
 import { useSidebarResize } from "./useSidebarResize";
 import { SidebarToolbar } from "./SidebarToolbar";
 import { SidebarBrand } from "./SidebarBrand";
@@ -16,10 +15,10 @@ export function Sidebar({ expanded, mobile = false, onClose, onNewProject, setti
   settings: boolean; onSettings(): void; onBack(): void;
   settingsSection: SettingsSection; onSettingsSection(section: SettingsSection): void;
 }) {
-  const [projectScope, setProjectScope] = useProjectScope();
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
-  const sessions = useSessions();
+  const sessions = useSessions()!;
+  const { projectScope, setProjectScope } = sessions;
   const { width, minimum, maximum, resizing, handleProps } = useSidebarResize();
   const content = (
     <aside hidden={!expanded} id="workspace-sidebar" className="sidebar" aria-label="Sidebar" style={mobile ? undefined : { width }} data-resizing={resizing}>
@@ -27,7 +26,7 @@ export function Sidebar({ expanded, mobile = false, onClose, onNewProject, setti
         {!mobile && <SidebarBrand />}
       </div>
       {settings ? <SettingsNavigation section={settingsSection} onSelect={(section) => { onSettingsSection(section); if (mobile) onClose(); }} /> : <>
-        <SidebarToolbar onNewProject={onNewProject} scope={projectScope} onScopeChange={setProjectScope}
+        <SidebarToolbar onNewProject={onNewProject} scope={projectScope} onScopeChange={(id) => { void sessions.selectProject(id).then(() => { if (mobile && id) onClose(); }).catch(() => {}); }}
           search={search} onSearch={setSearch} onNewSession={() => setCreating(true)} busy={!!sessions?.busy} />
         <SidebarThreads scope={projectScope} search={search} onNewProject={onNewProject} onOpened={() => { if (mobile) onClose(); }} />
       </>}
@@ -40,7 +39,7 @@ export function Sidebar({ expanded, mobile = false, onClose, onNewProject, setti
     </aside>
   );
   return <>{mobile ? <SidebarDrawer open={expanded} onClose={onClose}>{content}</SidebarDrawer> : content}
-    {creating && <NewSessionDialog scope={projectScope} onClose={() => setCreating(false)} onCreated={(projectId) => {
+    {creating && <NewSessionDialog scope={projectScope} onClose={() => setCreating(false)} onNewProject={() => { setCreating(false); onNewProject(); }} onCreated={(projectId) => {
       setCreating(false); setSearch("");
       if (projectScope) setProjectScope(projectId);
       if (mobile) onClose();

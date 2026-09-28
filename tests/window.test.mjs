@@ -147,10 +147,9 @@ test(`${mode}: composer window${mode === "development" ? " with live updates" : 
   await checkProjects({ evaluate, send: (method, params) => send(method, params, sessionId), folder: join(profile, 'folders') });
   await checkProjectFilter({ evaluate, send: (method, params) => send(method, params, sessionId), folder: join(profile, 'folders') });
   await evaluate("document.querySelector('[aria-label=\"New thread\"]').click()");
-  for (let i = 0; i < 100 && !await evaluate("!!document.querySelector('.session-dialog select')"); i++) await delay(20);
-  await evaluate(`(() => { const select = document.querySelector('.session-dialog select'); select.value = [...select.options].find(option => option.value).value; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-  await evaluate("document.querySelector('.session-dialog button[type=submit]').click()");
-  for (let i = 0; i < 100 && !await evaluate("!!document.querySelector('.session-history:not([hidden])') && !document.querySelector('.session-dialog')"); i++) await delay(20);
+  for (let i = 0; i < 100 && !await evaluate("!!document.querySelector('.new-session-dialog [role=option]')"); i++) await delay(20);
+  await evaluate("document.querySelector('.new-session-dialog [role=option]').click()");
+  for (let i = 0; i < 100 && !await evaluate("document.querySelector('textarea')?.readOnly === false && !document.querySelector('.new-session-dialog')"); i++) await delay(20);
   assert.equal(await evaluate("document.querySelector('textarea').readOnly"), false);
   await checkSettings({ evaluate, send: (method, params) => send(method, params, sessionId), savedAuthPath: mode === 'development' ? authPath : undefined });
   if (mode === "production") {

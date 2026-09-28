@@ -6,7 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 export async function checkComposerSubmission(appPath, evaluate) {
   // Test-only callback. No agent or send stub is added to the application.
   const workspacePath = join(dirname(appPath), 'components/sessions/SessionWorkspace.tsx');
-  await writeFile(workspacePath, (await readFile(workspacePath, "utf8")).replace("onSend={active ? sessions.send : undefined}", `onSend={async (message) => {
+  await writeFile(workspacePath, (await readFile(workspacePath, "utf8")).replace("onSend={sessions.canCompose ? sessions.send : undefined}", `onSend={async (message) => {
     window.__sendCount = (window.__sendCount ?? 0) + 1;
     await new Promise(resolve => setTimeout(resolve, 100));
     if (window.__rejectSend) throw new Error("test rejection");
