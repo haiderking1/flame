@@ -13,7 +13,7 @@ export async function checkComposer({ evaluate, send }) {
   })()`), { heightWithinRounding: true, padding: "16px", radius: "24px", sendSize: 32 });
   assert.deepEqual(await evaluate(`(() => {
     const attach = document.querySelector('button[aria-label="Attach media"]');
-    const send = document.querySelector('button[aria-label="Send message"]');
+    const send = document.querySelector('button[aria-label="Save message to session"]');
     const style = getComputedStyle(send);
     return { attachmentDisabled: attach.disabled, attachmentType: attach.type,
       round: style.borderRadius, square: style.width === style.height };
@@ -36,14 +36,17 @@ export async function checkComposer({ evaluate, send }) {
   assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('[aria-label="Model settings"] button')).map(button => ({
     label: button.textContent.trim(), disabled: button.disabled, type: button.type
   }))`), [
-    { label: "Select model", disabled: true, type: "button" },
-    { label: "Medium", disabled: true, type: "button" },
+    { label: "Select model", disabled: false, type: "button" },
+    { label: "Thinking", disabled: true, type: "button" },
   ]);
   await replaceText("draft preserved");
   assert.equal(await value(), "draft preserved");
-  assert.equal(await evaluate("document.querySelector('button[type=submit]').disabled"), true, "Unconnected composer must not pretend it can send");
+  assert.equal(await evaluate("document.querySelector('button[type=submit]').disabled"), false, "A session can save a local message without an agent");
   await enter();
-  assert.equal(await value(), "draft preserved", "Enter must not discard an unsent draft");
+  for (let i = 0; i < 100 && await value() !== ''; i++) await delay(20);
+  assert.equal(await value(), '', 'Successful durable submission clears the draft');
+  assert.equal(await evaluate("document.querySelector('.session-message p').textContent"), 'draft preserved');
+  await replaceText('draft preserved');
   await enter(8); // Shift modifier.
   assert.equal(await value(), "draft preserved\n");
 

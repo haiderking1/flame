@@ -13,15 +13,18 @@ function Icon({ children }: { children: ReactNode }) {
   );
 }
 
-export function SidebarToolbar({ onNewProject, scope, onScopeChange }: { onNewProject(): void; scope: string | null; onScopeChange(id: string | null): void }) {
+export function SidebarToolbar({ onNewProject, scope, onScopeChange, search: query, onSearch, onNewSession, busy }: {
+  onNewProject(): void; scope: string | null; onScopeChange(id: string | null): void;
+  search: string; onSearch(query: string): void; onNewSession(): void; busy: boolean;
+}) {
   const search = useRef<HTMLLabelElement>(null);
   const projects = useAtomValue(projectsAtom);
   const hasProjects = AsyncResult.isSuccess(projects) && projects.value.length > 0;
   return (
     <div className="sidebar-toolbar" role="group" aria-label="Projects and threads">
-      <label ref={search} className="sidebar-toolbar__search" title="Thread search is not connected yet">
+      <label ref={search} className="sidebar-toolbar__search" title="Search sessions">
         <Icon><circle cx="10.5" cy="10.5" r="7.5" /><path d="m16 16 5 5" /></Icon>
-        <input type="search" aria-label="Search threads" placeholder="Search" disabled />
+        <input type="search" aria-label="Search threads" placeholder="Search" disabled={!hasProjects} value={query} onChange={(event) => onSearch(event.target.value)} />
       </label>
       <div className="sidebar-toolbar__actions">
         {hasProjects && <><ProjectFilter scope={scope} onChange={onScopeChange} anchor={search} />
@@ -29,7 +32,7 @@ export function SidebarToolbar({ onNewProject, scope, onScopeChange }: { onNewPr
           <Icon><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z M9 13h6m-3-3v6" /></Icon>
         </button>
         </>}
-        <button type="button" aria-label="New thread" title="New thread is not connected yet" disabled>
+        <button type="button" aria-label="New thread" title="New session" disabled={!hasProjects || busy} onClick={onNewSession}>
           <Icon><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M16 4l4 4 M10 14l1-5 7-7a2.1 2.1 0 0 1 3 3l-7 7Z" /></Icon>
         </button>
       </div>

@@ -1,0 +1,2 @@
+.turn-status, .turn-feedback { margin: 8px 0 16px; color: #999; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.session-message--assistant { background: transparent; border-color: transparent; }

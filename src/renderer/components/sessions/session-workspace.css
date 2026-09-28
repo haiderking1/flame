@@ -1,0 +1,31 @@
+.session-error button, .session-history__older { flex-shrink: 0; border: 0; background: transparent; color: #858585; font: inherit; font-size: 11px; cursor: pointer; padding: 4px; }
+.session-error button:hover, .session-history__older:hover { color: #ddd; }
+.session-error button:disabled, .session-history__older:disabled { opacity: .5; cursor: default; }
+.session-history {
+  --flame-scrollbar-thumb: rgb(255 255 255 / 8%);
+  --flame-scrollbar-thumb-hover: rgb(255 255 255 / 12%);
+  --flame-scrollbar-thumb-active: rgb(255 255 255 / 12%);
+  flex: 1;
+  min-height: 0;
+  width: calc(100% + 2 * var(--chat-gutter));
+  margin-inline: calc(-1 * var(--chat-gutter));
+  margin-bottom: calc(-1 * var(--chat-gutter));
+  /* Balance the scrollbar gutter so messages and the floating composer share
+     the same centerline, including on narrow layouts. */
+  scrollbar-gutter: stable both-edges;
+  padding-inline: max(0px, calc(var(--chat-gutter) - var(--flame-scrollbar-width)));
+  padding-bottom: calc(var(--composer-overlay-height, 144px) + var(--chat-gutter) + 16px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+.session-history__content { width: 100%; max-width: var(--chat-max-width); margin-inline: auto; }
+.session-message { padding: 14px 12px; margin: 0 0 12px; border: 1px solid #ffffff08; border-radius: 10px; background: #ffffff03; }
+.session-message > span { color: #777; font-size: 11px; }
+.session-message p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: #ddd; font-size: 13px; line-height: 1.65; }
+.session-status { margin: 0 0 8px; color: #777; font-size: 11px; }
+.session-error { margin-bottom: 8px; color: #baa5a2; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.session-error button { margin-left: 8px; }
+.workspace__chat:has(.session-history:not([hidden])) .workspace__composer { position: absolute; z-index: 2; inset-inline: var(--chat-gutter); bottom: var(--chat-gutter); width: auto; margin: 0 auto; pointer-events: none; }
+.workspace__chat:has(.session-history:not([hidden])) .workspace__composer > * { pointer-events: auto; }
+.workspace__composer .session-error { padding: 8px 12px; border-radius: 10px; background: #111111ed; }

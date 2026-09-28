@@ -43,8 +43,9 @@ export async function checkSettings({ evaluate, send, savedAuthPath }) {
     await evaluate("document.querySelector('.private-email').click()");
     await wait("document.querySelector('.private-email').dataset.revealed === 'false'");
     assert.equal((await emailState()).blur, 'blur(4px)');
+    await send('Page.bringToFront');
     await evaluate("document.querySelector('.private-email').focus()");
-    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' });
     await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
     await wait("document.querySelector('.private-email').dataset.revealed === 'true'");
     await evaluate("document.querySelector('[aria-label=\"Close settings\"]').click()");

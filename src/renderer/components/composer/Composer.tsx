@@ -5,27 +5,31 @@ import "./composer.css";
 
 type ComposerProps = {
   onSend?: (message: string) => Promise<void> | void;
+  onStop?: () => void;
+  draft?: string; onDraftChange?: (value: string) => void; readOnly?: boolean; saveOnly?: boolean;
 };
 
-export function Composer({ onSend }: ComposerProps) {
-  const [draft, setDraft] = useState("");
+export function Composer({ onSend, onStop, draft: controlledDraft, onDraftChange, readOnly = false, saveOnly = false }: ComposerProps) {
+  const [localDraft, setLocalDraft] = useState("");
+  const draft = controlledDraft ?? localDraft;
+  const setDraft = onDraftChange ?? setLocalDraft;
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
   const composing = useRef(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const hintId = useId();
-  const canSend = Boolean(onSend && draft.trim() && !sending);
+  const canSend = Boolean(onSend && draft.trim() && !sending && !readOnly && !onStop);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!onSend || !draft.trim() || inFlight.current) return;
+    if (!onSend || !draft.trim() || inFlight.current || readOnly || onStop) return;
     inFlight.current = true;
     setSending(true);
     setError(null);
     try {
       await onSend(draft);
-      setDraft("");
+      if (controlledDraft === undefined) setDraft("");
     } catch {
       setError("Could not send. Your message is still here. Try again.");
     } finally {
@@ -55,16 +59,16 @@ export function Composer({ onSend }: ComposerProps) {
         onKeyDown={handleKeyDown}
         onCompositionStart={() => { composing.current = true; }}
         onCompositionEnd={() => { composing.current = false; }}
-        readOnly={sending}
+        readOnly={sending || readOnly}
         rows={1}
         spellCheck={false}
       />
-      <span id={hintId} className={error || sending ? "composer__hint" : "composer__status-hidden"} role="status">
+      <span id={hintId} className={error ? "composer__hint" : "composer__status-hidden"} role="status">
         {error ?? (sending ? "Sending…" : onSend ? "Shift + Enter for a new line" : "Agent not connected. Shift + Enter for a new line.")}
       </span>
       <div className="composer__footer">
         <ComposerSettings />
-        <ComposerActions canSend={canSend} connected={Boolean(onSend)} />
+        <ComposerActions canSend={canSend} sending={sending} connected={Boolean(onSend)} saveOnly={saveOnly} onStop={onStop} />
       </div>
     </form>
   );

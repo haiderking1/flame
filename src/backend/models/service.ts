@@ -114,6 +114,15 @@ export class CodexModels extends EventEmitter {
     if (!model) throw new ModelsError({ message: "This model is no longer available." });
     this.saveSelection(accountKey, thinkingSelection(model, effort, this.state.selection.serviceTier));
   }
+  validateSelection(accountKey: string, selection: ModelSelection): ModelSelection {
+    this.requireAccount(accountKey);
+    const model = this.state.catalog?.models.find((model) => model.id === selection.modelId);
+    if (!model || (selection.serviceTier === "priority" && !model.supportsFast)) {
+      throw new ModelsError({ message: "This model or service tier is no longer available for the connected account." });
+    }
+    return selection.effort === null ? modelSelection(model, null, selection.serviceTier)
+      : thinkingSelection(model, selection.effort, selection.serviceTier);
+  }
   selectTier(accountKey: string, modelId: string, serviceTier: ServiceTier) {
     this.requireAccount(accountKey);
     const selection = this.state.selection;

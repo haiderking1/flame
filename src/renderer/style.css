@@ -85,22 +85,25 @@ body {
 }
 
 .workspace__chat {
+  --chat-max-width: 768px;
+  --chat-gutter: 20px;
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  padding: 20px;
+  padding: var(--chat-gutter);
   min-height: 0;
 }
 
 .workspace__composer {
   width: 100%;
-  max-width: 736px;
+  max-width: var(--chat-max-width);
   margin: auto;
 }
 
 @media (max-width: 639px) {
   .workspace__chat {
-    padding: 12px;
+    --chat-gutter: 12px;
   }
 }

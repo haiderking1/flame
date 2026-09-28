@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { NewSessionDialog } from "../sessions/NewSessionDialog";
+import { useSessions } from "../sessions/SessionContext";
 import { SidebarThreads } from "./SidebarThreads";
 import { useProjectScope } from "./useProjectScope";
 import { useSidebarResize } from "./useSidebarResize";
@@ -14,6 +17,9 @@ export function Sidebar({ expanded, mobile = false, onClose, onNewProject, setti
   settingsSection: SettingsSection; onSettingsSection(section: SettingsSection): void;
 }) {
   const [projectScope, setProjectScope] = useProjectScope();
+  const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
+  const sessions = useSessions();
   const { width, minimum, maximum, resizing, handleProps } = useSidebarResize();
   const content = (
     <aside hidden={!expanded} id="workspace-sidebar" className="sidebar" aria-label="Sidebar" style={mobile ? undefined : { width }} data-resizing={resizing}>
@@ -21,8 +27,9 @@ export function Sidebar({ expanded, mobile = false, onClose, onNewProject, setti
         {!mobile && <SidebarBrand />}
       </div>
       {settings ? <SettingsNavigation section={settingsSection} onSelect={(section) => { onSettingsSection(section); if (mobile) onClose(); }} /> : <>
-        <SidebarToolbar onNewProject={onNewProject} scope={projectScope} onScopeChange={setProjectScope} />
-        <SidebarThreads scope={projectScope} onNewProject={onNewProject} />
+        <SidebarToolbar onNewProject={onNewProject} scope={projectScope} onScopeChange={setProjectScope}
+          search={search} onSearch={setSearch} onNewSession={() => setCreating(true)} busy={!!sessions?.busy} />
+        <SidebarThreads scope={projectScope} search={search} onNewProject={onNewProject} onOpened={() => { if (mobile) onClose(); }} />
       </>}
       <SidebarFooter settings={settings} onClick={settings ? onBack : onSettings} />
       {!mobile && <div className="sidebar__resize" role="separator" tabIndex={0}
@@ -32,5 +39,11 @@ export function Sidebar({ expanded, mobile = false, onClose, onNewProject, setti
         {...handleProps} />}
     </aside>
   );
-  return mobile ? <SidebarDrawer open={expanded} onClose={onClose}>{content}</SidebarDrawer> : content;
+  return <>{mobile ? <SidebarDrawer open={expanded} onClose={onClose}>{content}</SidebarDrawer> : content}
+    {creating && <NewSessionDialog scope={projectScope} onClose={() => setCreating(false)} onCreated={(projectId) => {
+      setCreating(false); setSearch("");
+      if (projectScope) setProjectScope(projectId);
+      if (mobile) onClose();
+    }} />}
+  </>;
 }

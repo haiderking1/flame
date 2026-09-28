@@ -2,10 +2,13 @@ import "./composer-actions.css";
 
 type ComposerActionsProps = {
   canSend: boolean;
-  connected: boolean;
+  sending: boolean;
+  onStop?: () => void;
+  connected: boolean; saveOnly?: boolean;
 };
 
-export function ComposerActions({ canSend, connected }: ComposerActionsProps) {
+export function ComposerActions({ canSend, sending, connected, saveOnly = false, onStop }: ComposerActionsProps) {
+  const showStop = Boolean(onStop) || (sending && !saveOnly);
   return (
     <div className="composer-actions">
       <button
@@ -21,13 +24,17 @@ export function ComposerActions({ canSend, connected }: ComposerActionsProps) {
       </button>
       <button
         className="composer-actions__send"
-        type="submit"
-        aria-label="Send message"
-        disabled={!canSend}
-        title={connected ? "Send message (Enter)" : "Connect an agent to send messages"}
+        data-active={sending || Boolean(onStop)}
+        data-stop={showStop}
+        type={showStop ? "button" : "submit"}
+        onClick={onStop}
+        aria-label={onStop ? "Stop response" : sending ? "Sending message" : saveOnly ? "Save message to session" : "Send message"}
+        disabled={!onStop && !canSend}
+        title={onStop ? "Stop response" : sending ? "Sending message…" : saveOnly ? "Save message locally (Enter). Agent execution is not connected yet." : connected ? "Send message (Enter)" : "Connect an agent to send messages"}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
+          <rect className="composer-actions__stop-icon" x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+          <path className="composer-actions__send-icon" d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
     </div>

@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { useAtomMount } from "@effect/atom-react";
 import { codexAuthAtom } from "./backend/auth";
 import { ProjectPicker } from "./components/projects/ProjectPicker";
-import { Composer } from "./components/composer/Composer";
+import { SessionProvider } from "./components/sessions/SessionContext";
+import { SessionWorkspace } from "./components/sessions/SessionWorkspace";
 import { WorkspaceActions } from "./components/workspace/WorkspaceActions";
 import { DiffPanel } from "./components/workspace/DiffPanel";
 import { Sidebar } from "./components/sidebar/Sidebar";
@@ -13,7 +14,9 @@ import type { SettingsSection } from "./components/settings/SettingsNavigation";
 import { useMediaQuery } from "./hooks/useMediaQuery";
 import { useWindowTitlebar } from "./hooks/useWindowTitlebar";
 
-export function App() {
+export function App() { return <SessionProvider><Workspace /></SessionProvider>; }
+
+function Workspace() {
   useWindowTitlebar();
   useAtomMount(codexAuthAtom);
   const [diffOpen, setDiffOpen] = useState(false);
@@ -60,9 +63,7 @@ export function App() {
         <WorkspaceActions diffOpen={diffOpen} diffButtonRef={diffButton} onToggleDiff={() => setDiffOpen((open) => !open)} />
         <div className="workspace__body">
           <div className="workspace__chat">
-            <div className="workspace__composer">
-              <Composer />
-            </div>
+            <SessionWorkspace />
           </div>
           <DiffPanel open={diffOpen} onClose={closeDiff} />
         </div>

@@ -40,7 +40,7 @@ export function ModelPicker({ models, selectedId, onSelect, emptyMessage = "No m
     <button ref={trigger} type="button" aria-busy={busy} onClick={(event) => { if (busy) event.preventDefault(); }} className="composer-settings__control composer-settings__model" aria-label={selected ? `Select model: ${selected.name}` : "Select model"}
       aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-list`} popoverTarget={id}>
       <span className="model-picker__logo model-picker__trigger-logo"><img src={openaiLogo} alt="" /></span>
-      <span className="composer-settings__label">{selected?.name ?? "Select model"}</span><ComposerChevron />
+      <span className="composer-settings__label">{selected?.name ?? selectedId ?? "Select model"}</span><ComposerChevron />
     </button>
     <div ref={popup} id={id} popover="auto" className="model-picker" data-keyboard={index >= 0 || undefined} onPointerMove={() => setHighlighted(null)} onToggle={(event) => {
       setOpen(event.newState === "open");

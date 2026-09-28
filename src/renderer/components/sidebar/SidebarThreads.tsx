@@ -2,13 +2,15 @@ import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { projectsAtom, resultMessage } from "../../backend/projects";
 import "./sidebar-threads.css";
+import { SessionList } from "../sessions/SessionList";
 
-export function SidebarThreads({ scope, onNewProject }: { scope: string | null; onNewProject(): void }) {
+export function SidebarThreads({ scope, search, onNewProject, onOpened }: { scope: string | null; search: string; onNewProject(): void; onOpened(): void }) {
   const result = useAtomValue(projectsAtom);
   const retry = useAtomRefresh(projectsAtom);
   if (AsyncResult.isInitial(result)) return <div className="sidebar-threads__empty" role="status">Loading projects…</div>;
   if (!AsyncResult.isSuccess(result)) return <div className="sidebar-threads__empty" role="alert">{resultMessage(result)}<button type="button" onClick={retry}>Retry</button></div>;
   const project = result.value.find((item) => item.id === scope);
+  if (result.value.length) return <SessionList projects={result.value} scope={scope} search={search} onOpened={onOpened} />;
   return <div className="sidebar-threads__empty" role="status">
     {result.value.length === 0 ? <>
       <span>No projects yet</span>

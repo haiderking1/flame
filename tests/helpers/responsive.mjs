@@ -48,7 +48,7 @@ export async function checkResponsive({ evaluate, send }) {
   }
   await viewport(1200);
   assert.equal(await evaluate(`${toggle}.getAttribute('aria-expanded')`), 'false', 'Closing the drawer must also keep the desktop sidebar closed');
-  assert.equal(await evaluate("Math.round(document.querySelector('.workspace__composer').getBoundingClientRect().width)"), 736);
+  assert.equal(await evaluate("Math.round(document.querySelector('.workspace__composer').getBoundingClientRect().width)"), 768);
   await viewport(750);
   assert.equal(await evaluate("document.querySelector('.sidebar-drawer').open"), false);
   assert.equal(await evaluate("document.querySelector('.workspace').getBoundingClientRect().left"), 0);

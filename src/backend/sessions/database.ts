@@ -1,0 +1,124 @@
+import { DatabaseSync } from "node:sqlite";
+import { randomUUID } from "node:crypto";
+import { Schema } from "effect";
+import { SessionDocument, SessionEntry, SessionError, fitsSessionText, type SessionLocation, type SessionPage } from "../../contracts/sessions.js";
+import type { ModelSelection } from "../../contracts/models.js";
+import { checkDatabase, missing, storageError } from "./files.js";
+import { initializeSession } from "./schema.js";
+import { migrateSession } from "./migrations.js";
+import { TurnStore } from "./turn-store.js";
+
+const conflict = () => new SessionError({ code: "CONFLICT", message: "This session changed elsewhere. Reopen it before saving again. Your unsaved text has been kept." });
+const invalid = (message: string) => new SessionError({ code: "INVALID", message });
+export class SessionDatabase {
+  private readonly db: DatabaseSync;
+  readonly turns: TurnStore;
+  constructor(filename: string, private readonly location: SessionLocation, settings?: ModelSelection | null) {
+    checkDatabase(filename);
+    this.db = new DatabaseSync(filename);
+    try {
+      this.db.exec("PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; PRAGMA synchronous=FULL;");
+      const version = this.db.prepare("PRAGMA user_version").get()?.user_version;
+      if (version === 0 && settings !== undefined) {
+        this.db.exec("PRAGMA journal_mode=WAL;");
+        initializeSession(this.db, location, settings);
+      } else if (version !== 1 && version !== 2) throw storageError();
+      this.read(true);
+      if (version === 0 || version === 1) migrateSession(this.db);
+      this.turns = new TurnStore(this.db, () => this.read(), (work) => this.transaction(work), (revision, id, text) => this.append(revision, id, text));
+    } catch (error) { this.db.close(); throw error; }
+  }
+  read(includeDeleted = false): SessionDocument {
+    const row = this.db.prepare(`SELECT id AS sessionId, project_id AS projectId, title, created_at AS createdAt,
+      updated_at AS updatedAt, revision, draft, settings, deleted, leaf_id AS leafId FROM session WHERE singleton = 1`).get();
+    if (!row || row.sessionId !== this.location.sessionId || row.projectId !== this.location.projectId) throw storageError();
+    if (!includeDeleted && row.deleted === 1) throw missing();
+    return Schema.decodeUnknownSync(SessionDocument)({ ...row, settings: JSON.parse(String(row.settings)) });
+  }
+  private transaction<T>(work: () => T): T {
+    if (this.db.isTransaction) return work();
+    this.db.exec("BEGIN IMMEDIATE");
+    try { const result = work(); this.db.exec("COMMIT"); return result; }
+    catch (error) { this.db.exec("ROLLBACK"); throw error; }
+  }
+  private expect(revision: number) {
+    const current = this.read();
+    if (!Number.isSafeInteger(revision) || current.revision !== revision) throw conflict();
+    return current;
+  }
+  isDeleted() { return this.db.prepare("SELECT deleted FROM session WHERE singleton=1").get()?.deleted === 1; }
+  retire(revision: number) {
+    this.transaction(() => {
+      if (this.db.prepare("SELECT deleted FROM session WHERE singleton=1").get()?.deleted === 1) return;
+      this.expect(revision);
+      this.turns.assertIdle();
+      this.db.prepare("UPDATE session SET deleted=1, revision=revision+1 WHERE singleton=1").run();
+    });
+  }
+  draft(revision: number, draft: string) {
+    if (!fitsSessionText(draft)) throw invalid("Draft exceeds the 48 KiB encoded message limit. Shorten it before saving.");
+    return this.transaction(() => {
+      const current = this.expect(revision);
+      if (draft !== current.draft) this.db.prepare("UPDATE session SET draft=?, revision=revision+1 WHERE singleton=1").run(draft);
+      return this.read();
+    });
+  }
+  rename(revision: number, title: string) {
+    title = title.trim();
+    if (!title || title.length > 160) throw invalid("Session names must be between 1 and 160 characters.");
+    return this.transaction(() => {
+      this.expect(revision);
+      this.turns.assertIdle();
+      this.db.prepare("UPDATE session SET title=?, custom_title=1, revision=revision+1, updated_at=? WHERE singleton=1").run(title, Date.now());
+      return this.read();
+    });
+  }
+  private entry(current: SessionDocument, kind: "user" | "settings", text: string | null, settings: ModelSelection | null, requestId: string | null) {
+    const id = randomUUID();
+    const now = Math.max(Date.now(), current.updatedAt);
+    this.db.prepare("INSERT INTO entries VALUES (?, ?, ?, ?, ?, ?, ?)").run(id, current.leafId, now, kind, text, JSON.stringify(settings), requestId);
+    this.db.prepare("UPDATE session SET leaf_id=?, updated_at=?, revision=revision+1 WHERE singleton=1").run(id, now);
+  }
+  configure(revision: number, settings: ModelSelection) {
+    return this.transaction(() => {
+      const current = this.expect(revision);
+      this.turns.assertIdle();
+      if (JSON.stringify(settings) === JSON.stringify(current.settings)) return current;
+      this.entry(current, "settings", null, settings, null);
+      this.db.prepare("UPDATE session SET settings=? WHERE singleton=1").run(JSON.stringify(settings));
+      return this.read();
+    });
+  }
+  append(revision: number, requestId: string, text: string) {
+    if (!text.trim() || !fitsSessionText(text)) throw invalid("Messages must contain text and fit within 48 KiB when encoded.");
+    return this.transaction(() => {
+      const previous = this.db.prepare("SELECT text FROM entries WHERE request_id=?").get(requestId);
+      if (previous) {
+        if (previous.text !== text) throw invalid("This submission identifier was already used for a different message.");
+        return this.read();
+      }
+      const current = this.expect(revision);
+      this.turns.assertIdle();
+      this.entry(current, "user", text, current.settings, requestId);
+      this.db.prepare("UPDATE session SET draft=CASE WHEN draft=? THEN '' ELSE draft END, title=CASE WHEN custom_title=0 THEN ? ELSE title END, custom_title=1 WHERE singleton=1")
+        .run(text, text.trim().split(/\r?\n/)[0]!.replace(/\s+/g, " ").slice(0, 120).replace(/[\uD800-\uDBFF]$/, ""));
+      return this.read();
+    });
+  }
+  history(before: string | null): SessionPage {
+    let tip = this.read().leafId;
+    if (before) {
+      const row = this.db.prepare("SELECT parent_id FROM entries WHERE id=?").get(before);
+      if (!row) throw missing();
+      tip = row.parent_id as string | null;
+    }
+    const rows = this.db.prepare(`WITH RECURSIVE chain AS (
+      SELECT *, 0 AS depth FROM entries WHERE id=?
+      UNION ALL SELECT e.*, c.depth+1 FROM entries e JOIN chain c ON e.id=c.parent_id WHERE c.depth < 29
+    ) SELECT id, parent_id AS parentId, created_at AS createdAt, kind, text, settings,
+      (SELECT status FROM turns WHERE entry_id=chain.id) AS turnStatus FROM chain ORDER BY depth DESC`).all(tip);
+    const entries = rows.map((row) => Schema.decodeUnknownSync(SessionEntry)({ ...row, settings: JSON.parse(String(row.settings)) }));
+    return { entries, nextBefore: entries[0]?.parentId ? entries[0].id : null };
+  }
+  close() { this.db.close(); }
+}

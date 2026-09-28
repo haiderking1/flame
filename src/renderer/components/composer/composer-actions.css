@@ -27,6 +27,7 @@
   background: #3563d0;
   color: #e4eaff;
   cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .composer-actions__send:hover:not(:disabled) {
@@ -38,9 +39,18 @@
   opacity: 1;
 }
 
-.composer-actions__send:disabled {
+.composer-actions__send:disabled:not([data-active="true"]) {
   background: #284b9f;
   color: #8b9ec9;
+}
+
+.composer-actions__send-icon, .composer-actions__stop-icon { transition: opacity 120ms ease; }
+.composer-actions__stop-icon { opacity: 0; }
+.composer-actions__send[data-stop="true"] .composer-actions__send-icon { opacity: 0; }
+.composer-actions__send[data-stop="true"] .composer-actions__stop-icon { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-actions__send, .composer-actions__send-icon, .composer-actions__stop-icon { transition: none; }
 }
 
 @container composer (max-width: 280px) {
