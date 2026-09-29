@@ -6,19 +6,14 @@
 .work-tools { margin: 8px 0; min-width: 0; }
 .work-tools:first-child { margin-top: 0; }
 .work-tools:last-child { margin-bottom: 0; }
-.work-group__summary { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.work-group__heading { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; padding: 0; border: 0; background: none; color: #888; cursor: pointer; text-align: left; line-height: 1.65; }
-.work-group__heading .thinking-label { flex-shrink: 0; }
-.work-group__heading:hover .thinking-label:not(.thinking-label--active) { color: #bbb; }
-.work-group__hint { color: #626262; min-width: 0; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .work-chevron { display: inline-block; flex: 0 0 10px; width: 10px; color: #808080; font-size: 17px; line-height: 14px; transform-origin: center; transition: transform 120ms; }
 .work-chevron[data-open="true"] { transform: rotate(90deg); }
-.work-group__body { margin-top: 12px; max-height: 320px; overflow: auto; scrollbar-gutter: stable; }
 .work-tool { min-width: 0; margin: 5px 0; }
 .work-tool__row { display: flex; align-items: center; min-width: 0; gap: 8px; }
 .work-tool__toggle { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; padding: 3px 0; border: 0; background: none; cursor: pointer; color: #969696; text-align: left; }
 .work-tool__toggle:hover { color: #d0d0d0; }
 .work-tool__command { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.work-tool__toggle[aria-expanded="true"] .work-tool__command { white-space: pre-wrap; overflow-wrap: anywhere; }
 .work-tool__status { flex-shrink: 0; color: #666; font-size: 11px; }
 .work-tool[data-failed="true"] .work-tool__status { color: #c5a080; }
 .work-tool__stop, .work-tool__error button { border: 0; padding: 0 4px; background: none; color: #999; cursor: pointer; font-size: 11px !important; }
@@ -26,7 +21,6 @@
 .work-tool__stop:disabled { opacity: .5; cursor: default; }
 .work-tool__detail { margin: 7px 0 12px; padding: 9px 0; border-top: 1px solid #ffffff0b; }
 .work-tool__detail pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: monospace; font-size: 11px; line-height: 1.6; }
-.work-tool__full-command { color: #b0b0b0; padding-bottom: 7px; }
 .work-tool__output { max-height: 180px; overflow: auto; color: #8a8a8a; }
 .work-tool__detail p, .work-tool__error { margin: 7px 0 0; color: #bc9e86; font-size: 11px; overflow-wrap: anywhere; }
 .work-group button:focus-visible { outline: 1px solid #666; outline-offset: 3px; border-radius: 3px; }

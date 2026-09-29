@@ -1,4 +1,5 @@
 import type { WorkActivity, WorkStep } from "../../contracts/work.js";
+import { fileWork } from "./file-work.js";
 
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const parse = (value: unknown): Record<string, unknown> => { try { return object(JSON.parse(String(value))); } catch { return {}; } };
@@ -23,8 +24,11 @@ export function workActivity(id: string, text: string, output: unknown[], status
     }
     if (item.type === "function_call" && typeof item.call_id === "string") {
       const args = parse(item.arguments), result = results.get(item.call_id);
+      const file = fileWork(String(item.name), args, result, status);
       steps.push({ kind: "tool", id: `tool-${item.call_id}`, callId: item.call_id, name: String(item.name),
-        command: typeof args.command === "string" ? args.command : args.action === "stop" ? "Stop background job" : "Check background job",
+        command: file?.command ?? (typeof args.command === "string" ? args.command : args.action === "stop" ? "Stop background job" : "Check background job"),
+        ...(file ? { file: file.file } : {}),
+        ...(result?.status === "deferred" && typeof result.summary === "string" ? { deferred: result.summary } : {}),
         jobId: typeof result?.job_id === "string" ? result.job_id : null,
         error: typeof result?.error === "string" ? result.error : typeof result?.message === "string" ? result.message
           : result?.status === "exited" && result.exit_code !== 0 ? `Command exited with ${result.signal ?? result.exit_code ?? "an unknown status"}.` : null });

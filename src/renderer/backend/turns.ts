@@ -7,7 +7,7 @@ export const turnAtom = Atom.family((id: string) => backendRuntime.atom(id ? Str
   const [projectId, sessionId] = id.split(":") as [string, string];
   return client["turns.watch"]({ projectId, sessionId }).pipe(Stream.retry(Schedule.spaced("2 seconds")));
 })) : Stream.succeed(null)));
-export const startTurn = backendRuntime.fn((input: SessionLocation & { revision: number; requestId: string; text: string; accountKey: string }) =>
+export const startTurn = backendRuntime.fn((input: SessionLocation & { revision: number; requestId: string; text: string; accountKey: string; images?: readonly string[] }) =>
   Effect.flatMap(Backend, (client) => client["turns.start"](input)).pipe(Effect.timeout("20 seconds")));
 export const stopTurn = backendRuntime.fn((input: SessionLocation & { turnId: string }) =>
   Effect.flatMap(Backend, (client) => client["turns.stop"](input)).pipe(Effect.timeout("10 seconds")));

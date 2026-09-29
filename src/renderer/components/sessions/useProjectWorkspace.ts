@@ -1,5 +1,6 @@
+import type { DraftImage } from "../images/draft-storage";
 import { useEffect, useRef, useState } from "react";
-import { SessionError, type SessionLocation } from "@contracts/sessions";
+import { SessionError, type SessionLocation, type SessionPage } from "@contracts/sessions";
 import { sessionErrorMessage } from "../../backend/sessions";
 import { useModelCatalog } from "../composer/models/useModelCatalog";
 import { useProjectScope } from "../sidebar/useProjectScope";
@@ -8,7 +9,7 @@ import { useProjectDrafts } from "./useProjectDrafts";
 import { useSessionWorkspace } from "./useSessionWorkspace";
 import { useStartProjectSession } from "./useStartProjectSession";
 
-const emptyPage = { entries: [], nextBefore: null } as const;
+const emptyPage: SessionPage = { entries: [], nextBefore: null };
 export function useProjectWorkspace() {
   const workspace = useSessionWorkspace();
   const [projectScope, setScope] = useProjectScope();
@@ -25,7 +26,7 @@ export function useProjectWorkspace() {
   const projectId = projectScope && (draftMode || !workspace.document) ? projectScope : null;
   const state = projectId ? drafts.get(projectId) : null;
   async function transition(work: () => Promise<void>) {
-    if (guard.current) return;
+    if (guard.current) throw new Error("Workspace navigation is still busy");
     guard.current = true; setBusy(true); setError(null);
     try { await work(); }
     catch (error) { setError(sessionErrorMessage(error)); throw error; }
@@ -44,22 +45,26 @@ export function useProjectWorkspace() {
       setDraftMode(false);
     });
   }
-  async function send(message: string) {
-    if (!projectId) return workspace.send(message);
+  async function send(message: string, images: readonly DraftImage[] = [], signal?: AbortSignal) {
+    if (!projectId) return workspace.send(message, images, signal);
+    let accepted: readonly string[] = [];
     await transition(async () => {
       const value = drafts.get(projectId).value;
       if (!value) throw new Error("Project draft is unavailable");
       const draft = { ...value, text: message };
       drafts.save(projectId, draft);
-      const result = await start(projectId, draft, catalog.accountKey, catalog.selection, value => drafts.save(projectId, value));
+      const result = await start(projectId, draft, catalog.accountKey, catalog.selection, value => drafts.save(projectId, value), images, signal);
+      accepted = result.sentImages;
       try {
         if (!await workspace.open(result.location)) throw new Error("Session navigation is still busy");
       } catch {
         throw new SessionError({ code: "STORAGE", message: "Your message was accepted, but the session could not be opened. Open it from the sidebar or retry to reconnect; it will not be sent again." });
       }
       drafts.clear(projectId); setDraftMode(false);
-      if (result.edited) setError("Your previous message was already sent. Your edited draft is ready to send as a follow-up.");
+      if (result.stopWarning) setError("Your message was accepted, but Stop could not be confirmed. Check the response status; do not resend it.");
+      else if (result.edited) setError("Your previous message was already sent. Your edited draft is ready to send as a follow-up.");
     });
+    return accepted;
   }
   useEffect(() => {
     const guard = (event: BeforeUnloadEvent) => {
@@ -76,6 +81,11 @@ export function useProjectWorkspace() {
     dirty: state ? state.dirty : workspace.dirty,
     error: state?.error ?? error ?? (projectId ? null : workspace.error),
     canCompose: state ? !!state.value : !!workspace.document,
+    imageLocation: state?.value && projectId ? { projectId, sessionId: state.value.sessionId } : !projectId && workspace.document ? { projectId: workspace.document.projectId, sessionId: workspace.document.sessionId } : undefined,
+    prepareAttachments: async () => {
+      if (projectId) { const value = drafts.get(projectId).value; if (!value) throw new Error("Project draft unavailable"); drafts.save(projectId, value); }
+      else await workspace.flushDraft();
+    },
     editDraft: (text: string) => {
       if (!projectId) return workspace.editDraft(text);
       const value = drafts.get(projectId).value;

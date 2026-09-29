@@ -28,6 +28,7 @@ function setup(t, respond) {
   const client = new CodexInferenceClient(async (_url, options) => {
     const body = JSON.parse(options.body); requests.push(body);
     assert.ok(body.tools.some(tool => tool.name === 'bash'));
+    assert.ok(body.instructions.endsWith(`<cwd>\n${root}\n</cwd>`), 'every request, including background continuations, uses this project directory');
     const items = await respond(body, requests.length, options.signal);
     const events = items.map((item, output_index) => ({ type: 'response.output_item.done', output_index, item }));
     events.push({ type: 'response.completed', response: { status: 'completed', output: [] } });

@@ -35,6 +35,7 @@ export class BashRuntime extends EventEmitter {
     this.timer = setInterval(() => { for (const id of this.active.keys()) this.checkpoint(id); }, 400);
     this.timer.unref();
   }
+  workingDirectory(projectId: string) { return this.projectPath(projectId); }
   list(location: SessionLocation) {
     return this.sessions.jobs(location, store => {
       const jobs = store.list();
@@ -83,7 +84,7 @@ export class BashRuntime extends EventEmitter {
       return previous; // A retry observes the claim, never launches again.
     }
     if (this.sessions.jobs(location, store => store.list().length) >= 256) throw invalid("This session has reached its Bash job limit. Start a new session.");
-    const cwd = this.projectPath(location.projectId);
+    const cwd = this.workingDirectory(location.projectId);
     const job: StoredJob = { id: randomUUID(), turnId, callId, command, background, accountKey, pid: null, identity: null,
       notified: !background, status: "claimed", exitCode: null, signal: null, text: "", truncated: false,
       outputClosed: false, message: null, createdAt: Date.now() };

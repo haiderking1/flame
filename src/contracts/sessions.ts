@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { ImageInfo, ImageIds } from "./image-types.js";
 import { WorkActivity } from "./work.js";
 import { TurnStatus } from "./turn-status.js";
 import { ModelSelection, ServiceTier } from "./models.js";
@@ -21,7 +22,7 @@ export const SessionDocument = Schema.Struct({
 export type SessionDocument = typeof SessionDocument.Type;
 export const SessionEntry = Schema.Struct({
   id: SessionId, parentId: Schema.NullOr(SessionId), createdAt: Schema.Number, turnStatus: Schema.optionalKey(Schema.NullOr(TurnStatus)),
-  activity: Schema.optionalKey(WorkActivity),
+  activity: Schema.optionalKey(WorkActivity), images: Schema.optionalKey(Schema.Array(ImageInfo)), requestId: Schema.optionalKey(Schema.NullOr(SessionId)),
   kind: Schema.Literals(["user", "settings", "assistant"]), text: Schema.NullOr(Schema.String.check(Schema.isMaxLength(1024 * 1024))), settings: Schema.NullOr(ModelSelection),
 });
 export type SessionEntry = typeof SessionEntry.Type;
@@ -40,7 +41,7 @@ export const SessionRpc = RpcGroup.make(
   Rpc.make("sessions.draft", { payload: { ...edit, draft: Text }, success: SessionDocument, error: SessionError }),
   Rpc.make("sessions.rename", { payload: { ...edit, title: Title }, success: SessionDocument, error: SessionError }),
   Rpc.make("sessions.settle", { payload: { ...edit, settled: Schema.Boolean }, success: SessionDocument, error: SessionError }),
-  Rpc.make("sessions.append", { payload: { ...edit, requestId: SessionId, text: Text }, success: SessionDocument, error: SessionError }),
+  Rpc.make("sessions.append", { payload: { ...edit, requestId: SessionId, text: Text, images: Schema.optionalKey(ImageIds) }, success: SessionDocument, error: SessionError }),
   Rpc.make("sessions.configure", { payload: { ...edit, accountKey: Schema.String, modelId: Schema.String,
     effort: Schema.NullOr(Schema.String), serviceTier: ServiceTier }, success: SessionDocument, error: SessionError }),
   Rpc.make("sessions.delete", { payload: edit, success: Schema.Void, error: SessionError }),

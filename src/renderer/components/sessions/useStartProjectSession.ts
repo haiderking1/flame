@@ -2,27 +2,36 @@ import { useAtomSet } from "@effect/atom-react";
 import type { ModelSelection } from "@contracts/models";
 import { SessionError } from "@contracts/sessions";
 import { changeSession, createSession, sessionHistory } from "../../backend/sessions";
-import { startTurn } from "../../backend/turns";
+import { startTurn, stopTurn } from "../../backend/turns";
+import { useUploadImages } from "../images/useUploadImages";
+import { saveImageDraft, type DraftImage } from "../images/draft-storage";
 import type { ProjectDraft } from "./projectDrafts";
 
 export function useStartProjectSession() {
+  const upload = useUploadImages();
+  const stop = useAtomSet(stopTurn, { mode: "promise" });
   const create = useAtomSet(createSession, { mode: "promise" });
   const change = useAtomSet(changeSession, { mode: "promise" });
   const history = useAtomSet(sessionHistory, { mode: "promise" });
   const run = useAtomSet(startTurn, { mode: "promise" });
   return async (projectId: string, draft: ProjectDraft, accountKey: string | null, settings: ModelSelection | null,
-    persist: (value: ProjectDraft) => void) => {
-    if (!draft.submittedText && (!accountKey || !settings)) throw new SessionError({ code: "INVALID", message: "Choose a connected model before sending." });
+    persist: (value: ProjectDraft) => void, images: readonly DraftImage[] = [], signal?: AbortSignal) => {
+    if (draft.submittedText === null && (!accountKey || !settings)) throw new SessionError({ code: "INVALID", message: "Choose a connected model before sending." });
     const location = { projectId, sessionId: draft.sessionId };
+    let stopWarning = false;
+    const stopIfCancelled = async () => { if (signal?.aborted) { try { await stop({ ...location, turnId: draft.requestId }); } catch { stopWarning = true; } } };
     let saved = await create(location);
     let before: string | null = null;
     do {
       const page = await history({ ...location, before });
-      const prior = page.entries.find(entry => entry.id === draft.requestId && entry.kind === "user");
+      const prior = page.entries.find(entry => entry.requestId === draft.requestId && entry.kind === "user");
       if (prior) {
-        const edited = draft.text !== prior.text;
+        const sentImages = prior.images?.map(image => image.id) ?? [];
+        const edited = draft.text !== prior.text || images.some(image => !sentImages.includes(image.id));
+        await saveImageDraft(`${location.projectId}:${location.sessionId}`, images.filter(image => !sentImages.includes(image.id)));
+        await stopIfCancelled();
         if (edited && saved.draft !== draft.text) await change({ ...location, revision: saved.revision, type: "draft", draft: draft.text });
-        return { location, edited };
+        return { location, edited, sentImages, stopWarning };
       }
       before = page.nextBefore;
     } while (before);
@@ -32,8 +41,11 @@ export function useStartProjectSession() {
     if (JSON.stringify(saved.settings) !== JSON.stringify(settings)) {
       saved = await change({ ...location, revision: saved.revision, type: "configure", accountKey, settings });
     }
+    await upload(location, images, signal);
     persist({ ...draft, submittedText: draft.text });
-    await run({ ...location, revision: saved.revision, requestId: draft.requestId, text: draft.text, accountKey });
-    return { location, edited: false };
+    await run({ ...location, revision: saved.revision, requestId: draft.requestId, text: draft.text, accountKey, images: images.map(image => image.id) });
+    await stopIfCancelled();
+    await saveImageDraft(`${location.projectId}:${location.sessionId}`, []).catch(() => {});
+    return { location, edited: false, sentImages: images.map(image => image.id), stopWarning };
   };
 }

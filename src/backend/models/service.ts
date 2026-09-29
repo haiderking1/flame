@@ -114,6 +114,10 @@ export class CodexModels extends EventEmitter {
     if (!model) throw new ModelsError({ message: "This model is no longer available." });
     this.saveSelection(accountKey, thinkingSelection(model, effort, this.state.selection.serviceTier));
   }
+  supportsImages(accountKey: string, modelId: string) {
+    this.requireAccount(accountKey);
+    return this.state.catalog?.models.find(model => model.id === modelId)?.supportsImages;
+  }
   validateSelection(accountKey: string, selection: ModelSelection): ModelSelection {
     this.requireAccount(accountKey);
     const model = this.state.catalog?.models.find((model) => model.id === selection.modelId);

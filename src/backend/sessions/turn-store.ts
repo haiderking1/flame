@@ -1,3 +1,5 @@
+import type { ImageStore } from "../images/store.js";
+import { fitsInputBudget } from "../turns/input-budget.js";
 import { workActivity } from "../turns/work-activity.js";
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
@@ -10,29 +12,31 @@ export const turnInvalid = (message: string) => new SessionError({ code: "INVALI
 export class TurnStore {
   constructor(private db: DatabaseSync, private read: () => SessionDocument,
     private transaction: <T>(work: () => T) => T,
-    private append: (revision: number, requestId: string, text: string) => SessionDocument) {}
+    private append: (revision: number, requestId: string, text: string, images?: readonly string[]) => SessionDocument,
+    private restoreToolResults: (id: string, output: unknown[]) => unknown[] = (_id, output) => output,
+    private images?: ImageStore) {}
   snapshot(id?: string): TurnSnapshot | null {
     this.read();
     const row = id ? this.db.prepare("SELECT *, entry_id AS entryId FROM turns WHERE id=?").get(id)
       : this.db.prepare("SELECT *, entry_id AS entryId FROM turns ORDER BY created_at DESC, rowid DESC LIMIT 1").get();
     if (!row) return null;
     const finished = row.entryId ? this.db.prepare("SELECT created_at FROM entries WHERE id=?").get(String(row.entryId)) : null;
-    const activity = workActivity(String(row.id), String(row.text), JSON.parse(String(row.output)), String(row.status), Number(row.created_at), finished ? Number(finished.created_at) : null);
+    const activity = workActivity(String(row.id), String(row.text), this.restoreToolResults(String(row.id), JSON.parse(String(row.output))), String(row.status), Number(row.created_at), finished ? Number(finished.created_at) : null);
     return Schema.decodeUnknownSync(TurnSnapshot)({ ...row, ...(activity ? { activity } : {}) });
   }
   assertIdle() {
     if (this.db.prepare("SELECT 1 FROM turns WHERE status='running'").get()) throw turnInvalid("Stop the active response before changing this session.");
   }
-  start(revision: number, id: string, text: string, settings: ModelSelection, accountKey = "") {
+  start(revision: number, id: string, text: string, settings: ModelSelection, accountKey = "", images: readonly string[] = []) {
     return this.transaction(() => {
-      const prior = this.db.prepare("SELECT e.text FROM turns t JOIN entries e ON e.id=t.user_id WHERE t.id=?").get(id);
+      const prior = this.db.prepare("SELECT e.id,e.text FROM turns t JOIN entries e ON e.id=t.user_id WHERE t.id=?").get(id);
       if (prior) {
-        if (prior.text !== text) throw turnInvalid("This submission identifier already belongs to another message.");
+        if (prior.text !== text || JSON.stringify(this.images?.list(String(prior.id)).map(image => image.id) ?? []) !== JSON.stringify(images)) throw turnInvalid("This submission identifier already belongs to another message.");
         return this.read();
       }
       this.assertIdle();
       if (this.db.prepare("SELECT 1 FROM entries WHERE request_id=?").get(id)) throw turnInvalid("This message was already saved locally. Send a new message to start a response.");
-      const document = this.append(revision, id, text);
+      const document = this.append(revision, id, text, images);
       this.db.prepare("INSERT INTO turns(id,user_id,status,settings,account_key,revision,created_at) VALUES (?,?,'running',?,?,?,?)")
         .run(id, document.leafId, JSON.stringify(settings), accountKey, document.revision, Date.now());
       return document;
@@ -115,14 +119,18 @@ export class TurnStore {
       first = false;
       size += Buffer.byteLength(String(row.text ?? "")) + Buffer.byteLength(String(row.output ?? ""));
       if (size > 8 * 1024 * 1024) throw turnInvalid("This conversation is too large. Start a new session; automatic compaction is not available yet.");
-      if (row.kind === "user") input.push({ role: "user", content: [{ type: "input_text", text: row.text }] });
+      if (row.kind === "user") {
+        const ids = this.images?.list(String(row.id)).map(image => image.id) ?? [];
+        input.push({ role: "user", content: [{ type: "input_text", text: row.text }, ...(this.images?.content(ids) ?? [])] });
+        if (!fitsInputBudget(input)) throw turnInvalid("This conversation exceeds the text or image input budget. Start a new session.");
+      }
       if (row.kind === "assistant") {
         const output: unknown[] = JSON.parse(String(row.output ?? "[]"));
         if (row.status === "completed" && output.length && row.account_key === accountKey && (!settings || JSON.parse(String(row.settings)).modelId === settings.modelId)) input.push(...output);
         else input.push({ role: "assistant", content: [{ type: "output_text", text: `${row.text}${row.status !== 'completed' ? '\n[Response interrupted.]' : ''}` }] });
       }
     }
-    if (Buffer.byteLength(JSON.stringify(input)) > 8 * 1024 * 1024) throw turnInvalid("This conversation is too large. Start a new session; automatic compaction is not available yet.");
+    if (!fitsInputBudget(input)) throw turnInvalid("This conversation is too large. Start a new session; automatic compaction is not available yet.");
     return input;
   }
 }

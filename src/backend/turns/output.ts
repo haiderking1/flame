@@ -1,4 +1,6 @@
 import { InferenceFailure } from "./sse.js";
+import { isFileTool } from "../file-tools/definitions.js";
+import { MAX_ARGUMENT_BYTES } from "../file-tools/types.js";
 
 export type InferenceResult = { text: string; output: unknown[] };
 export const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -10,10 +12,11 @@ function messageText(raw: unknown, tools = false): string {
   const item = object(raw);
   if (item.type === "reasoning") return "";
   if (tools && item.type === "function_call") {
-    if (!["bash", "bash_job"].includes(String(item.name)) || typeof item.call_id !== "string" || !item.call_id || item.call_id.length > 256 || typeof item.arguments !== "string" || Buffer.byteLength(item.arguments) > 64 * 1024) return fail("OpenAI returned an invalid tool call.");
+    const file = isFileTool(String(item.name));
+    if ((!file && !["bash", "bash_job"].includes(String(item.name))) || typeof item.call_id !== "string" || !item.call_id || item.call_id.length > 256 || typeof item.arguments !== "string" || Buffer.byteLength(item.arguments) > (file ? MAX_ARGUMENT_BYTES : 64 * 1024)) return fail("OpenAI returned an invalid tool call.");
     return "";
   }
-  if (item.type !== "message" || item.role !== "assistant" || !Array.isArray(item.content)) return fail("OpenAI returned an unsupported response item. Tools are not connected yet.");
+  if (item.type !== "message" || item.role !== "assistant" || !Array.isArray(item.content)) return fail("OpenAI returned an unsupported response item.");
   return item.content.map((rawPart) => {
     const part = object(rawPart);
     const text = part.type === "output_text" ? part.text : part.type === "refusal" ? part.refusal : undefined;

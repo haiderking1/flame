@@ -1,16 +1,20 @@
+import { useUploadImages } from "../images/useUploadImages";
+import { saveImageDraft, type DraftImage } from "../images/draft-storage";
 import { useEffect, useRef, useState } from "react";
 import { useAtomSet } from "@effect/atom-react";
 import type { ModelSelection } from "@contracts/models";
 import { fitsSessionText, SessionError, type SessionDocument, type SessionLocation, type SessionPage, type SessionSummary } from "@contracts/sessions";
 import { changeSession, createSession, deleteSession, readSession, sessionErrorMessage, sessionHistory } from "../../backend/sessions";
-import { startTurn } from "../../backend/turns";
+import { startTurn, stopTurn } from "../../backend/turns";
 import { useTurnState } from "./useTurnState";
 import { rememberActiveSession, restoreActiveSession } from "./activeSession";
 
 type Change = { type: "draft"; draft: string } | { type: "rename"; title: string }
-  | { type: "run"; requestId: string; text: string; accountKey: string }
-  | { type: "append"; requestId: string; text: string } | { type: "configure"; accountKey: string; settings: ModelSelection };
+  | { type: "run"; requestId: string; text: string; accountKey: string; images?: readonly string[] }
+  | { type: "append"; requestId: string; text: string; images?: readonly string[] } | { type: "configure"; accountKey: string; settings: ModelSelection };
 export function useSessionWorkspace() {
+  const upload = useUploadImages();
+  const stopAccepted = useAtomSet(stopTurn, { mode: "promise" });
   const run = useAtomSet(startTurn, { mode: "promise" });
   const read = useAtomSet(readSession, { mode: "promise" });
   const create = useAtomSet(createSession, { mode: "promise" });
@@ -30,7 +34,7 @@ export function useSessionWorkspace() {
   const queue = useRef(Promise.resolve());
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const navigating = useRef(false);
-  const pendingSend = useRef<{ projectId: string; sessionId: string; requestId: string; text: string } | null>(null);
+  const pendingSend = useRef<{ projectId: string; sessionId: string; requestId: string; text: string; images: readonly string[] } | null>(null);
   const restoredTurn = useRef("");
   const pendingCreate = useRef<SessionLocation | null>(null);
   function adopt(value: SessionDocument) { current.current = value; setDocument(value); }
@@ -100,21 +104,29 @@ export function useSessionWorkspace() {
       });
     } finally { navigating.current = false; setTransitioning(false); }
   }
-  async function send(message: string) {
+  async function send(message: string, images: readonly DraftImage[] = [], signal?: AbortSignal) {
     setAwaitingMessageHistory(true);
-    try { await submitMessage(message); }
+    try { await submitMessage(message, images, signal); return images.map(image => image.id); }
     finally { setAwaitingMessageHistory(false); }
   }
-  async function submitMessage(message: string) {
+  async function submitMessage(message: string, attachments: readonly DraftImage[], signal?: AbortSignal) {
+    const images = attachments.map(image => image.id);
     const previous = pendingSend.current;
-    if (!(previous?.sessionId === current.current?.sessionId && previous?.projectId === current.current?.projectId && previous?.text === message)) {
+    if (!(previous?.sessionId === current.current?.sessionId && previous?.projectId === current.current?.projectId && previous?.text === message && JSON.stringify(previous.images) === JSON.stringify(images))) {
       await flushDraft();
       if (!current.current) throw new Error("No active session");
-      pendingSend.current = { projectId: current.current.projectId, sessionId: current.current.sessionId, requestId: crypto.randomUUID(), text: message };
+      pendingSend.current = { projectId: current.current.projectId, sessionId: current.current.sessionId, requestId: crypto.randomUUID(), text: message, images };
     }
+    const target = current.current!;
+    await upload({ projectId: target.projectId, sessionId: target.sessionId }, attachments, signal);
+    if (current.current?.projectId !== target.projectId || current.current?.sessionId !== target.sessionId) throw new Error("Session changed during image upload");
     const saved = await mutate(current.current?.settings
-      ? { type: "run", requestId: pendingSend.current!.requestId, text: message, accountKey: turnState.accountKey }
-      : { type: "append", requestId: pendingSend.current!.requestId, text: message });
+      ? { type: "run", requestId: pendingSend.current!.requestId, text: message, accountKey: turnState.accountKey, images }
+      : { type: "append", requestId: pendingSend.current!.requestId, text: message, images });
+    if (signal?.aborted && target.settings) {
+      try { await stopAccepted({ projectId: target.projectId, sessionId: target.sessionId, turnId: pendingSend.current!.requestId }); }
+      catch { setError("Your message was accepted, but Stop could not be confirmed. Check the response status; do not resend it."); }
+    }
     pendingSend.current = null;
     if (text.current === message) { text.current = saved.draft; setDraft(saved.draft); }
     await refreshHistory(saved);
@@ -137,6 +149,7 @@ export function useSessionWorkspace() {
         if (isActive) adopt(saved);
       } else {
         await remove(location);
+        void saveImageDraft(`${location.projectId}:${location.sessionId}`, []).catch(() => {});
         if (isActive) {
           clearTimeout(timer.current);
           current.current = null; setDocument(null); text.current = ""; setDraft("");

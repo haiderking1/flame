@@ -1,6 +1,9 @@
+import { fitsInputBudget } from "./input-budget.js";
 import { workActivity } from "./work-activity.js";
 import { randomUUID } from "node:crypto";
 import type { BashRuntime } from "../bash/service.js";
+import type { FileTools } from "../file-tools/service.js";
+import { FilePersistenceFailure } from "../file-tools/types.js";
 import { agentLoop, notificationInput } from "./agent-loop.js";
 import { EventEmitter } from "node:events";
 import type { ModelSelection } from "../../contracts/models.js";
@@ -19,8 +22,8 @@ export class Turns extends EventEmitter {
   private active = new Map<string, Running>();
   private failedWrites = new Map<string, TurnSnapshot>();
   private closed = false;
-  constructor(private sessions: Sessions, private auth: CodexAuth, private models: Pick<CodexModels, "validateSelection">,
-    private client: Pick<CodexInferenceClient, "run"> = new CodexInferenceClient(), private bash?: BashRuntime) {
+  constructor(private sessions: Sessions, private auth: CodexAuth, private models: Pick<CodexModels, "validateSelection"> & Partial<Pick<CodexModels, "supportsImages">>,
+    private client: Pick<CodexInferenceClient, "run"> = new CodexInferenceClient(), private bash?: BashRuntime, private files?: FileTools) {
     super();
     for (const location of sessions.snapshot().sessions) {
       try { sessions.publish(sessions.turns(location, (store) => store.recover())); }
@@ -44,7 +47,8 @@ export class Turns extends EventEmitter {
         if (!document.settings) return;
         const settings = this.models.validateSelection(account.key, document.settings);
         const initial = [notificationInput(pending)];
-        const context = [...this.sessions.turns(location, store => store.context(settings, account.key)), ...this.bash.ledger(location), ...initial];
+        const context = [...this.sessions.turns(location, store => store.context(settings, account.key)), ...this.bash.ledger(location), ...(this.files?.ledger(location) ?? []), ...initial];
+        this.assertImageModel(account.key, settings, context);
         const requestId = randomUUID();
         const saved = this.sessions.turns(location, store => store.backgroundStart(requestId, settings, account.key, initial));
         this.bash.acknowledge(location, pending.map(job => job.id));
@@ -61,13 +65,17 @@ export class Turns extends EventEmitter {
     if (account) for (const location of this.sessions.snapshot().sessions) this.backgroundCompleted(location);
   };
   snapshot(location: SessionLocation) { return this.failedWrites.get(key(location)) ?? this.sessions.turns(location, (store) => store.snapshot()); }
-  async start(input: SessionLocation & { revision: number; requestId: string; text: string; accountKey: string }) {
+  private assertImageModel(account: string, settings: ModelSelection, input: unknown[]) {
+    const hasImages = input.some(item => !!item && typeof item === "object" && "content" in item && Array.isArray(item.content) && item.content.some(part => part.type === "input_image"));
+    if (hasImages && this.models.supportsImages?.(account, settings.modelId) === false) throw turnInvalid("This model does not accept images. Choose an image-capable model; your attachments have been kept.");
+  }
+  async start(input: SessionLocation & { revision: number; requestId: string; text: string; accountKey: string; images?: readonly string[] }) {
     if (this.closed) throw turnInvalid("Flame is shutting down.");
     // A retry only acknowledges the existing turn, never starts another provider request.
     const existing = this.sessions.turns(input, (store) => store.snapshot(input.requestId));
     if (existing) {
       const settings = this.sessions.read(input).settings;
-      return this.sessions.turns(input, (store) => store.start(input.revision, input.requestId, input.text, settings!));
+      return this.sessions.turns(input, (store) => store.start(input.revision, input.requestId, input.text, settings!, "", input.images));
     }
     if (this.active.size >= 4) throw turnInvalid("Four responses are already running. Stop one before starting another.");
     if (!this.auth.usageSession()) await this.auth.refresh();
@@ -79,13 +87,14 @@ export class Turns extends EventEmitter {
     const document = this.sessions.read(input);
     if (!document.settings) throw turnInvalid("Choose a model before sending to OpenAI.");
     const settings: ModelSelection = this.models.validateSelection(input.accountKey, document.settings);
-    const context = this.sessions.turns(input, (store) => store.context(settings, account.key));
-    context.push(...(this.bash?.ledger(input) ?? []));
-    context.push({ role: "user", content: [{ type: "input_text", text: input.text }] });
-    if (Buffer.byteLength(JSON.stringify(context)) > 8 * 1024 * 1024) throw turnInvalid("This conversation is too large. Start a new session; automatic compaction is not available yet.");
+    const context = this.sessions.turns(input, store => store.context(settings, account.key));
+    context.push(...(this.bash?.ledger(input) ?? []), ...(this.files?.ledger(input) ?? []));
+    context.push({ role: "user", content: [{ type: "input_text", text: input.text }, ...this.sessions.images(input, store => store.content(input.images ?? []))] });
+    this.assertImageModel(account.key, settings, context);
+    if (!fitsInputBudget(context)) throw turnInvalid("This conversation exceeds the text or image input budget. Start a new session; automatic compaction is not available yet.");
     // Recheck after credential refresh: concurrent retries may have already started this ID.
     const duplicate = this.sessions.turns(input, (store) => store.snapshot(input.requestId));
-    const saved = this.sessions.turns(input, (store) => store.start(input.revision, input.requestId, input.text, settings, account.key));
+    const saved = this.sessions.turns(input, (store) => store.start(input.revision, input.requestId, input.text, settings, account.key, input.images));
     if (duplicate) return saved;
     this.bash?.resumeSession(input);
     const controller = new AbortController();
@@ -118,12 +127,13 @@ export class Turns extends EventEmitter {
         location, location.requestId, account.key, running.controller.signal, next => { text = next; }, (next, items) => {
           try { this.sessions.turns(location, store => store.progress(location.requestId, next, items)); output = [...items]; delivered = next; this.emit("change", key(location)); }
           catch (error) { storageFailed = true; running.controller.abort(); throw error; }
-        }, initialOutput);
+        }, initialOutput, this.files);
       running.controller.signal.throwIfAborted();
       text = result.text; output = result.output;
     } catch (error) {
       status = running.controller.signal.aborted ? running.status : "failed";
       message = storageFailed ? "Could not save the response. Check disk space and permissions."
+        : error instanceof FilePersistenceFailure ? error.message
         : status === "cancelled" ? "Response stopped. It was not replayed."
         : status === "interrupted" ? "Flame stopped before this response finished. It was not replayed."
         : error instanceof InferenceFailure ? error.message : "Could not complete this response. It was not replayed.";

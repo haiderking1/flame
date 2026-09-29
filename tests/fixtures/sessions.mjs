@@ -158,24 +158,26 @@ void app.whenReady().then(async () => {
     await wait("!!document.querySelector('.work-group__commentary')");
     assert.equal(await evaluate("!!document.querySelector('.session-empty__heading')"), false, 'existing conversation stays docked after reload');
     assert.equal(inferenceCalls, 2, 'renderer reload resumes the active response without replay');
-    await wait("document.querySelector('.work-group__heading')?.textContent.includes('Ran command')");
+    await wait("document.querySelector('.work-tool__status')?.textContent.includes('Done')");
     assert.equal(readFileSync(join(a.path, 'flame-ui-marker'), 'utf8'), 'x');
     await wait("[...document.querySelectorAll('.work-group__commentary')].some(node => node.textContent.includes('Pending words continued.'))");
     assert.ok(!await evaluate("document.querySelector('.session-history').textContent.includes('const value')"), 'an open code fence remains buffered');
     await wait("document.querySelector('.session-message--assistant .markdown-code pre')?.textContent.includes('const value') && !document.querySelector('textarea').readOnly && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
-    await wait("document.querySelector('.work-group__heading')?.getAttribute('aria-expanded') === 'false'");
+    await wait("document.querySelector('.work-tool__toggle')?.getAttribute('aria-expanded') === 'false'");
     assert.equal(await evaluate("document.querySelectorAll('.work-group').length"), 1, 'work stays in its response instead of a separate job list');
     assert.ok(!await evaluate("document.querySelector('.session-message--assistant p').textContent.includes('Checking the project')"), 'commentary is not duplicated into the final answer');
-    await click('.work-group__heading');
+    assert.equal(await evaluate("document.querySelectorAll('.work-tools button[aria-expanded]').length"), 1, 'one command has one disclosure, not nested dropdowns');
     assert.ok(await evaluate("document.querySelector('.work-group__steps').firstElementChild.textContent.includes('Checking the project')"), 'narration precedes its tool call');
     await click('.work-tool__toggle');
     await wait("document.querySelector('.work-tool__output')?.textContent.includes('bash-ui-output')");
+    assert.equal(await evaluate("document.querySelectorAll('.work-tool__command').length"), 1, 'the expanded command keeps a single command label');
     if (process.env.FLAME_UI_CAPTURE_DIR) {
       await delay(150); // Let the compositor paint the expanded state before capture.
       mkdirSync(process.env.FLAME_UI_CAPTURE_DIR, { recursive: true });
       writeFileSync(join(process.env.FLAME_UI_CAPTURE_DIR, 'work-expanded.png'), (await window.webContents.capturePage()).toPNG());
     }
-    await click('.work-group__heading');
+    await click('.work-tool__toggle');
+    assert.equal(await evaluate("!!document.querySelector('.work-tool__output')"), false, 'the same disclosure collapses output');
     if (process.env.FLAME_UI_CAPTURE_DIR) {
       await delay(150);
       writeFileSync(join(process.env.FLAME_UI_CAPTURE_DIR, 'work-collapsed.png'), (await window.webContents.capturePage()).toPNG());
@@ -225,7 +227,7 @@ void app.whenReady().then(async () => {
     await type('textarea', 'Stop this', true);
     await click('[aria-label="Send message"]');
     await wait("!!document.querySelector('.composer-actions__send[aria-label=\"Stop response\"]')");
-    await wait("!!document.querySelector('.work-tools[data-running=true]')");
+    await wait("!!document.querySelector('.work-group[data-running=true] .work-tools')");
     await click('.composer-actions__send[aria-label="Stop response"]');
     await wait("document.querySelector('.session-history').textContent.includes('Response stopped') && !document.querySelector('textarea').readOnly");
     assert.equal(repository.use(sessionA, (db) => db.turns.snapshot()).status, 'cancelled');

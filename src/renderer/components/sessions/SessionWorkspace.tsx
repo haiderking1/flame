@@ -35,6 +35,7 @@ export function SessionWorkspace() {
       </div>}
       <Composer key={active ? `${active.projectId}:${active.sessionId}` : sessions.projectDraftId ?? "empty"} draft={sessions.draft} onDraftChange={sessions.editDraft}
         readOnly={!sessions.canCompose || sessions.transitioning} onSend={sessions.canCompose ? sessions.send : undefined}
+        imageLocation={sessions.imageLocation} prepareAttachments={sessions.prepareAttachments}
         onStop={sessions.running ? () => { void sessions.stop(); } : undefined} saveOnly={!sessions.projectDraftId && !active?.settings} />
     </div>
     {discarding && <SessionDialog title="Discard unsaved draft?" busy={sessions.busy} error={sessions.error}

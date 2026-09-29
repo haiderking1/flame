@@ -4,7 +4,7 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc";
 export const CatalogModel = Schema.Struct({
   id: Schema.String, name: Schema.String, description: Schema.String,
   reasoningLevels: Schema.Array(Schema.Struct({ effort: Schema.String, description: Schema.String })),
-  defaultReasoning: Schema.NullOr(Schema.String), supportsFast: Schema.Boolean,
+  defaultReasoning: Schema.NullOr(Schema.String), supportsFast: Schema.Boolean, supportsImages: Schema.optionalKey(Schema.Boolean),
 });
 export type CatalogModel = typeof CatalogModel.Type;
 export const ModelCatalog = Schema.Struct({

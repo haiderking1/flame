@@ -27,6 +27,9 @@ import { sessionHandlers } from "./sessions/handlers.js";
 import { Turns } from "./turns/service.js";
 import { turnHandlers } from "./turns/handlers.js";
 import { BashRuntime } from "./bash/service.js";
+import { Images } from "./images/service.js";
+import { imageHandlers } from "./images/handlers.js";
+import { FileTools } from "./file-tools/service.js";
 import { bashHandlers } from "./bash/handlers.js";
 import type { CodexInferenceClient } from "./turns/client.js";
 
@@ -50,14 +53,17 @@ export const startServer = (options: { filename: string; token: string; origin: 
   const modelsStore = yield* Effect.acquireRelease(Effect.sync(() => new ModelsStore(options.filename)), (store) => Effect.sync(() => store.close()));
   const models = yield* Effect.acquireRelease(Effect.sync(() => new CodexModels(auth, modelsStore, options.modelsClient)), (models) => Effect.promise(() => models.close()));
   const sessions = new Sessions(new SessionRepository(join(dirname(options.filename), "projects"), store), models);
-  const bash = yield* Effect.acquireRelease(Effect.sync(() => new BashRuntime(sessions, id => {
+  const projectPath = (id: string) => {
     const project = store.list().find(project => project.id === id);
     if (!project) throw new Error("Project not found");
     return project.path;
-  })), bash => Effect.sync(() => bash.close()));
-  const turns = yield* Effect.acquireRelease(Effect.sync(() => new Turns(sessions, auth, models, options.inferenceClient, bash)), (turns) => Effect.promise(() => turns.close()));
+  };
+  const bash = yield* Effect.acquireRelease(Effect.sync(() => new BashRuntime(sessions, projectPath)), bash => Effect.sync(() => bash.close()));
+  const files = new FileTools(sessions, projectPath);
+  const images = yield* Effect.acquireRelease(Effect.sync(() => new Images(sessions)), images => Effect.promise(() => images.close()));
+  const turns = yield* Effect.acquireRelease(Effect.sync(() => new Turns(sessions, auth, models, options.inferenceClient, bash, files)), (turns) => Effect.promise(() => turns.close()));
   const rpc = yield* RpcServer.toHttpEffectWebsocket(BackendRpc).pipe(
-    Effect.provide(bashHandlers(bash)), Effect.provide(turnHandlers(turns)), Effect.provide(sessionHandlers(sessions)), Effect.provide(modelsHandlers(models)), Effect.provide(usageHandlers(usage)), Effect.provide(authHandlers(auth)), Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
+    Effect.provide(imageHandlers(images)), Effect.provide(bashHandlers(bash)), Effect.provide(turnHandlers(turns)), Effect.provide(sessionHandlers(sessions)), Effect.provide(modelsHandlers(models)), Effect.provide(usageHandlers(usage)), Effect.provide(authHandlers(auth)), Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
   );
   const server = yield* NodeHttpServer.make(createServer, {
     host: "127.0.0.1", port: 0, gracefulShutdownTimeout: "2 seconds", websocket: { maxPayload: 64 * 1024 },

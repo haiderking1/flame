@@ -30,6 +30,7 @@
   "dependencies": {
     "@effect/atom-react": "4.0.0-rc.115",
     "@effect/platform-node": "4.0.0-rc.115",
+    "@silvia-odwyer/photon-node": "^0.3.4",
     "effect": "4.0.0-rc.115",
     "react": "19.3.0",
     "react-dom": "19.3.0",

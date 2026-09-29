@@ -28,7 +28,8 @@ export function parseModels(payload: unknown): readonly CatalogModel[] {
     const defaultReasoning = typeof entry.default_reasoning_level === "string" && efforts.has(entry.default_reasoning_level) ? entry.default_reasoning_level : null;
     seen.add(entry.slug);
     models.push({ priority: entry.priority as number, model: { id: entry.slug, name: entry.display_name,
-      description: (entry.description as string | null | undefined) ?? "", reasoningLevels, defaultReasoning, supportsFast: supportsFast(entry) } });
+      description: (entry.description as string | null | undefined) ?? "", reasoningLevels, defaultReasoning, supportsFast: supportsFast(entry),
+      ...(Array.isArray(entry.input_modalities) ? { supportsImages: entry.input_modalities.includes("image") } : {}) } });
   }
   return models.sort((a, b) => a.priority - b.priority).map(({ model }) => model);
 }

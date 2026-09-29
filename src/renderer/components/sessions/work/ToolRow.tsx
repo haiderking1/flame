@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useAtomSet } from "@effect/atom-react";
 import type { BashJob } from "@contracts/bash";
 import type { SessionLocation } from "@contracts/sessions";
 import type { WorkStep } from "@contracts/work";
 import { readBash, stopBash } from "../../../backend/bash";
+import { FileToolRow } from "./FileToolRow";
+import { ThinkingLabel } from "./ThinkingLabel";
 
 export const isRunning = (job: BashJob) => job.status === "running" || job.status === "claimed";
 export const isFailure = (job: BashJob) => job.status === "failed" || job.status === "interrupted" || (job.status === "exited" && (job.exitCode !== 0 || !!job.message));
@@ -12,7 +14,12 @@ function statusLabel(job?: BashJob) {
   if (job.status === "exited") return job.exitCode === 0 ? (job.message ? "Warning" : "Done") : `exit ${job.exitCode ?? job.signal ?? "unknown"}`;
   return job.status === "claimed" ? "Starting" : job.status;
 }
-export function ToolRow({ step, job: live, location }: { step: Extract<WorkStep, { kind: "tool" }>; job?: BashJob; location: SessionLocation }) {
+type Props = { step: Extract<WorkStep, { kind: "tool" }>; job?: BashJob; location: SessionLocation };
+export function ToolRow(props: Props) {
+  return props.step.file ? <FileToolRow step={props.step} detail={props.step.file} /> : <BashToolRow {...props} />;
+}
+function BashToolRow({ step, job: live, location }: Props) {
+  const detailId = useId();
   const [open, setOpen] = useState(false), [saved, setSaved] = useState<BashJob>();
   const [loading, setLoading] = useState(false), [stopping, setStopping] = useState(false), [error, setError] = useState<string>();
   const read = useAtomSet(readBash, { mode: "promise" }), stop = useAtomSet(stopBash, { mode: "promise" });
@@ -33,17 +40,16 @@ export function ToolRow({ step, job: live, location }: { step: Extract<WorkStep,
   }
   return <div className="work-tool" data-state={job?.status ?? "saved"} data-failed={job ? isFailure(job) : !!step.error}>
     <div className="work-tool__row">
-      <button className="work-tool__toggle" aria-expanded={open} onClick={() => { setOpen(!open); if (!open) void load(); }}>
+      <button className="work-tool__toggle" aria-expanded={open} aria-controls={detailId} onClick={() => { setOpen(!open); if (!open) void load(); }}>
         <span className="work-chevron" data-open={open} aria-hidden="true">›</span>
         <span className="work-tool__command" title={step.command}>{step.name === "bash" ? "$ " : ""}{step.command}</span>
-        <span className="work-tool__status">{job?.background ? "background · " : ""}{!job && step.error ? "Issue" : statusLabel(job)}</span>
+        <span className="work-tool__status">{job?.background ? "background · " : ""}{job && isRunning(job) ? <ThinkingLabel>{statusLabel(job)}</ThinkingLabel> : step.deferred ? "Not run" : !job && step.error ? "Issue" : statusLabel(job)}</span>
       </button>
       {job && isRunning(job) && <button className="work-tool__stop" disabled={stopping} onClick={() => void cancel()} aria-label={`Stop Bash job ${job.id}`}>{stopping ? "Stopping…" : "Stop"}</button>}
     </div>
     {error && <p className="work-tool__error" role="alert">{error} {!job && <button onClick={() => void load()}>Retry</button>}</p>}
-    {open && <div className="work-tool__detail">
-      <pre className="work-tool__full-command">{step.name === "bash" ? "$ " : ""}{step.command}</pre>
-      <pre className="work-tool__output flame-scrollbar">{loading ? "Loading output…" : job?.text || (job && isRunning(job) ? "Waiting for output…" : job ? "No output." : "No saved process output for this step.")}</pre>
+    {open && <div id={detailId} className="work-tool__detail">
+      {step.deferred ? <p>{step.deferred}</p> : <pre className="work-tool__output flame-scrollbar">{loading ? "Loading output…" : job?.text || (job && isRunning(job) ? "Waiting for output…" : job ? "No output." : "No saved process output for this step.")}</pre>}
       {job?.truncated && <p>Showing the last 64 KiB. Earlier output was discarded.</p>}
       {(job?.message || (!job && step.error)) && <p>{job?.message ?? step.error}</p>}
       {job && !job.outputClosed && !isRunning(job) && <p>Output collection is incomplete.</p>}

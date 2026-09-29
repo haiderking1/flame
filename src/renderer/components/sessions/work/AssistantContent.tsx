@@ -14,6 +14,6 @@ export function AssistantContent({ text, activity, status, jobs, location }: {
   return <>
     {activity && <WorkGroup activity={activity} running={running} jobs={jobs} location={location} status={status} />}
     {answer && <article className="session-message session-message--assistant" aria-label="Flame"><Markdown text={answer} streaming={running} />{!running && status !== "completed" && <p className="turn-status">{status === "cancelled" ? "Response stopped" : status === "interrupted" ? "Response interrupted" : "Response failed"}</p>}</article>}
-    {running && !activity && <p className="turn-status" role="status"><ThinkingLabel>{text ? "Responding" : "Thinking"}</ThinkingLabel></p>}
+    {running && !activity && <p className="turn-status" role="status"><ThinkingLabel>{text ? "Working" : "Thinking"}</ThinkingLabel></p>}
   </>;
 }

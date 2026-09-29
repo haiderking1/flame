@@ -1,4 +1,7 @@
 import { workActivity } from "../turns/work-activity.js";
+import { dirname, join } from "node:path";
+import { ImageStore } from "../images/store.js";
+import { migrateImages } from "./images-migration.js";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { Schema } from "effect";
@@ -11,6 +14,9 @@ import { TurnStore } from "./turn-store.js";
 import { migrateBash } from "./bash-migration.js";
 import { migrateSettlement } from "./settlement-migration.js";
 import { BashStore } from "../bash/store.js";
+import { FileOperationStore } from "../file-tools/store.js";
+import { migrateFileTools } from "./file-tools-migration.js";
+import { migrateLs } from "./ls-migration.js";
 
 const conflict = () => new SessionError({ code: "CONFLICT", message: "This session changed elsewhere. Reopen it before saving again. Your unsaved text has been kept." });
 const invalid = (message: string) => new SessionError({ code: "INVALID", message });
@@ -18,6 +24,8 @@ export class SessionDatabase {
   private readonly db: DatabaseSync;
   readonly turns: TurnStore;
   readonly jobs: BashStore;
+  readonly files: FileOperationStore;
+  readonly images: ImageStore;
   constructor(filename: string, private readonly location: SessionLocation, settings?: ModelSelection | null) {
     checkDatabase(filename);
     this.db = new DatabaseSync(filename);
@@ -27,13 +35,20 @@ export class SessionDatabase {
       if (version === 0 && settings !== undefined) {
         this.db.exec("PRAGMA journal_mode=WAL;");
         initializeSession(this.db, location, settings);
-      } else if (version !== 1 && version !== 2 && version !== 3 && version !== 4) throw storageError();
-      this.read(true, version !== 4);
+      } else if (version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== 6 && version !== 7) throw storageError();
+      const legacySettlement = version !== 4 && version !== 5 && version !== 6 && version !== 7;
+      this.read(true, legacySettlement);
       if (version === 0 || version === 1) migrateSession(this.db);
       if (version === 0 || version === 1 || version === 2) migrateBash(this.db);
-      if (version !== 4) migrateSettlement(this.db);
+      if (legacySettlement) migrateSettlement(this.db);
+      if (version !== 5 && version !== 6 && version !== 7) migrateFileTools(this.db);
+      if (version !== 6 && version !== 7) migrateLs(this.db);
+      if (version !== 7) migrateImages(this.db);
+      this.images = new ImageStore(this.db, join(dirname(filename), "images"), () => this.read(), work => this.transaction(work));
+      this.files = new FileOperationStore(this.db, () => this.read());
       this.jobs = new BashStore(this.db, () => this.read());
-      this.turns = new TurnStore(this.db, () => this.read(), (work) => this.transaction(work), (revision, id, text) => this.append(revision, id, text));
+      this.turns = new TurnStore(this.db, () => this.read(), (work) => this.transaction(work), (revision, id, text, images) => this.append(revision, id, text, images),
+        (id, output) => this.files.restoreResults(id, output), this.images);
     } catch (error) { this.db.close(); throw error; }
   }
   read(includeDeleted = false, legacy = false): SessionDocument {
@@ -110,19 +125,21 @@ export class SessionDatabase {
       return this.read();
     });
   }
-  append(revision: number, requestId: string, text: string) {
-    if (!text.trim() || !fitsSessionText(text)) throw invalid("Messages must contain text and fit within 48 KiB when encoded.");
+  append(revision: number, requestId: string, text: string, images: readonly string[] = []) {
+    if ((!text.trim() && !images.length) || !fitsSessionText(text)) throw invalid("Messages must contain text or images and text must fit within 48 KiB when encoded.");
     return this.transaction(() => {
-      const previous = this.db.prepare("SELECT text FROM entries WHERE request_id=?").get(requestId);
+      const previous = this.db.prepare("SELECT id,text FROM entries WHERE request_id=?").get(requestId);
       if (previous) {
-        if (previous.text !== text) throw invalid("This submission identifier was already used for a different message.");
+        if (previous.text !== text || JSON.stringify(this.images.list(String(previous.id)).map(image => image.id)) !== JSON.stringify(images)) throw invalid("This submission identifier was already used for a different message.");
         return this.read();
       }
       const current = this.expect(revision);
       this.turns.assertIdle();
+      this.images.assertIds(images);
       this.entry(current, "user", text, current.settings, requestId);
+      this.images.bind(this.read().leafId!, images);
       this.db.prepare("UPDATE session SET settled_at=NULL, draft=CASE WHEN draft=? THEN '' ELSE draft END, title=CASE WHEN custom_title=0 THEN ? ELSE title END, custom_title=1 WHERE singleton=1")
-        .run(text, text.trim().split(/\r?\n/)[0]!.replace(/\s+/g, " ").slice(0, 120).replace(/[\uD800-\uDBFF]$/, ""));
+        .run(text, text.trim().split(/\r?\n/)[0]!.replace(/\s+/g, " ").slice(0, 120).replace(/[\uD800-\uDBFF]$/, "") || "Image attachment");
       return this.read();
     });
   }
@@ -140,8 +157,9 @@ export class SessionDatabase {
       t.status AS turnStatus, t.id AS turnId, t.output AS output, t.created_at AS startedAt
       FROM chain c LEFT JOIN turns t ON t.entry_id=c.id ORDER BY c.depth DESC`).all(tip);
     const entries = rows.map((row) => {
-      const activity = row.turnId ? workActivity(String(row.turnId), String(row.text), JSON.parse(String(row.output)), String(row.turnStatus), Number(row.startedAt), Number(row.createdAt)) : undefined;
-      return Schema.decodeUnknownSync(SessionEntry)({ ...row, settings: JSON.parse(String(row.settings)), ...(activity ? { activity } : {}) });
+      const activity = row.turnId ? workActivity(String(row.turnId), String(row.text), this.files.restoreResults(String(row.turnId), JSON.parse(String(row.output))), String(row.turnStatus), Number(row.startedAt), Number(row.createdAt)) : undefined;
+      return Schema.decodeUnknownSync(SessionEntry)({ ...row, requestId: this.db.prepare("SELECT request_id FROM entries WHERE id=?").get(String(row.id))?.request_id ?? null,
+        images: this.images.list(String(row.id)), settings: JSON.parse(String(row.settings)), ...(activity ? { activity } : {}) });
     });
     return { entries, nextBefore: entries[0]?.parentId ? entries[0].id : null };
   }

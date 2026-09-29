@@ -26,7 +26,7 @@ export function WorkGroup({ activity, running, jobs, location, status }: {
     <div className="work-group__steps">
       {blocks(activity.steps).map(block => block.kind === "message"
         ? <Markdown className="work-group__commentary" key={block.id} text={block.text} streaming={running} />
-        : <ToolGroup key={block.id} working={running} steps={block.steps} turnId={activity.turnId} jobs={jobs} location={location} />)}
+        : <ToolGroup key={block.id} steps={block.steps} turnId={activity.turnId} jobs={jobs} location={location} />)}
     </div>
     {running && !active && <p className="turn-status" role="status"><ThinkingLabel>Thinking</ThinkingLabel></p>}
     {!running && status && status !== "completed" && <p className="turn-status">{status === "cancelled" ? "Work stopped" : status === "failed" ? "Work failed" : "Work interrupted"}</p>}

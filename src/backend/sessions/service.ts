@@ -1,8 +1,10 @@
+import type { ImageStore } from "../images/store.js";
 import { EventEmitter } from "node:events";
 import type { ModelSelection } from "../../contracts/models.js";
 import type { SessionDocument, SessionLocation } from "../../contracts/sessions.js";
 import type { CodexModels } from "../models/service.js";
 import type { BashStore } from "../bash/store.js";
+import type { FileOperationStore } from "../file-tools/store.js";
 import type { TurnStore } from "./turn-store.js";
 import { SessionRepository, summary } from "./repository.js";
 
@@ -15,6 +17,8 @@ export class Sessions extends EventEmitter {
   snapshot() { return this.index; }
   turns<T>(location: SessionLocation, work: (store: TurnStore) => T) { return this.repository.use(location, (db) => work(db.turns)); }
   jobs<T>(location: SessionLocation, work: (store: BashStore) => T) { return this.repository.use(location, (db) => work(db.jobs)); }
+  files<T>(location: SessionLocation, work: (store: FileOperationStore) => T) { return this.repository.use(location, (db) => work(db.files)); }
+  images<T>(location: SessionLocation, work: (store: ImageStore) => T) { return this.repository.use(location, db => work(db.images)); }
   warn(message: string) { this.index = { ...this.index, warnings: [...this.index.warnings, message] }; this.emit("change"); }
   publish(document: SessionDocument) {
     this.index = { ...this.index, sessions: [...this.index.sessions.filter((item) => item.sessionId !== document.sessionId || item.projectId !== document.projectId), summary(document)]
@@ -42,8 +46,8 @@ export class Sessions extends EventEmitter {
   settle(location: SessionLocation, revision: number, settled: boolean) {
     return this.publish(this.repository.use(location, (db) => db.settle(revision, settled)));
   }
-  append(location: SessionLocation, revision: number, requestId: string, text: string) {
-    return this.publish(this.repository.use(location, (db) => db.append(revision, requestId, text)));
+  append(location: SessionLocation, revision: number, requestId: string, text: string, images: readonly string[] = []) {
+    return this.publish(this.repository.use(location, (db) => db.append(revision, requestId, text, images)));
   }
   configure(location: SessionLocation, revision: number, accountKey: string, settings: ModelSelection) {
     const validated = this.models.validateSelection(accountKey, settings);

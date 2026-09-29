@@ -10,7 +10,7 @@ export const readSession = backendRuntime.fn((location: SessionLocation) => Effe
 export const createSession = backendRuntime.fn((location: SessionLocation) => Effect.flatMap(Backend, (client) => client["sessions.create"](location)).pipe(Effect.timeout("10 seconds")));
 export const sessionHistory = backendRuntime.fn((input: SessionLocation & { before: string | null }) => Effect.flatMap(Backend, (client) => client["sessions.history"](input)).pipe(Effect.timeout("10 seconds")));
 export type SessionChange = SessionLocation & { revision: number } & (
-  { type: "draft"; draft: string } | { type: "rename"; title: string } | { type: "settle"; settled: boolean } | { type: "append"; requestId: string; text: string }
+  { type: "draft"; draft: string } | { type: "rename"; title: string } | { type: "settle"; settled: boolean } | { type: "append"; requestId: string; text: string; images?: readonly string[] }
   | { type: "configure"; accountKey: string; settings: ModelSelection }
 );
 export const changeSession = backendRuntime.fn((input: SessionChange) => Effect.flatMap(Backend, (client) => {
