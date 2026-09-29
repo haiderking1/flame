@@ -2,10 +2,12 @@ import { fitsInputBudget } from "./input-budget.js";
 import { bashTools } from "../bash/tools.js";
 import { fileTools } from "../file-tools/definitions.js";
 import { agentInstructions } from "./instructions.js";
+import { ReasoningContext, reasoningSettings } from "./reasoning-context.js";
+import { isContextOverflow, providerFailure, readProviderError, ContextOverflow } from "./provider-errors.js";
 import type { ModelSelection } from "../../contracts/models.js";
 import { events, InferenceFailure } from "./sse.js";
 export { InferenceFailure } from "./sse.js";
-export type InferenceRequest = { accountId: string; access: string; sessionId: string; settings: ModelSelection; input: unknown[]; cwd?: string; projectInstructions?: string; tools?: boolean; fileTools?: boolean; bashTools?: boolean };
+export type InferenceRequest = { accountId: string; access: string; sessionId: string; settings: ModelSelection; input: unknown[]; cwd?: string; projectInstructions?: string; tools?: boolean; fileTools?: boolean; bashTools?: boolean; instructionsOverride?: string; promptCacheKey?: string };
 import { object, ResponseOutput, type InferenceResult } from "./output.js";
 export type { InferenceResult } from "./output.js";
 const failure = (message: string): never => { throw new InferenceFailure(message); };
@@ -17,11 +19,12 @@ export class CodexInferenceClient {
     const combined = AbortSignal.any([signal, timeout]);
     try {
       if (!fitsInputBudget(request.input)) return failure("This conversation exceeds the input limit. Start a new session.");
+      const reasoning = reasoningSettings(request.settings);
       const body = { model: request.settings.modelId, store: false, stream: true,
-        instructions: agentInstructions(request.tools === true, request.fileTools === true, request.cwd, request.projectInstructions),
+        instructions: request.instructionsOverride ?? agentInstructions(request.tools === true, request.fileTools === true, request.cwd, request.projectInstructions),
         ...(request.tools ? { tools: [...(request.bashTools !== false ? bashTools : []), ...(request.fileTools ? fileTools : [])], parallel_tool_calls: false } : {}),
-        input: request.input, include: ["reasoning.encrypted_content"], prompt_cache_key: request.sessionId,
-        ...(request.settings.effort !== null ? { reasoning: { effort: request.settings.effort, summary: "auto" } } : {}),
+        input: request.input, include: ["reasoning.encrypted_content"], prompt_cache_key: request.promptCacheKey ?? request.sessionId,
+        ...(reasoning ? { reasoning } : {}),
         ...(request.settings.serviceTier === "priority" ? { service_tier: "priority" } : {}),
       };
       const response = await this.fetcher("https://chatgpt.com/backend-api/codex/responses", {
@@ -31,6 +34,7 @@ export class CodexInferenceClient {
         body: JSON.stringify(body),
       });
       if (!response.ok) {
+        if ((response.status === 400 || response.status === 413) && isContextOverflow(await readProviderError(response))) throw new ContextOverflow("OpenAI's context window is full.");
         await response.body?.cancel();
         return failure(response.status === 401 || response.status === 403 ? "OpenAI could not authorize this response. Check your sign-in in Providers."
           : response.status === 429 ? "OpenAI rate-limited this response. Check Usage before trying again. No banked reset was used."
@@ -41,10 +45,14 @@ export class CodexInferenceClient {
       if (!response.body) return failure(`OpenAI returned no response body (HTTP ${response.status}). The request was not replayed.`);
       let size = 0, streamedText = "";
       const output = new ResponseOutput(request.tools === true);
+      const context = new ReasoningContext(request.settings.modelId);
       let previousItem: unknown;
       for await (const data of events(response.body, combined)) {
         if (data === "[DONE]") break;
         const event = object(JSON.parse(data));
+        if (["response.created", "response.in_progress", "response.completed", "response.done"].includes(String(event.type))) {
+          context.observe(object(event.response), event.type === "response.completed" || event.type === "response.done");
+        }
         if (event.type === "response.output_text.delta" || event.type === "response.refusal.delta") {
           if (typeof event.delta !== "string") return failure("OpenAI returned an invalid text event.");
           const item = event.item_id ?? event.output_index;
@@ -57,7 +65,7 @@ export class CodexInferenceClient {
         } else if (event.type === "response.output_item.done") output.record(event.output_index, event.item);
         else if (event.type === "response.completed" || event.type === "response.done") return output.complete(event.response, streamedText);
         else if (event.type === "error" || event.type === "response.failed" || event.type === "response.incomplete") {
-          return failure("OpenAI did not complete this response. The request was not replayed.");
+          throw providerFailure(event.type === "error" ? event.error ?? event : object(event.response).error);
         }
       }
       return failure("The connection ended before OpenAI confirmed completion. The request was not replayed.");

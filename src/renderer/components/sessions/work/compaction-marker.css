@@ -1,0 +1,6 @@
+.compaction-marker { margin: 16px 0; border-block: 1px solid #ffffff0d; color: #939393; font-size: 12px; }
+.compaction-marker > summary { padding: 10px 0; cursor: pointer; line-height: 1.5; }
+.compaction-marker > summary > span { margin-left: 8px; color: #6f6f6f; white-space: nowrap; }
+.compaction-marker__detail { padding-bottom: 12px; }
+.compaction-marker__detail > p { line-height: 1.5; }
+.compaction-marker__detail .markdown { font-size: 12px; }

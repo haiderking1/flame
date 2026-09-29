@@ -1,0 +1,106 @@
+.slash-commands-layer {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  --slash-overlap: calc(1rem + 1px);
+}
+
+.slash-commands {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: var(--slash-overlap);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 16px;
+  color: #f5f5f5;
+}
+
+.slash-commands::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border: 1px solid rgb(255 255 255 / 5%);
+  border-radius: 16px 16px 0 0;
+  background: rgb(17 17 17 / 80%);
+  background-image: linear-gradient(to top, transparent 0 var(--slash-overlap), rgb(0 0 0 / 18%) var(--slash-overlap), transparent calc(var(--slash-overlap) + 10px));
+  backdrop-filter: blur(12px) saturate(1.14);
+  box-shadow: 0 14px 32px -18px rgb(0 0 0 / 75%);
+  /* End the filtered backdrop inside the composer's surface, avoiding a double-glass seam. */
+  mask-image: linear-gradient(to top, transparent 0 1rem, black 1rem);
+}
+
+.slash-commands__list {
+  min-height: 0;
+  max-height: 288px;
+  padding: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 8px 24px;
+  pointer-events: auto;
+}
+
+.slash-commands__list:empty { display: none; }
+
+.slash-commands__option {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.slash-commands__option[aria-selected="true"] { background: rgb(255 255 255 / 4%); }
+.slash-commands__option[aria-disabled="true"] { cursor: default; }
+
+.slash-commands__name {
+  min-width: 0;
+  max-width: 45%;
+  flex-shrink: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slash-commands__description {
+  min-width: 0;
+  max-width: 48ch;
+  flex: 1;
+  overflow: hidden;
+  color: color-mix(in srgb, #737373 90%, white);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slash-commands__empty { margin: 0; padding: 14px 20px 28px; color: #818181; }
+
+.slash-commands__hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .slash-commands::before { background: #111; }
+}
+
+@media (max-width: 639px) {
+  .slash-commands__option { min-height: 32px; }
+}

@@ -26,7 +26,7 @@ export async function checkFloatingComposer({ evaluate, type, wait, resize }) {
   const initial = await dimensions();
   assert.equal(initial.maxWidth, '768px');
   assert.equal(Math.round(initial.width), Math.min(initial.available, 768));
-  assert.ok(Math.abs(initial.height - 144) <= 1, 'resting expanded height matches within zoom rounding');
+  assert.ok(Math.abs(initial.height - 144) <= 1, `resting expanded height matches within zoom rounding: ${initial.height}`);
   assert.equal(initial.radius, '24px'); assert.equal(initial.padding, '16px');
   assert.equal(initial.position, 'absolute'); assert.equal(initial.background, 'rgba(0, 0, 0, 0)');
   assert.equal(initial.glass, 'rgba(17, 17, 17, 0.8)'); assert.ok(initial.blur.includes('blur(12px)'));

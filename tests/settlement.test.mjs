@@ -91,14 +91,16 @@ test('version 3 databases migrate without changing content; settled sessions can
   const h = setup(t);
   h.repository.use(h.location, db => db.draft(0, 'Legacy draft'));
   const raw = new DatabaseSync(h.file);
-  raw.exec(`DROP TABLE file_operations; DROP TABLE entry_images; DROP TABLE image_chunks;
+  raw.exec(`DROP TABLE file_operations; DROP TABLE compactions; DROP TABLE entry_images; DROP TABLE image_chunks;
     DROP TABLE image_uploads; DROP TABLE images;
+    ALTER TABLE turns DROP COLUMN operation; ALTER TABLE turns DROP COLUMN phase; ALTER TABLE turns DROP COLUMN context;
+    ALTER TABLE turns DROP COLUMN context_projection;
     ALTER TABLE session DROP COLUMN settled_at; PRAGMA user_version=3;`); raw.close();
   const loaded = h.repository.use(h.location, db => db.read());
   assert.equal(loaded.settledAt, null);
   assert.equal(loaded.draft, 'Legacy draft');
   const check = new DatabaseSync(h.file);
-  assert.equal(check.prepare('PRAGMA user_version').get().user_version, 7);
+  assert.equal(check.prepare('PRAGMA user_version').get().user_version, 8);
   assert.deepEqual(check.prepare('PRAGMA foreign_key_check').all(), []); check.close();
   const settled = h.repository.use(h.location, db => db.settle(loaded.revision, true));
   h.repository.remove(h.location, settled.revision);

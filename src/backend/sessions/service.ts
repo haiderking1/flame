@@ -6,6 +6,7 @@ import type { CodexModels } from "../models/service.js";
 import type { BashStore } from "../bash/store.js";
 import type { FileOperationStore } from "../file-tools/store.js";
 import type { TurnStore } from "./turn-store.js";
+import type { CompactionStore } from "./compaction-store.js";
 import { SessionRepository, summary } from "./repository.js";
 
 export class Sessions extends EventEmitter {
@@ -16,6 +17,7 @@ export class Sessions extends EventEmitter {
   }
   snapshot() { return this.index; }
   turns<T>(location: SessionLocation, work: (store: TurnStore) => T) { return this.repository.use(location, (db) => work(db.turns)); }
+  compactions<T>(location: SessionLocation, work: (store: CompactionStore) => T) { return this.repository.use(location, db => work(db.compactions)); }
   jobs<T>(location: SessionLocation, work: (store: BashStore) => T) { return this.repository.use(location, (db) => work(db.jobs)); }
   files<T>(location: SessionLocation, work: (store: FileOperationStore) => T) { return this.repository.use(location, (db) => work(db.files)); }
   images<T>(location: SessionLocation, work: (store: ImageStore) => T) { return this.repository.use(location, db => work(db.images)); }

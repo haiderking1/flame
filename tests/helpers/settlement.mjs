@@ -41,6 +41,8 @@ export async function checkSettlement({ evaluate, wait, click, type, reload, rep
   await wait("[...document.querySelectorAll('.session-list__warning')].some(p => p.textContent.includes('Stop the active response'))");
   assert.equal(repository.use(inactive, db => db.read()).settledAt, null);
   await wait("!!document.querySelector('[aria-label=\"Send message\"]') && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
+  await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+  await wait("!!document.querySelector('.session-list__item[aria-label=\"New session\"]:not(:disabled)')");
   await click('.session-list__item[aria-label="New session"]');
   await wait("document.querySelector('textarea').value === 'Draft to keep' && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
 }

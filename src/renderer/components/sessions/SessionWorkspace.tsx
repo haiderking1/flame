@@ -23,7 +23,7 @@ export function SessionWorkspace() {
     <div ref={history} hidden={!active || empty} className="session-history flame-scrollbar" role="region" aria-label="Session history">
       <div className="session-history__content">
       {sessions.page.nextBefore && <button className="session-history__older" disabled={sessions.busy} onClick={() => { void sessions.loadOlder().catch(() => {}); }}>Load earlier messages</button>}
-      {active && <SessionTimeline key={`${active.projectId}:${active.sessionId}`} location={active} entries={sessions.page.entries} turn={sessions.turn} revision={active.revision} />}
+      {active && <SessionTimeline key={`${active.projectId}:${active.sessionId}`} location={active} entries={sessions.page.entries} compactions={sessions.page.compactions} turn={sessions.turn} revision={active.revision} />}
       </div>
     </div>
     <div ref={composer} className="workspace__composer" data-empty={empty || undefined} data-save-state={saveState}>
@@ -36,7 +36,7 @@ export function SessionWorkspace() {
       <Composer key={active ? `${active.projectId}:${active.sessionId}` : sessions.projectDraftId ?? "empty"} draft={sessions.draft} onDraftChange={sessions.editDraft}
         readOnly={!sessions.canCompose || sessions.transitioning} onSend={sessions.canCompose ? sessions.send : undefined}
         imageLocation={sessions.imageLocation} prepareAttachments={sessions.prepareAttachments}
-        onStop={sessions.running ? () => { void sessions.stop(); } : undefined} saveOnly={!sessions.projectDraftId && !active?.settings} />
+        onStop={sessions.running ? () => { void sessions.stop(); } : undefined} stopLabel={sessions.turn?.phase === "compacting" ? "Stop compaction" : "Stop response"} saveOnly={!sessions.projectDraftId && !active?.settings} />
     </div>
     {discarding && <SessionDialog title="Discard unsaved draft?" busy={sessions.busy} error={sessions.error}
       onClose={close} action="Discard draft" destructive onSubmit={() => { sessions.discardDraft(); close(); }}>

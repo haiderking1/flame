@@ -15,7 +15,7 @@ The image migration extends session database version 6 to version 7, preserving 
 
 History exposes image metadata and checksums, not base64 provider payloads or credentials. Model context reconstructs the prepared image as a real Responses `input_image` data URL with `detail: auto`, alongside text and an image dimension hint. Originals are not injected into model context. Models explicitly known to be text-only reject attachments; an unknown capability is not silently treated as text-only. Provider errors remain truthful, with no blind resend.
 
-Image payloads have a separate 64 MiB request budget; ordinary text/tool input retains its 8 MiB bound. Image bytes are not treated as ordinary text for this transport budget. Opening or reloading the renderer does not send images again.
+Image payloads have a separate 64 MiB request budget; ordinary text/tool input retains its 8 MiB bound. Images are not counted as base64 text tokens. Existing context projection/compaction carries visual content through its image-aware path. Opening or reloading the renderer does not send images again.
 
 Deleting a session moves its image files with its session-owned storage into the existing retirement/trash lifecycle. Unsent image discard cancels preparation and removes upload rows/private image files. Shutdown aborts preparation workers. Stop during sending prevents submission where possible; if acceptance races Stop, the client requests cancellation of that accepted turn instead of treating Stop as rollback.
 

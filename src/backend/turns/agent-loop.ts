@@ -4,18 +4,20 @@ import type { FileTools } from "../file-tools/service.js";
 import { isFileTool } from "../file-tools/definitions.js";
 import { calls, executeCall, jobResult } from "../bash/tools.js";
 import { InferenceFailure, type CodexInferenceClient, type InferenceRequest } from "./client.js";
+import type { CompactionRuntime } from "../compaction/runtime.js";
 import { agentContext } from "./agent-context.js";
 export function notificationInput(jobs: Parameters<typeof jobResult>[0][]) {
   return { role: "user", content: [{ type: "input_text", text: `[Automatic Bash completion notification, not a new human request]\n${JSON.stringify(jobs.map(jobResult))}\nContinue the existing task if needed. Do not rerun completed commands.` }] };
 }
 export async function agentLoop(client: Pick<CodexInferenceClient, "run">, request: InferenceRequest,
   runtime: BashRuntime | undefined, location: SessionLocation, turnId: string, account: string, signal: AbortSignal,
-  onText: (text: string) => void, checkpoint: (text: string, output: unknown[]) => void, initialOutput: unknown[] = [], files?: FileTools) {
+  onText: (text: string) => void, checkpoint: (text: string, output: unknown[]) => void, initialOutput: unknown[] = [], files?: FileTools, context?: CompactionRuntime) {
   let text = "";
   const output = [...initialOutput];
   const input = [...request.input];
   const seen = new Set<string>();
   const prepared = await agentContext(location, runtime, files, signal);
+  context?.setOverhead(prepared.overhead);
   for (let step = 0; step < 32; step++) {
     signal.throwIfAborted();
     const prefix = text ? `${text}\n\n` : "";
@@ -28,11 +30,12 @@ export async function agentLoop(client: Pick<CodexInferenceClient, "run">, reque
       if (Buffer.byteLength(streamed) > 1024 * 1024) throw new InferenceFailure("The agent response exceeded 1 MiB.");
       onText(streamed);
     };
-    const response = await client.run(current, stream, signal);
+    const response = context ? await context.run(current, stream) : await client.run(current, stream, signal);
     signal.throwIfAborted();
     text = response.text ? prefix + response.text : text;
     onText(text);
     output.push(...response.output); input.push(...response.output);
+    context?.completed(response);
     checkpoint(text, output);
     const tools = calls(response.output);
     if (tools.length && !runtime && !files) throw new InferenceFailure("Tools are not available in this session.");
@@ -45,11 +48,13 @@ export async function agentLoop(client: Pick<CodexInferenceClient, "run">, reque
         : runtime ? await executeCall(runtime, location, turnId, account, tool, signal) : { error: "Bash is not available in this session." };
       const item = { type: "function_call_output", call_id: tool.call_id, output: JSON.stringify(result) };
       output.push(item); input.push(item); checkpoint(text, output);
+      context?.append([item]);
     }
     const pending = runtime?.pending(location, account) ?? [];
     if (pending.length) {
       const notice = notificationInput(pending);
       output.push(notice); input.push(notice);
+      context?.append([notice]);
       checkpoint(text, output);
       runtime!.acknowledge(location, pending.map(job => job.id));
     }

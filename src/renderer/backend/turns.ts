@@ -11,3 +11,5 @@ export const startTurn = backendRuntime.fn((input: SessionLocation & { revision:
   Effect.flatMap(Backend, (client) => client["turns.start"](input)).pipe(Effect.timeout("20 seconds")));
 export const stopTurn = backendRuntime.fn((input: SessionLocation & { turnId: string }) =>
   Effect.flatMap(Backend, (client) => client["turns.stop"](input)).pipe(Effect.timeout("10 seconds")));
+export const compactTurn = backendRuntime.fn((input: SessionLocation & { revision: number; requestId: string; accountKey: string }) =>
+  Effect.flatMap(Backend, (client) => client["turns.compact"](input)).pipe(Effect.timeout("20 seconds")));

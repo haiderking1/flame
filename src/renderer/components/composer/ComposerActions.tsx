@@ -1,3 +1,4 @@
+import { ContextStatus } from "./ContextStatus";
 import "./composer-actions.css";
 
 type ComposerActionsProps = {
@@ -25,6 +26,7 @@ export function ComposerActions({ canSend, sending, connected, saveOnly = false,
           <path d="m20 11-8.5 8.5a5 5 0 0 1-7.07-7.07l9.2-9.2a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.2a2 2 0 0 1-2.83-2.83L15 6.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
+      <ContextStatus />
       <button
         className="composer-actions__send"
         data-active={sending || Boolean(onStop)}

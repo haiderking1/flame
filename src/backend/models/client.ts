@@ -4,7 +4,7 @@ import { parseModels } from "./payload.js";
 
 export type ModelsSession = NonNullable<ReturnType<CodexAuth["usageSession"]>>;
 // Catalog protocol compatibility, not Flame's application version. Never used to pin model IDs.
-export const CATALOG_VERSION = "0.157.1";
+export const CATALOG_VERSION = "0.159.0";
 export const CATALOG_URL = `https://chatgpt.com/backend-api/codex/models?client_version=${CATALOG_VERSION}`;
 const MAX_BYTES = 4 * 1024 * 1024;
 

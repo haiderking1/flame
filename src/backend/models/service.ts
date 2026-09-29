@@ -118,6 +118,12 @@ export class CodexModels extends EventEmitter {
     this.requireAccount(accountKey);
     return this.state.catalog?.models.find(model => model.id === modelId)?.supportsImages;
   }
+  contextWindow(accountKey: string, modelId: string) {
+    this.requireAccount(accountKey);
+    // Older caches have no capacity metadata; use a conservative window until
+    // the live catalog supplies the model's standard (not experimental) limit.
+    return this.state.catalog?.models.find(model => model.id === modelId)?.contextWindow ?? 128_000;
+  }
   validateSelection(accountKey: string, selection: ModelSelection): ModelSelection {
     this.requireAccount(accountKey);
     const model = this.state.catalog?.models.find((model) => model.id === selection.modelId);

@@ -17,6 +17,8 @@ import { BashStore } from "../bash/store.js";
 import { FileOperationStore } from "../file-tools/store.js";
 import { migrateFileTools } from "./file-tools-migration.js";
 import { migrateLs } from "./ls-migration.js";
+import { migrateCompaction } from "./compaction-migration.js";
+import { CompactionStore } from "./compaction-store.js";
 
 const conflict = () => new SessionError({ code: "CONFLICT", message: "This session changed elsewhere. Reopen it before saving again. Your unsaved text has been kept." });
 const invalid = (message: string) => new SessionError({ code: "INVALID", message });
@@ -26,6 +28,7 @@ export class SessionDatabase {
   readonly jobs: BashStore;
   readonly files: FileOperationStore;
   readonly images: ImageStore;
+  readonly compactions: CompactionStore;
   constructor(filename: string, private readonly location: SessionLocation, settings?: ModelSelection | null) {
     checkDatabase(filename);
     this.db = new DatabaseSync(filename);
@@ -35,20 +38,22 @@ export class SessionDatabase {
       if (version === 0 && settings !== undefined) {
         this.db.exec("PRAGMA journal_mode=WAL;");
         initializeSession(this.db, location, settings);
-      } else if (version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== 6 && version !== 7) throw storageError();
-      const legacySettlement = version !== 4 && version !== 5 && version !== 6 && version !== 7;
+      } else if (version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8) throw storageError();
+      const legacySettlement = version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8;
       this.read(true, legacySettlement);
       if (version === 0 || version === 1) migrateSession(this.db);
       if (version === 0 || version === 1 || version === 2) migrateBash(this.db);
       if (legacySettlement) migrateSettlement(this.db);
-      if (version !== 5 && version !== 6 && version !== 7) migrateFileTools(this.db);
-      if (version !== 6 && version !== 7) migrateLs(this.db);
-      if (version !== 7) migrateImages(this.db);
+      if (version !== 5 && version !== 6 && version !== 7 && version !== 8) migrateFileTools(this.db);
+      if (version !== 6 && version !== 7 && version !== 8) migrateLs(this.db);
+      if (version !== 7 && version !== 8) migrateImages(this.db);
+      if (version !== 8) migrateCompaction(this.db);
       this.images = new ImageStore(this.db, join(dirname(filename), "images"), () => this.read(), work => this.transaction(work));
       this.files = new FileOperationStore(this.db, () => this.read());
       this.jobs = new BashStore(this.db, () => this.read());
+      this.compactions = new CompactionStore(this.db, () => this.read(), work => this.transaction(work), this.images);
       this.turns = new TurnStore(this.db, () => this.read(), (work) => this.transaction(work), (revision, id, text, images) => this.append(revision, id, text, images),
-        (id, output) => this.files.restoreResults(id, output), this.images);
+        (id, output) => this.files.restoreResults(id, output), this.images, this.compactions);
     } catch (error) { this.db.close(); throw error; }
   }
   read(includeDeleted = false, legacy = false): SessionDocument {
@@ -56,7 +61,11 @@ export class SessionDatabase {
       updated_at AS updatedAt, revision, draft, settings, deleted, leaf_id AS leafId, ${legacy ? "NULL" : "settled_at"} AS settledAt FROM session WHERE singleton = 1`).get();
     if (!row || row.sessionId !== this.location.sessionId || row.projectId !== this.location.projectId) throw storageError();
     if (!includeDeleted && row.deleted === 1) throw missing();
-    return Schema.decodeUnknownSync(SessionDocument)({ ...row, settings: JSON.parse(String(row.settings)) });
+    const hasCompaction = this.db.prepare("PRAGMA user_version").get()?.user_version === 8;
+    const meter = hasCompaction ? this.db.prepare("SELECT context,settings FROM turns WHERE context IS NOT NULL ORDER BY created_at DESC,rowid DESC LIMIT 1").get() : null;
+    const settings = JSON.parse(String(row.settings));
+    const storedContext = meter && JSON.parse(String(meter.settings)).modelId === settings?.modelId ? meter.context : null;
+    return Schema.decodeUnknownSync(SessionDocument)({ ...row, settings, ...(storedContext ? { context: JSON.parse(String(storedContext)) } : {}) });
   }
   private transaction<T>(work: () => T): T {
     if (this.db.isTransaction) return work();
@@ -161,7 +170,12 @@ export class SessionDatabase {
       return Schema.decodeUnknownSync(SessionEntry)({ ...row, requestId: this.db.prepare("SELECT request_id FROM entries WHERE id=?").get(String(row.id))?.request_id ?? null,
         images: this.images.list(String(row.id)), settings: JSON.parse(String(row.settings)), ...(activity ? { activity } : {}) });
     });
-    return { entries, nextBefore: entries[0]?.parentId ? entries[0].id : null };
+    const compactions = this.compactions.list();
+    // A checkpoint after the current leaf lives on the newest page; older
+    // markers are returned only alongside their original capture entry.
+    const ids = new Set(entries.map(entry => entry.id));
+    return { entries, nextBefore: entries[0]?.parentId ? entries[0].id : null,
+      compactions: compactions.filter(checkpoint => checkpoint.leafId === null ? before === null : ids.has(checkpoint.leafId)) };
   }
   close() { this.db.close(); }
 }

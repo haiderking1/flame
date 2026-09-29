@@ -1,5 +1,5 @@
 import type { ImageStore } from "../images/store.js";
-import { fitsInputBudget } from "../turns/input-budget.js";
+import { ContextInfo, type ContextInfo as Context } from "../../contracts/compaction.js";
 import { workActivity } from "../turns/work-activity.js";
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
@@ -7,6 +7,9 @@ import { Schema } from "effect";
 import { TurnSnapshot, type TurnStatus } from "../../contracts/turns.js";
 import { SessionError, type SessionDocument } from "../../contracts/sessions.js";
 import type { ModelSelection } from "../../contracts/models.js";
+import type { CompactionStore } from "./compaction-store.js";
+import { ManualTurnStore } from "./manual-turn-store.js";
+import { outputDigest } from "./context-items.js";
 
 export const turnInvalid = (message: string) => new SessionError({ code: "INVALID", message });
 export class TurnStore {
@@ -14,7 +17,32 @@ export class TurnStore {
     private transaction: <T>(work: () => T) => T,
     private append: (revision: number, requestId: string, text: string, images?: readonly string[]) => SessionDocument,
     private restoreToolResults: (id: string, output: unknown[]) => unknown[] = (_id, output) => output,
-    private images?: ImageStore) {}
+    private images?: ImageStore, private compactions?: CompactionStore) {}
+  manualStart(revision: number, id: string, settings: ModelSelection, accountKey: string) {
+    return new ManualTurnStore(this.db, this.read, this.transaction, () => this.assertIdle()).start(revision, id, settings, accountKey);
+  }
+  manualFinish(id: string, status: Exclude<TurnStatus, "running">, message: string | null) {
+    return new ManualTurnStore(this.db, this.read, this.transaction, () => this.assertIdle()).finish(id, status, message);
+  }
+  phase(id: string, phase: "responding" | "compacting", context?: Context, ledgerTokens = 0, overhead = 0) {
+    this.read();
+    if (context) Schema.decodeUnknownSync(ContextInfo)(context);
+    if (!Number.isSafeInteger(ledgerTokens) || ledgerTokens < 0) throw turnInvalid("Invalid context ledger token count.");
+    if (!Number.isSafeInteger(overhead) || overhead < 0) throw turnInvalid("Invalid context instruction token count.");
+    this.transaction(() => {
+      let projection: string | null = null;
+      if (context && this.compactions) {
+        const turn = this.db.prepare("SELECT settings,account_key FROM turns WHERE id=? AND status='running'").get(id);
+        if (!turn) throw turnInvalid("The active operation changed before its context could be saved.");
+        const captured = this.compactions.capture(JSON.parse(String(turn.settings)), String(turn.account_key));
+        projection = JSON.stringify({ checkpointId: captured.checkpointId, count: captured.input.length, digest: outputDigest(captured.input), ledgerTokens, overhead });
+      }
+      const saved = context
+        ? this.db.prepare("UPDATE turns SET phase=?,context=?,context_projection=? WHERE id=? AND status='running'").run(phase, JSON.stringify(context), projection, id)
+        : this.db.prepare("UPDATE turns SET phase=? WHERE id=? AND status='running'").run(phase, id);
+      if (saved.changes !== 1) throw turnInvalid("The active operation changed before its context could be saved.");
+    });
+  }
   snapshot(id?: string): TurnSnapshot | null {
     this.read();
     const row = id ? this.db.prepare("SELECT *, entry_id AS entryId FROM turns WHERE id=?").get(id)
@@ -22,7 +50,8 @@ export class TurnStore {
     if (!row) return null;
     const finished = row.entryId ? this.db.prepare("SELECT created_at FROM entries WHERE id=?").get(String(row.entryId)) : null;
     const activity = workActivity(String(row.id), String(row.text), this.restoreToolResults(String(row.id), JSON.parse(String(row.output))), String(row.status), Number(row.created_at), finished ? Number(finished.created_at) : null);
-    return Schema.decodeUnknownSync(TurnSnapshot)({ ...row, ...(activity ? { activity } : {}) });
+    const { context: storedContext, ...snapshot } = row;
+    return Schema.decodeUnknownSync(TurnSnapshot)({ ...snapshot, ...(storedContext ? { context: JSON.parse(String(storedContext)) } : {}), ...(activity ? { activity } : {}) });
   }
   assertIdle() {
     if (this.db.prepare("SELECT 1 FROM turns WHERE status='running'").get()) throw turnInvalid("Stop the active response before changing this session.");
@@ -31,6 +60,7 @@ export class TurnStore {
     return this.transaction(() => {
       const prior = this.db.prepare("SELECT e.id,e.text FROM turns t JOIN entries e ON e.id=t.user_id WHERE t.id=?").get(id);
       if (prior) {
+        if (this.db.prepare("SELECT operation FROM turns WHERE id=?").get(id)?.operation !== "response") throw turnInvalid("This submission identifier already belongs to a compaction operation.");
         if (prior.text !== text || JSON.stringify(this.images?.list(String(prior.id)).map(image => image.id) ?? []) !== JSON.stringify(images)) throw turnInvalid("This submission identifier already belongs to another message.");
         return this.read();
       }
@@ -50,7 +80,7 @@ export class TurnStore {
         this.db.prepare("UPDATE session SET settled_at=NULL, revision=revision+1, updated_at=? WHERE singleton=1").run(Date.now());
         current = this.read();
       }
-      const prior = this.db.prepare("SELECT user_id FROM turns ORDER BY created_at DESC,rowid DESC LIMIT 1").get();
+      const prior = this.db.prepare("SELECT user_id FROM turns WHERE operation='response' ORDER BY created_at DESC,rowid DESC LIMIT 1").get();
       if (!prior) throw turnInvalid("No prior user request for this background notification.");
       this.db.prepare("INSERT INTO turns(id,user_id,status,settings,account_key,output,revision,created_at) VALUES (?,?,'running',?,?,?,?,?)")
         .run(id, String(prior.user_id), JSON.stringify(settings), accountKey, JSON.stringify(output), current.revision, Date.now());
@@ -59,9 +89,11 @@ export class TurnStore {
   }
   progress(id: string, text: string, output: unknown[]) {
     const encoded = JSON.stringify(output);
-    if (Buffer.byteLength(encoded) > 8 * 1024 * 1024) throw turnInvalid("Agent history exceeds 8 MiB. Start a new session.");
-    this.checkpoint(id, text);
-    this.db.prepare("UPDATE turns SET output=? WHERE id=? AND status='running'").run(encoded, id);
+    if (Buffer.byteLength(encoded) > 256 * 1024 * 1024) throw turnInvalid("The active response exceeded Flame's durable transcript limit.");
+    this.transaction(() => {
+      this.checkpoint(id, text);
+      this.db.prepare("UPDATE turns SET output=? WHERE id=? AND status='running'").run(encoded, id);
+    });
   }
   checkpoint(id: string, text: string) {
     this.read();
@@ -73,6 +105,7 @@ export class TurnStore {
       const current = this.read();
       const turn = this.db.prepare("SELECT * FROM turns WHERE id=? AND status='running'").get(id);
       if (!turn) return current;
+      if (turn.operation === "compaction") return this.manualFinish(id, status, message);
       let entryId: string | null = null;
       if (text || output.length) {
         entryId = randomUUID();
@@ -107,30 +140,7 @@ export class TurnStore {
     });
   }
   context(settings?: ModelSelection, accountKey = ""): unknown[] {
-    const current = this.read();
-    const rows = this.db.prepare(`WITH RECURSIVE chain AS (
-      SELECT *,0 AS depth FROM entries WHERE id=? UNION ALL
-      SELECT e.*,c.depth+1 FROM entries e JOIN chain c ON e.id=c.parent_id WHERE c.depth<10000
-    ) SELECT c.*,t.output,t.status,t.account_key FROM chain c LEFT JOIN turns t ON t.entry_id=c.id ORDER BY depth DESC`).iterate(current.leafId);
-    const input: unknown[] = [];
-    let first = true, size = 0;
-    for (const row of rows) {
-      if (first && row.parent_id) throw turnInvalid("This conversation is too large. Start a new session; automatic compaction is not available yet.");
-      first = false;
-      size += Buffer.byteLength(String(row.text ?? "")) + Buffer.byteLength(String(row.output ?? ""));
-      if (size > 8 * 1024 * 1024) throw turnInvalid("This conversation is too large. Start a new session; automatic compaction is not available yet.");
-      if (row.kind === "user") {
-        const ids = this.images?.list(String(row.id)).map(image => image.id) ?? [];
-        input.push({ role: "user", content: [{ type: "input_text", text: row.text }, ...(this.images?.content(ids) ?? [])] });
-        if (!fitsInputBudget(input)) throw turnInvalid("This conversation exceeds the text or image input budget. Start a new session.");
-      }
-      if (row.kind === "assistant") {
-        const output: unknown[] = JSON.parse(String(row.output ?? "[]"));
-        if (row.status === "completed" && output.length && row.account_key === accountKey && (!settings || JSON.parse(String(row.settings)).modelId === settings.modelId)) input.push(...output);
-        else input.push({ role: "assistant", content: [{ type: "output_text", text: `${row.text}${row.status !== 'completed' ? '\n[Response interrupted.]' : ''}` }] });
-      }
-    }
-    if (!fitsInputBudget(input)) throw turnInvalid("This conversation is too large. Start a new session; automatic compaction is not available yet.");
-    return input;
+    if (!this.compactions) throw turnInvalid("Conversation context storage is unavailable.");
+    return this.compactions.capture(settings, accountKey).input;
   }
 }

@@ -27,9 +27,11 @@ export function parseModels(payload: unknown): readonly CatalogModel[] {
     if (entry.default_reasoning_level != null && !text(entry.default_reasoning_level, 64)) return invalid();
     const defaultReasoning = typeof entry.default_reasoning_level === "string" && efforts.has(entry.default_reasoning_level) ? entry.default_reasoning_level : null;
     seen.add(entry.slug);
+    if (entry.context_window != null && (!Number.isSafeInteger(entry.context_window) || (entry.context_window as number) <= 0)) return invalid();
     models.push({ priority: entry.priority as number, model: { id: entry.slug, name: entry.display_name,
       description: (entry.description as string | null | undefined) ?? "", reasoningLevels, defaultReasoning, supportsFast: supportsFast(entry),
-      ...(Array.isArray(entry.input_modalities) ? { supportsImages: entry.input_modalities.includes("image") } : {}) } });
+      ...(Array.isArray(entry.input_modalities) ? { supportsImages: entry.input_modalities.includes("image") } : {}),
+      ...(typeof entry.context_window === "number" ? { contextWindow: entry.context_window } : {}) } });
   }
   return models.sort((a, b) => a.priority - b.priority).map(({ model }) => model);
 }

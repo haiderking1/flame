@@ -1,4 +1,3 @@
-import { fitsInputBudget } from "./input-budget.js";
 import { workActivity } from "./work-activity.js";
 import { randomUUID } from "node:crypto";
 import type { BashRuntime } from "../bash/service.js";
@@ -15,6 +14,8 @@ import type { Sessions } from "../sessions/service.js";
 import { turnInvalid } from "../sessions/turn-store.js";
 import { CodexInferenceClient, InferenceFailure } from "./client.js";
 import { paragraphBoundary } from "./paragraphs.js";
+import { turnContext } from "./compaction-context.js";
+import { agentContext } from "./agent-context.js";
 
 type Running = { controller: AbortController; task: Promise<void>; account: string; epoch: number; status: "cancelled" | "interrupted" };
 const key = (location: SessionLocation) => `${location.projectId}:${location.sessionId}`;
@@ -22,7 +23,7 @@ export class Turns extends EventEmitter {
   private active = new Map<string, Running>();
   private failedWrites = new Map<string, TurnSnapshot>();
   private closed = false;
-  constructor(private sessions: Sessions, private auth: CodexAuth, private models: Pick<CodexModels, "validateSelection"> & Partial<Pick<CodexModels, "supportsImages">>,
+  constructor(private sessions: Sessions, private auth: CodexAuth, private models: Pick<CodexModels, "validateSelection"> & Partial<Pick<CodexModels, "supportsImages" | "contextWindow">>,
     private client: Pick<CodexInferenceClient, "run"> = new CodexInferenceClient(), private bash?: BashRuntime, private files?: FileTools) {
     super();
     for (const location of sessions.snapshot().sessions) {
@@ -47,15 +48,13 @@ export class Turns extends EventEmitter {
         if (!document.settings) return;
         const settings = this.models.validateSelection(account.key, document.settings);
         const initial = [notificationInput(pending)];
-        const context = [...this.sessions.turns(location, store => store.context(settings, account.key)), ...this.bash.ledger(location), ...(this.files?.ledger(location) ?? []), ...initial];
-        this.assertImageModel(account.key, settings, context);
         const requestId = randomUUID();
         const saved = this.sessions.turns(location, store => store.backgroundStart(requestId, settings, account.key, initial));
         this.bash.acknowledge(location, pending.map(job => job.id));
         const running: Running = { controller: new AbortController(), task: Promise.resolve(), account: account.key, epoch: account.epoch, status: "cancelled" };
         this.active.set(key(location), running);
         this.sessions.publish(saved); this.emit("change", key(location));
-        running.task = Promise.resolve().then(() => this.execute({ ...location, requestId }, settings, context, account, running, initial));
+        running.task = Promise.resolve().then(() => this.execute({ ...location, requestId }, settings, account, running, initial));
       } catch { this.sessions.warn("A background Bash notification could not be delivered. Its job record was preserved; no command was replayed."); }
     });
   };
@@ -87,11 +86,7 @@ export class Turns extends EventEmitter {
     const document = this.sessions.read(input);
     if (!document.settings) throw turnInvalid("Choose a model before sending to OpenAI.");
     const settings: ModelSelection = this.models.validateSelection(input.accountKey, document.settings);
-    const context = this.sessions.turns(input, store => store.context(settings, account.key));
-    context.push(...(this.bash?.ledger(input) ?? []), ...(this.files?.ledger(input) ?? []));
-    context.push({ role: "user", content: [{ type: "input_text", text: input.text }, ...this.sessions.images(input, store => store.content(input.images ?? []))] });
-    this.assertImageModel(account.key, settings, context);
-    if (!fitsInputBudget(context)) throw turnInvalid("This conversation exceeds the text or image input budget. Start a new session; automatic compaction is not available yet.");
+    this.assertImageModel(account.key, settings, [{ content: this.sessions.images(input, store => store.content(input.images ?? [])) }]);
     // Recheck after credential refresh: concurrent retries may have already started this ID.
     const duplicate = this.sessions.turns(input, (store) => store.snapshot(input.requestId));
     const saved = this.sessions.turns(input, (store) => store.start(input.revision, input.requestId, input.text, settings, account.key, input.images));
@@ -101,11 +96,38 @@ export class Turns extends EventEmitter {
     const running: Running = { controller, task: Promise.resolve(), account: account.key, epoch: account.epoch, status: "cancelled" };
     this.active.set(key(input), running);
     this.sessions.publish(saved); this.emit("change", key(input));
-    running.task = Promise.resolve().then(() => this.execute(input, settings, context, account, running));
+    running.task = Promise.resolve().then(() => this.execute(input, settings, account, running));
     return saved;
   }
-  private async execute(location: SessionLocation & { requestId: string }, settings: ModelSelection, input: unknown[],
-    account: NonNullable<ReturnType<CodexAuth["usageSession"]>>, running: Running, initialOutput: unknown[] = []) {
+  async compact(input: SessionLocation & { revision: number; requestId: string; accountKey: string }) {
+    if (this.closed) throw turnInvalid("Flame is shutting down.");
+    const existing = this.sessions.turns(input, store => store.snapshot(input.requestId));
+    if (existing) {
+      if (existing.operation !== "compaction") throw turnInvalid("This request identifier belongs to a response.");
+      return this.sessions.read(input);
+    }
+    if (this.active.size >= 4) throw turnInvalid("Four responses are already running. Stop one before compacting.");
+    if (!this.auth.usageSession()) await this.auth.refresh();
+    const account = this.auth.usageSession();
+    if (this.closed || !account || account.key !== input.accountKey) throw turnInvalid("Account changed or disconnected. Check Providers before compacting.");
+    if (this.active.size >= 4) throw turnInvalid("Four responses are already running. Stop one before compacting.");
+    const document = this.sessions.read(input);
+    if (!document.settings) throw turnInvalid("Choose a model before compacting.");
+    const settings = this.models.validateSelection(account.key, document.settings);
+    const duplicate = this.sessions.turns(input, store => store.snapshot(input.requestId));
+    if (duplicate) {
+      if (duplicate.operation !== "compaction") throw turnInvalid("This request identifier belongs to a response.");
+      return this.sessions.read(input);
+    }
+    const saved = this.sessions.turns(input, store => store.manualStart(input.revision, input.requestId, settings, account.key));
+    const running: Running = { controller: new AbortController(), task: Promise.resolve(), account: account.key, epoch: account.epoch, status: "cancelled" };
+    this.active.set(key(input), running);
+    this.sessions.publish(saved); this.emit("change", key(input));
+    running.task = Promise.resolve().then(() => this.execute(input, settings, account, running, [], true));
+    return saved;
+  }
+  private async execute(location: SessionLocation & { requestId: string }, settings: ModelSelection,
+    account: NonNullable<ReturnType<CodexAuth["usageSession"]>>, running: Running, initialOutput: unknown[] = [], manual = false) {
     const startedAt = Date.now();
     let text = "", delivered = "", storageFailed = false;
     const checkpoint = () => {
@@ -120,23 +142,33 @@ export class Turns extends EventEmitter {
     };
     const interval = setInterval(checkpoint, 400);
     let status: "completed" | "cancelled" | "failed" | "interrupted" = "completed";
-    let message: string | null = null, output: unknown[] = [];
+    let message: string | null = null, output: unknown[] = [...initialOutput];
     try {
       running.controller.signal.throwIfAborted();
-      const result = await agentLoop(this.client, { ...account, settings, input, sessionId: location.sessionId }, this.bash,
-        location, location.requestId, account.key, running.controller.signal, next => { text = next; }, (next, items) => {
-          try { this.sessions.turns(location, store => store.progress(location.requestId, next, items)); output = [...items]; delivered = next; this.emit("change", key(location)); }
-          catch (error) { storageFailed = true; running.controller.abort(); throw error; }
-        }, initialOutput, this.files);
-      running.controller.signal.throwIfAborted();
-      text = result.text; output = result.output;
+      const request = { ...account, settings, input: [], sessionId: location.sessionId };
+      const context = turnContext(this.sessions, this.models, this.client, location, settings, request, running.controller.signal, manual,
+        account.key, () => output.length, () => [...(this.bash?.ledger(location) ?? []), ...(this.files?.ledger(location) ?? [])], () => this.emit("change", key(location)));
+      this.assertImageModel(account.key, settings, context.input);
+      if (manual) {
+        context.setOverhead((await agentContext(location, this.bash, this.files, running.controller.signal)).overhead);
+        await context.compact("manual");
+      } else {
+        const result = await agentLoop(this.client, { ...request, input: context.input }, this.bash,
+          location, location.requestId, account.key, running.controller.signal, next => { text = next; }, (next, items) => {
+            try { this.sessions.turns(location, store => store.progress(location.requestId, next, items)); output = [...items]; delivered = next; this.emit("change", key(location)); }
+            catch (error) { storageFailed = true; running.controller.abort(); throw error; }
+          }, initialOutput, this.files, context);
+        running.controller.signal.throwIfAborted();
+        text = result.text; output = result.output;
+        context.publish();
+      }
     } catch (error) {
       status = running.controller.signal.aborted ? running.status : "failed";
       message = storageFailed ? "Could not save the response. Check disk space and permissions."
         : error instanceof FilePersistenceFailure ? error.message
-        : status === "cancelled" ? "Response stopped. It was not replayed."
-        : status === "interrupted" ? "Flame stopped before this response finished. It was not replayed."
-        : error instanceof InferenceFailure ? error.message : "Could not complete this response. It was not replayed.";
+        : status === "cancelled" ? manual ? "Compaction stopped. Your full history was preserved." : "Response stopped. It was not replayed."
+        : status === "interrupted" ? manual ? "Flame stopped before compaction finished. Your full history was preserved." : "Flame stopped before this response finished. It was not replayed."
+        : error instanceof InferenceFailure ? error.message : manual ? "Could not compact this conversation. Your history was preserved." : "Could not complete this response. It was not replayed.";
     } finally {
       clearInterval(interval);
       if (running.controller.signal.aborted) { try { this.bash?.stopTurn(location, location.requestId); } catch { /* Job records retain the actual process status. */ } }
@@ -157,7 +189,7 @@ export class Turns extends EventEmitter {
     const running = this.active.get(key(location));
     if (snapshot.status === "running" && running) {
       running.controller.abort();
-      this.bash?.stopSession(location);
+      if (snapshot.operation !== "compaction") this.bash?.stopSession(location);
     }
   }
   async close() {

@@ -1,0 +1,34 @@
+.context-indicator {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  color: #939393;
+  cursor: default;
+}
+
+.context-indicator__meter {
+  display: block;
+  border-radius: 50%;
+  fill: none;
+  stroke-width: 2;
+}
+
+.context-indicator__track { stroke: #303030; }
+.context-indicator__progress { stroke: #668bdf; }
+
+.context-indicator__label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.context-indicator[data-compacting="true"] { color: #668bdf; }

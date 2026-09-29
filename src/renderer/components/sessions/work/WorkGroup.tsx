@@ -18,8 +18,8 @@ function blocks(steps: readonly WorkStep[]): Block[] {
   }
   return result;
 }
-export function WorkGroup({ activity, running, jobs, location, status }: {
-  activity: WorkActivity; running: boolean; jobs: readonly BashJob[]; location: SessionLocation; status?: string;
+export function WorkGroup({ activity, running, compacting = false, jobs, location, status }: {
+  activity: WorkActivity; running: boolean; compacting?: boolean; jobs: readonly BashJob[]; location: SessionLocation; status?: string;
 }) {
   const active = jobs.some(job => job.turnId === activity.turnId && isRunning(job));
   return <section className="work-group" data-running={running || active} aria-label="Agent work">
@@ -28,7 +28,7 @@ export function WorkGroup({ activity, running, jobs, location, status }: {
         ? <Markdown className="work-group__commentary" key={block.id} text={block.text} streaming={running} />
         : <ToolGroup key={block.id} steps={block.steps} turnId={activity.turnId} jobs={jobs} location={location} />)}
     </div>
-    {running && !active && <p className="turn-status" role="status"><ThinkingLabel>Thinking</ThinkingLabel></p>}
+    {running && !active && <p className="turn-status" role="status"><ThinkingLabel>{compacting ? "Compacting conversation" : "Thinking"}</ThinkingLabel></p>}
     {!running && status && status !== "completed" && <p className="turn-status">{status === "cancelled" ? "Work stopped" : status === "failed" ? "Work failed" : "Work interrupted"}</p>}
   </section>;
 }

@@ -1,8 +1,9 @@
 import { InferenceFailure } from "./sse.js";
 import { isFileTool } from "../file-tools/definitions.js";
 import { MAX_ARGUMENT_BYTES } from "../file-tools/types.js";
+import { inferenceUsage, type InferenceUsage } from "./usage.js";
 
-export type InferenceResult = { text: string; output: unknown[] };
+export type InferenceResult = { text: string; output: unknown[]; usage?: InferenceUsage };
 export const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const fail = (message: string): never => { throw new InferenceFailure(message); };
 const limit = (value: unknown) => {
@@ -66,6 +67,7 @@ export class ResponseOutput {
     if (new Set(ids).size !== ids.length || ids.length > 16) return fail("OpenAI returned duplicate or excessive tool calls.");
     if (Buffer.byteLength(text) > 1024 * 1024) return fail("The response exceeded Flame's storage limit.");
     limit(output);
-    return { text, output };
+    const usage = inferenceUsage(response.usage);
+    return { text, output, ...(usage ? { usage } : {}) };
   }
 }

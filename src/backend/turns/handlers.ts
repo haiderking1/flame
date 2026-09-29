@@ -9,6 +9,7 @@ const failure = (error: unknown) => error instanceof SessionError ? error : erro
 export function turnHandlers(turns: Turns) {
   return TurnRpc.toLayer({
     "turns.start": (input) => Effect.tryPromise({ try: () => turns.start(input), catch: failure }).pipe(Effect.uninterruptible),
+    "turns.compact": (input) => Effect.tryPromise({ try: () => turns.compact(input), catch: failure }).pipe(Effect.uninterruptible),
     "turns.stop": (input) => Effect.try({ try: () => turns.stop(input, input.turnId), catch: failure }),
     "turns.watch": (location) => Stream.callback<TurnSnapshot | null, SessionError>((queue) => Effect.acquireRelease(Effect.sync(() => {
       const id = `${location.projectId}:${location.sessionId}`;

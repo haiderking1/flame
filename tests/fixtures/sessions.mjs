@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { app, ipcMain, shell } from 'electron';
 import { checkEmptyChat } from '../helpers/emptyChat.mjs';
+import { checkContextIndicator } from '../helpers/contextIndicator.mjs';
 import { checkSettlement } from '../helpers/settlement.mjs';
 import { checkSessionSidebar } from '../helpers/sessionSidebar.mjs';
 import { markdownSample, checkMarkdown } from '../helpers/markdown.mjs';
@@ -127,6 +128,18 @@ void app.whenReady().then(async () => {
     sessionA = await create(a.id);
     await checkEmptyChat(evaluate);
     await model('Alpha');
+    await checkContextIndicator({ evaluate });
+    await type('textarea', '/com');
+    await wait("!!document.querySelector('[role=listbox][aria-label=\"Slash commands\"]')");
+    assert.ok(await evaluate("document.querySelector('.slash-commands [role=option][aria-disabled=true]').title.includes('Send a message before compacting')"));
+    await evaluate("document.querySelector('textarea').form.requestSubmit()");
+    await wait("document.querySelector('.composer__hint')?.textContent.includes('Send a message before compacting')");
+    assert.equal(await evaluate("document.querySelector('textarea').value"), '/com', 'unavailable command stays editable');
+    await type('textarea', '', true);
+    await evaluate("document.querySelector('.workspace__composer').style.width = '260px'");
+    await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    await checkContextIndicator({ evaluate });
+    await evaluate("document.querySelector('.workspace__composer').style.removeProperty('width')");
     await click('.composer-settings__thinking');
     await wait("document.querySelector('.thinking-picker').matches(':popover-open')");
     await click('.thinking-picker [role=menuitemradio]');
@@ -164,6 +177,7 @@ void app.whenReady().then(async () => {
     assert.ok(!await evaluate("document.querySelector('.session-history').textContent.includes('const value')"), 'an open code fence remains buffered');
     await wait("document.querySelector('.session-message--assistant .markdown-code pre')?.textContent.includes('const value') && !document.querySelector('textarea').readOnly && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
     await wait("document.querySelector('.work-tool__toggle')?.getAttribute('aria-expanded') === 'false'");
+    await checkContextIndicator({ evaluate, known: true });
     assert.equal(await evaluate("document.querySelectorAll('.work-group').length"), 1, 'work stays in its response instead of a separate job list');
     assert.ok(!await evaluate("document.querySelector('.session-message--assistant p').textContent.includes('Checking the project')"), 'commentary is not duplicated into the final answer');
     assert.equal(await evaluate("document.querySelectorAll('.work-tools button[aria-expanded]').length"), 1, 'one command has one disclosure, not nested dropdowns');

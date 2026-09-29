@@ -4,6 +4,7 @@ import { ImageInfo, ImageIds } from "./image-types.js";
 import { WorkActivity } from "./work.js";
 import { TurnStatus } from "./turn-status.js";
 import { ModelSelection, ServiceTier } from "./models.js";
+import { CompactionInfo, ContextInfo } from "./compaction.js";
 
 export const SessionId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
 export const SessionLocation = Schema.Struct({ projectId: SessionId, sessionId: SessionId });
@@ -17,7 +18,7 @@ export const SessionSummary = Schema.Struct({
 });
 export type SessionSummary = typeof SessionSummary.Type;
 export const SessionDocument = Schema.Struct({
-  ...SessionSummary.fields, draft: Text, settings: Schema.NullOr(ModelSelection), leafId: Schema.NullOr(SessionId),
+  ...SessionSummary.fields, draft: Text, settings: Schema.NullOr(ModelSelection), leafId: Schema.NullOr(SessionId), context: Schema.optionalKey(ContextInfo),
 });
 export type SessionDocument = typeof SessionDocument.Type;
 export const SessionEntry = Schema.Struct({
@@ -26,7 +27,7 @@ export const SessionEntry = Schema.Struct({
   kind: Schema.Literals(["user", "settings", "assistant"]), text: Schema.NullOr(Schema.String.check(Schema.isMaxLength(1024 * 1024))), settings: Schema.NullOr(ModelSelection),
 });
 export type SessionEntry = typeof SessionEntry.Type;
-export const SessionPage = Schema.Struct({ entries: Schema.Array(SessionEntry), nextBefore: Schema.NullOr(SessionId) });
+export const SessionPage = Schema.Struct({ entries: Schema.Array(SessionEntry), nextBefore: Schema.NullOr(SessionId), compactions: Schema.optionalKey(Schema.Array(CompactionInfo)) });
 export type SessionPage = typeof SessionPage.Type;
 export const SessionIndex = Schema.Struct({ sessions: Schema.Array(SessionSummary), warnings: Schema.Array(Schema.String) });
 export class SessionError extends Schema.TaggedError<SessionError>()("SessionError", {

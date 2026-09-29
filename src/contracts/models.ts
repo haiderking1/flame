@@ -5,6 +5,7 @@ export const CatalogModel = Schema.Struct({
   id: Schema.String, name: Schema.String, description: Schema.String,
   reasoningLevels: Schema.Array(Schema.Struct({ effort: Schema.String, description: Schema.String })),
   defaultReasoning: Schema.NullOr(Schema.String), supportsFast: Schema.Boolean, supportsImages: Schema.optionalKey(Schema.Boolean),
+  contextWindow: Schema.optionalKey(Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))),
 });
 export type CatalogModel = typeof CatalogModel.Type;
 export const ModelCatalog = Schema.Struct({

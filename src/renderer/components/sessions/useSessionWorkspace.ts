@@ -8,6 +8,7 @@ import { changeSession, createSession, deleteSession, readSession, sessionErrorM
 import { startTurn, stopTurn } from "../../backend/turns";
 import { useTurnState } from "./useTurnState";
 import { rememberActiveSession, restoreActiveSession } from "./activeSession";
+import { useManualCompaction } from "./useManualCompaction";
 
 type Change = { type: "draft"; draft: string } | { type: "rename"; title: string }
   | { type: "run"; requestId: string; text: string; accountKey: string; images?: readonly string[] }
@@ -74,6 +75,7 @@ export function useSessionWorkspace() {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => { void flushDraft().catch(() => {}); }, 400);
   }
+  const compact = useManualCompaction({ current, accountKey: turnState.accountKey, running: turnState.running, turn: turnState.turn, flushDraft, enqueue, adopt });
   async function open(location: SessionLocation) {
     if (navigating.current) return false;
     navigating.current = true; setTransitioning(true);
@@ -163,7 +165,8 @@ export function useSessionWorkspace() {
     if (!target || !page.nextBefore) return;
     await enqueue(async () => {
       const older = await history({ projectId: target.projectId, sessionId: target.sessionId, before: page.nextBefore });
-      if (current.current?.sessionId === target.sessionId && current.current?.projectId === target.projectId) setPage((page) => ({ entries: [...older.entries, ...page.entries], nextBefore: older.nextBefore }));
+      if (current.current?.sessionId === target.sessionId && current.current?.projectId === target.projectId) setPage((page) => ({ entries: [...older.entries, ...page.entries], nextBefore: older.nextBefore,
+        compactions: [...new Map([...(older.compactions ?? []), ...(page.compactions ?? [])].map(item => [item.id, item])).values()] }));
     });
   }
   async function reload() {
@@ -207,7 +210,7 @@ export function useSessionWorkspace() {
   }, [turnState.turn?.id, turnState.turn?.status, turnState.turn?.revision, pending, transitioning, document?.revision]);
   return { document, page, draft, error, transitioning, turn: awaitingMessageHistory ? null : turnState.turn, running: turnState.running,
     stop: () => turnState.stop().catch((error) => { setError(sessionErrorMessage(error)); }), busy: pending > 0 || transitioning, dirty: !!document && draft !== document.draft,
-    editDraft, open, newSession, send, loadOlder, reload, flushDraft,
+    editDraft, open, newSession, send, loadOlder, reload, flushDraft, compact, accountKey: turnState.accountKey,
     renameSession: (target: SessionSummary, title: string) => editSession(target, { type: "rename", title }),
     settleSession: (target: SessionSummary, settled: boolean) => editSession(target, { type: "settle", settled }),
     deleteSession: (target: SessionSummary) => editSession(target, { type: "delete" }),
