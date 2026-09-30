@@ -2,7 +2,8 @@ import type { SessionLocation } from "../../contracts/sessions.js";
 import type { ToolCall } from "../bash/tools.js";
 import type { Sessions } from "../sessions/service.js";
 import { digest, resolvePath } from "./filesystem.js";
-import { readText } from "./read.js";
+import { readFile, type ReadImage } from "./read-file.js";
+import { imageResultOutput } from "./image-results.js";
 import { listDirectory } from "./ls.js";
 import { mutateText } from "./mutate.js";
 import { parseOperation } from "./validation.js";
@@ -15,7 +16,10 @@ export class FileTools {
     const entries = this.sessions.files(location, store => store.ledger());
     return entries.length ? [{ role: "user", content: [{ type: "input_text", text: `[Saved file-operation ledger, not a new human request. These are historical outcomes, not proof of current file contents. Inspect before retrying uncertain operations; never blindly replay them.]\n${JSON.stringify(entries)}` }] }] : [];
   }
-  async execute(location: SessionLocation, turnId: string, call: ToolCall, signal: AbortSignal): Promise<FileResult> {
+  modelOutput(location: SessionLocation, encoded: string) {
+    return this.sessions.images(location, images => imageResultOutput(encoded, images));
+  }
+  async execute(location: SessionLocation, turnId: string, call: ToolCall, signal: AbortSignal, supportsImages = true): Promise<FileResult> {
     signal.throwIfAborted();
     let operation: FileOperation, path: string;
     try {
@@ -34,11 +38,12 @@ export class FileTools {
       if (!(error instanceof FileToolError)) throw new FilePersistenceFailure("claim"); // Stop the loop, never invite a retry.
       return { status: "failed", path: operation.path, summary: "File operation was not started.", error: error.message };
     }
-    let result: FileResult;
+    let result: FileResult, image: ReadImage | undefined;
     const readOnly = operation.name === "ls" || operation.name === "read";
     try {
-      result = operation.name === "ls" ? await listDirectory(path, operation, signal)
-        : operation.name === "read" ? await readText(path, operation, signal) : await mutateText(path, operation, signal);
+      if (operation.name === "read") {
+        const read = await readFile(path, operation, signal, supportsImages); result = read.result; image = read.image;
+      } else result = operation.name === "ls" ? await listDirectory(path, operation, signal) : await mutateText(path, operation, signal);
     } catch (error) {
       const uncertain = error instanceof FileToolError && error.uncertain;
       result = { status: uncertain ? "uncertain" : "failed", path: operation.path,
@@ -49,7 +54,7 @@ export class FileTools {
           : fileError(error) };
     }
     // Record completed commits even if Stop arrived during rename/fsync. Never call them rolled back.
-    try { this.sessions.files(location, store => store.finish(turnId, call.call_id, result)); }
+    try { this.sessions.files(location, store => store.finish(turnId, call.call_id, result, image)); }
     catch { throw new FilePersistenceFailure("result", readOnly); }
     return result;
   }

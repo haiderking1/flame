@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import electron from 'electron';
 
-test('image UI: paste/drop/picker, persistent draft, image-only inference, saved history, viewer geometry and zoom', { timeout: 40000 }, async () => {
+test('image UI: immediate chat handoff, no false error flash, failure/Stop rollback, background uploads and saved viewers', { timeout: 40000 }, async () => {
   const home = await mkdtemp(join(tmpdir(), 'flame-images-ui-'));
   await mkdir(join(home, '.flame', 'agent'), { recursive: true, mode: 0o700 });
   await writeFile(join(home, '.flame', 'agent', 'auth.json'), JSON.stringify({ 'openai-codex': {
@@ -23,5 +23,6 @@ test('image UI: paste/drop/picker, persistent draft, image-only inference, saved
   try {
     const code = await new Promise((resolve, reject) => { child.on('exit', resolve); child.on('error', reject); });
     assert.equal(code, 0, diagnostics); assert.ok(diagnostics.includes('FLAME_IMAGES_UI_OK'), diagnostics);
+    for (const line of diagnostics.split('\n').filter(line => line.startsWith('IMAGE_SEND_TRACE'))) console.log(line);
   } finally { clearTimeout(timer); child.kill('SIGKILL'); await rm(home, { recursive: true, force: true }); }
 });

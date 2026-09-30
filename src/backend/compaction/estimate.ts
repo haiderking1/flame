@@ -34,7 +34,7 @@ export function estimateTokens(input: readonly unknown[]): number {
     if (typeof item.text === "string") tokens += estimateTextTokens(item.text);
     if (typeof item.name === "string") tokens += estimateTextTokens(item.name);
     if (typeof item.arguments === "string") tokens += estimateTextTokens(item.arguments);
-    if (typeof item.output === "string") tokens += estimateTextTokens(item.output);
+    tokens += contentTokens(item.output);
     return total + tokens;
   }, 0);
 }

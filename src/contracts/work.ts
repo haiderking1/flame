@@ -1,9 +1,10 @@
 import { Schema } from "effect";
+import { ImageInfo } from "./image-types.js";
 
 // Deferred fields/statuses are retained only to render previously saved tool results accurately.
 export const FileWorkDetail = Schema.Struct({
   status: Schema.Literals(["pending", "completed", "failed", "uncertain", "deferred"]),
-  summary: Schema.String, output: Schema.String, truncated: Schema.Boolean,
+  summary: Schema.String, output: Schema.String, truncated: Schema.Boolean, image: Schema.optionalKey(ImageInfo),
 });
 export type FileWorkDetail = typeof FileWorkDetail.Type;
 

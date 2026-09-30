@@ -16,36 +16,44 @@ export async function maybeStat(path: string): Promise<BigIntStats | null> {
   try { return await lstat(path, { bigint: true }); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
 }
-export type FileSnapshot = { bytes: Buffer; text: string; hash: string; stat: BigIntStats };
-export async function snapshot(path: string, signal: AbortSignal): Promise<FileSnapshot> {
+export type ByteSnapshot = { bytes: Buffer; hash: string; stat: BigIntStats };
+export type FileSnapshot = ByteSnapshot & { text: string };
+export async function byteSnapshot(path: string, signal: AbortSignal, maxBytes = MAX_FILE_BYTES): Promise<ByteSnapshot> {
   signal.throwIfAborted();
   // O_NONBLOCK prevents accidentally hanging on a FIFO if a path is swapped.
   const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
   try {
     const stat = await file.stat({ bigint: true });
-    if (!stat.isFile()) throw new FileToolError("Only regular text files are supported, not directories, devices, sockets, or pipes.");
-    if (stat.size > BigInt(MAX_FILE_BYTES)) throw new FileToolError("File exceeds the 16 MiB text-file limit. Use Bash for bounded, specialized inspection.");
+    if (!stat.isFile()) throw new FileToolError("Only regular files are supported, not directories, devices, sockets, or pipes.");
+    if (stat.size > BigInt(maxBytes)) throw new FileToolError(`File exceeds the ${maxBytes / 1024 / 1024} MiB read limit. Use Bash for bounded, specialized inspection.`);
     const chunks: Buffer[] = [];
     let size = 0;
     while (true) {
       signal.throwIfAborted();
-      const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, MAX_FILE_BYTES + 1 - size));
+      const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, maxBytes + 1 - size));
       const { bytesRead } = await file.read(chunk, 0, chunk.length, null);
       if (!bytesRead) break;
       size += bytesRead;
-      if (size > MAX_FILE_BYTES) throw new FileToolError("File grew beyond the 16 MiB limit while reading.");
+      if (size > maxBytes) throw new FileToolError(`File grew beyond the ${maxBytes / 1024 / 1024} MiB limit while reading.`);
       chunks.push(chunk.subarray(0, bytesRead));
     }
     signal.throwIfAborted();
     const after = await file.stat({ bigint: true }), current = await maybeStat(path);
     if (!sameStat(stat, after) || !current || !sameStat(stat, current)) throw new FileToolError("File changed while reading. Read it again before making changes.");
     const bytes = Buffer.concat(chunks, size);
-    let text: string;
-    try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes); }
-    catch { throw new FileToolError("File is not valid UTF-8. Use Bash with an explicit encoding; no lossy conversion was performed."); }
-    if (text.includes("\0")) throw new FileToolError("File contains NUL bytes and appears binary. Use Bash for binary inspection.");
-    return { bytes, text, hash: digest(bytes), stat };
+    return { bytes, hash: digest(bytes), stat };
   } finally { await file.close(); }
+}
+export function textSnapshot(file: ByteSnapshot): FileSnapshot {
+  if (file.bytes.length > MAX_FILE_BYTES) throw new FileToolError("File exceeds the 16 MiB text-file limit. Use Bash for bounded, specialized inspection.");
+  let text: string;
+  try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(file.bytes); }
+  catch { throw new FileToolError("File is not valid UTF-8. Use Bash with an explicit encoding; no lossy conversion was performed."); }
+  if (text.includes("\0")) throw new FileToolError("File contains NUL bytes and appears binary. Use Bash for binary inspection.");
+  return { ...file, text };
+}
+export async function snapshot(path: string, signal: AbortSignal): Promise<FileSnapshot> {
+  return textSnapshot(await byteSnapshot(path, signal));
 }
 export async function existingPath(path: string) { return realpath(path); }
 export function assertHash(current: FileSnapshot | null, expected: string | null, createOnly: boolean) {

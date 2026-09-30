@@ -1,8 +1,11 @@
 import type { DatabaseSync } from "node:sqlite";
 import { FileToolError, type FileResult } from "./types.js";
+import type { ImageStore } from "../images/store.js";
+import type { ReadImage } from "./read-file.js";
 
 export class FileOperationStore {
-  constructor(private db: DatabaseSync, private assertOpen: () => unknown) {}
+  constructor(private db: DatabaseSync, private assertOpen: () => unknown,
+    private transaction: <T>(work: () => T) => T, private images: ImageStore) {}
   claim(turnId: string, callId: string, name: string, path: string, fingerprint: string): FileResult | null {
     this.assertOpen();
     const prior = this.db.prepare("SELECT fingerprint,result FROM file_operations WHERE turn_id=? AND call_id=?").get(turnId, callId);
@@ -21,10 +24,17 @@ export class FileOperationStore {
     this.db.prepare("INSERT INTO file_operations(turn_id,call_id,name,path,fingerprint,created_at) VALUES (?,?,?,?,?,?)").run(turnId, callId, name, path, fingerprint, Date.now());
     return null;
   }
-  finish(turnId: string, callId: string, result: FileResult) {
+  finish(turnId: string, callId: string, result: FileResult, image?: ReadImage) {
     this.assertOpen();
-    const saved = this.db.prepare("UPDATE file_operations SET result=? WHERE turn_id=? AND call_id=? AND result IS NULL").run(JSON.stringify(result), turnId, callId);
-    if (saved.changes !== 1) throw new Error("File operation outcome could not be recorded.");
+    this.transaction(() => {
+      if (Boolean(image) !== Boolean(result.image) || result.image && result.status !== "completed") throw new Error("Invalid image read result.");
+      const claim = this.db.prepare("SELECT name,result FROM file_operations WHERE turn_id=? AND call_id=?").get(turnId, callId);
+      if (!claim || claim.result !== null || image && claim.name !== "read") throw new Error("File operation outcome could not be recorded.");
+      if (image && result.image) this.images.saveRead(result.image, image.original, image.prepared);
+      const saved = this.db.prepare("UPDATE file_operations SET result=?,image_id=? WHERE turn_id=? AND call_id=? AND result IS NULL")
+        .run(JSON.stringify(result), result.image?.id ?? null, turnId, callId);
+      if (saved.changes !== 1) throw new Error("File operation outcome could not be recorded.");
+    });
   }
   restoreResults(turnId: string, output: unknown[]): unknown[] {
     this.assertOpen();

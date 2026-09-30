@@ -1,5 +1,4 @@
 import { createServer } from "node:http";
-import { timingSafeEqual } from "node:crypto";
 import { Effect } from "effect";
 import { NodeHttpServer } from "@effect/platform-node";
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
@@ -28,18 +27,14 @@ import { Turns } from "./turns/service.js";
 import { turnHandlers } from "./turns/handlers.js";
 import { BashRuntime } from "./bash/service.js";
 import { Images } from "./images/service.js";
+import { ImageStaging } from "./images/staging.js";
+import { imageUploadHttp } from "./images/http.js";
 import { imageHandlers } from "./images/handlers.js";
 import { FileTools } from "./file-tools/service.js";
 import { bashHandlers } from "./bash/handlers.js";
 import type { CodexInferenceClient } from "./turns/client.js";
-
-export function authorizedRequest(url: string, host: string | undefined, origin: string | undefined, port: number, token: string, allowedOrigin: string) {
-  if (host !== `127.0.0.1:${port}` || origin !== allowedOrigin) return false;
-  const parsed = new URL(url, `http://${host}`);
-  const supplied = Buffer.from(parsed.searchParams.get("token") ?? "");
-  const secret = Buffer.from(token);
-  return parsed.pathname === "/rpc" && supplied.length === secret.length && timingSafeEqual(supplied, secret);
-}
+import { authorizedRequest, authorizedImageRequest, imageCorsHeaders } from "./server-auth.js";
+export { authorizedRequest } from "./server-auth.js";
 
 export const startServer = (options: { filename: string; token: string; origin: string; openBrowser: (url: string) => Promise<void>; usageClient?: CodexUsageClient; modelsClient?: CodexModelsClient; inferenceClient?: Pick<CodexInferenceClient, "run">; ready: (port: number) => void }) => Effect.gen(function* () {
   const store = yield* Effect.acquireRelease(Effect.sync(() => new ProjectStore(options.filename)), (store) => Effect.sync(() => store.close()));
@@ -52,7 +47,8 @@ export const startServer = (options: { filename: string; token: string; origin: 
   const usage = yield* Effect.acquireRelease(Effect.sync(() => new CodexUsage(auth, usageStore, options.usageClient)), (usage) => Effect.promise(() => usage.close()));
   const modelsStore = yield* Effect.acquireRelease(Effect.sync(() => new ModelsStore(options.filename)), (store) => Effect.sync(() => store.close()));
   const models = yield* Effect.acquireRelease(Effect.sync(() => new CodexModels(auth, modelsStore, options.modelsClient)), (models) => Effect.promise(() => models.close()));
-  const sessions = new Sessions(new SessionRepository(join(dirname(options.filename), "projects"), store), models);
+  const repository = new SessionRepository(join(dirname(options.filename), "projects"), store);
+  const sessions = new Sessions(repository, models);
   const projectPath = (id: string) => {
     const project = store.list().find(project => project.id === id);
     if (!project) throw new Error("Project not found");
@@ -60,7 +56,8 @@ export const startServer = (options: { filename: string; token: string; origin: 
   };
   const bash = yield* Effect.acquireRelease(Effect.sync(() => new BashRuntime(sessions, projectPath)), bash => Effect.sync(() => bash.close()));
   const files = new FileTools(sessions, projectPath);
-  const images = yield* Effect.acquireRelease(Effect.sync(() => new Images(sessions)), images => Effect.promise(() => images.close()));
+  const images = yield* Effect.acquireRelease(Effect.sync(() => new Images(sessions,
+    new ImageStaging(join(dirname(options.filename), "image-uploads"), location => repository.assertUploadTarget(location)))), images => Effect.promise(() => images.close()));
   const turns = yield* Effect.acquireRelease(Effect.sync(() => new Turns(sessions, auth, models, options.inferenceClient, bash, files)), (turns) => Effect.promise(() => turns.close()));
   const rpc = yield* RpcServer.toHttpEffectWebsocket(BackendRpc).pipe(
     Effect.provide(imageHandlers(images)), Effect.provide(bashHandlers(bash)), Effect.provide(turnHandlers(turns)), Effect.provide(sessionHandlers(sessions)), Effect.provide(modelsHandlers(models)), Effect.provide(usageHandlers(usage)), Effect.provide(authHandlers(auth)), Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
@@ -72,6 +69,15 @@ export const startServer = (options: { filename: string; token: string; origin: 
   const port = server.address.port;
   yield* server.serve(Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
+    if (new URL(request.url, `http://127.0.0.1:${port}`).pathname === "/images/upload") {
+      if (!authorizedImageRequest(request.url, request.headers.host, request.headers.origin, port, options.token, options.origin)) {
+        return HttpServerResponse.empty({ status: 403 });
+      }
+      const headers = imageCorsHeaders(request.headers.origin!);
+      if (request.method === "OPTIONS") return HttpServerResponse.empty({ status: 204, headers });
+      const response = yield* imageUploadHttp(images, request);
+      return HttpServerResponse.setHeaders(response, headers);
+    }
     if (!authorizedRequest(request.url, request.headers.host, request.headers.origin, port, options.token, options.origin)) {
       return HttpServerResponse.empty({ status: 403 });
     }

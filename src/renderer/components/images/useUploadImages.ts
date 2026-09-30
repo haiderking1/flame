@@ -1,19 +1,22 @@
 import { useId } from "react";
 import { useAtomSet } from "@effect/atom-react";
 import type { SessionLocation } from "@contracts/sessions";
-import { uploadImage, discardImage } from "../../backend/images";
+import { adoptImages, stagedImages } from "../../backend/images";
 import type { DraftImage } from "./draft-storage";
+import { imageUploads, restoreImageUploads } from "./background-uploads";
+
 export function useUploadImages() {
   const key = useId();
-  const upload = useAtomSet(uploadImage(key), { mode: "promise" }), discard = useAtomSet(discardImage(key), { mode: "promise" });
+  const staged = useAtomSet(stagedImages(key), { mode: "promise" });
+  const adopt = useAtomSet(adoptImages(key), { mode: "promise" });
   return async (location: SessionLocation, images: readonly DraftImage[], signal?: AbortSignal) => {
-    for (const image of images) {
-      signal?.throwIfAborted();
-      const cancel = () => { void discard({ ...location, id: image.id }).catch(() => {}); };
-      signal?.addEventListener("abort", cancel, { once: true });
-      try { await upload({ ...location, image, signal }); signal?.throwIfAborted(); }
-      finally { signal?.removeEventListener("abort", cancel); }
-    }
+    if (!images.length) return;
+    signal?.throwIfAborted();
+    void restoreImageUploads(location, images, ids => staged({ ...location, ids })).catch(() => {});
+    await imageUploads.ready(location, images, signal);
+    signal?.throwIfAborted();
+    try { await adopt({ ...location, ids: images.map(image => image.id) }); }
+    catch (error) { imageUploads.invalidate(location, images.map(image => image.id), "This image could not be adopted. Retry to upload or reconnect."); throw error; }
     signal?.throwIfAborted();
   };
 }

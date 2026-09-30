@@ -1,4 +1,5 @@
 import { useUploadImages } from "../images/useUploadImages";
+import { imageUploads } from "../images/background-uploads";
 import { saveImageDraft, type DraftImage } from "../images/draft-storage";
 import { useEffect, useRef, useState } from "react";
 import { useAtomSet } from "@effect/atom-react";
@@ -151,6 +152,7 @@ export function useSessionWorkspace() {
         if (isActive) adopt(saved);
       } else {
         await remove(location);
+        imageUploads.clearScope(location);
         void saveImageDraft(`${location.projectId}:${location.sessionId}`, []).catch(() => {});
         if (isActive) {
           clearTimeout(timer.current);

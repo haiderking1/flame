@@ -4,14 +4,16 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { checkSlashCommandStyle } from '../helpers/slashCommands.mjs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { app, ipcMain } from 'electron';
+import { app, ipcMain, session } from 'electron';
 import { Effect } from 'effect';
 import { createWindow } from '../../dist/main/window.js';
+import { installImageUploadOrigin } from '../../dist/main/imageUploadOrigin.js';
 import { startServer } from '../../dist/backend/server.js';
 import { ProjectStore } from '../../dist/backend/projects/store.js';
 import { SessionRepository } from '../../dist/backend/sessions/repository.js';
 import { CodexModelsClient } from '../../dist/backend/models/client.js';
 import { InferenceFailure } from '../../dist/backend/turns/client.js';
+import { png } from '../helpers/images.mjs';
 
 app.on('window-all-closed', () => {});
 void app.whenReady().then(async () => {
@@ -62,6 +64,7 @@ void app.whenReady().then(async () => {
     openBrowser: async () => assert.fail('Compaction must not request OAuth'), ready })), { signal: abort.signal }).catch(() => {});
   const port = await portReady;
   ipcMain.handle('flame:connection', () => `ws://127.0.0.1:${port}/rpc?token=test-token`);
+  installImageUploadOrigin(session.defaultSession, `ws://127.0.0.1:${port}/rpc?token=test-token`);
   const window = await createWindow();
   const evaluate = async code => {
     try { return await window.webContents.executeJavaScript(code, true); }
@@ -102,7 +105,7 @@ void app.whenReady().then(async () => {
       const db = request.result;
       const transaction = db.transaction('drafts', ${JSON.stringify(write ? 'readwrite' : 'readonly')});
       const store = transaction.objectStore('drafts');
-      ${write ? `store.put([{id:${JSON.stringify(attachmentId)},name:'pending.png',file:new Blob([Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII='), c => c.charCodeAt(0))], {type:'image/png'})}], ${JSON.stringify(attachmentScope)});` : ''}
+      ${write ? `store.put([{id:${JSON.stringify(attachmentId)},name:'pending.png',file:new Blob([Uint8Array.from(atob(${JSON.stringify(png(1, 1).toString('base64'))}), c => c.charCodeAt(0))], {type:'image/png'})}], ${JSON.stringify(attachmentScope)});` : ''}
       const read = store.get(${JSON.stringify(attachmentScope)});
       transaction.oncomplete = () => { const rows=read.result ?? []; db.close(); resolve(rows.map(image => ({id:image.id,name:image.name,size:image.file.size,type:image.file.type}))); };
       transaction.onabort = () => { db.close(); reject(transaction.error); };
@@ -211,6 +214,7 @@ void app.whenReady().then(async () => {
     assert.ok(await evaluate("document.querySelector('[aria-label=\"Estimated context usage\"]')?.getAttribute('aria-valuetext').includes('(90%)')"));
     await reload();
     await wait(`document.querySelectorAll('.compaction-marker').length === 1 && document.querySelector('textarea')?.value === ${JSON.stringify(keptDraft)}`);
+    await wait("document.querySelector('.image-gallery--draft .image-thumbnail img')?.naturalWidth > 0");
     await click('[aria-label="Send message"]');
     await wait("document.querySelector('.session-message--assistant')?.textContent.includes('Continuing from the summary') && !!document.querySelector('[aria-label=\"Send message\"]')");
     assert.equal(answerCalls, 1);

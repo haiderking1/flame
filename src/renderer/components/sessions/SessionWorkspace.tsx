@@ -7,23 +7,28 @@ import "./session-empty.css";
 import { SessionTimeline } from "./work/SessionTimeline";
 import { useComposerOverlay } from "./useComposerOverlay";
 import { useHistoryScroll } from "./useHistoryScroll";
+import { usePendingImageMessage } from "./usePendingImageMessage";
+import { UserMessage } from "./work/UserMessage";
 
 export function SessionWorkspace() {
   const sessions = useSessions()!;
   const [discarding, setDiscarding] = useState(false);
   const active = sessions.document;
-  const empty = !sessions.turn && !sessions.page.nextBefore && !sessions.page.entries.some(entry => entry.kind !== "settings");
+  const preview = usePendingImageMessage(sessions.imageLocation);
+  const pending = preview.message?.sending ? preview.message : null;
+  const empty = !pending && !sessions.turn && !sessions.page.nextBefore && !sessions.page.entries.some(entry => entry.kind !== "settings");
   const close = () => setDiscarding(false);
   const history = useRef<HTMLDivElement>(null);
   const composer = useRef<HTMLDivElement>(null);
   useComposerOverlay(composer, history);
   const saveState = sessions.busy ? "saving" : sessions.dirty ? "unsaved" : "saved";
-  useHistoryScroll(history, `${active?.projectId ?? ""}:${active?.sessionId ?? ""}`, sessions.page.entries, sessions.turn?.text);
+  useHistoryScroll(history, `${active?.projectId ?? ""}:${active?.sessionId ?? ""}`, sessions.page.entries, `${sessions.turn?.text ?? ""}:${pending?.id ?? ""}`);
   return <>
-    <div ref={history} hidden={!active || empty} className="session-history flame-scrollbar" role="region" aria-label="Session history">
+    <div ref={history} hidden={(!active && !pending) || empty} className="session-history flame-scrollbar" role="region" aria-label="Session history">
       <div className="session-history__content">
       {sessions.page.nextBefore && <button className="session-history__older" disabled={sessions.busy} onClick={() => { void sessions.loadOlder().catch(() => {}); }}>Load earlier messages</button>}
-      {active && <SessionTimeline key={`${active.projectId}:${active.sessionId}`} location={active} entries={sessions.page.entries} compactions={sessions.page.compactions} turn={sessions.turn} revision={active.revision} />}
+      {active ? <SessionTimeline key={`${active.projectId}:${active.sessionId}`} location={active} entries={sessions.page.entries} compactions={sessions.page.compactions} turn={sessions.turn} revision={active.revision} imagePreview={preview.message} />
+        : pending && <UserMessage text={pending.text} images={pending.images} pending />}
       </div>
     </div>
     <div ref={composer} className="workspace__composer" data-empty={empty || undefined} data-save-state={saveState}>
@@ -36,6 +41,7 @@ export function SessionWorkspace() {
       <Composer key={active ? `${active.projectId}:${active.sessionId}` : sessions.projectDraftId ?? "empty"} draft={sessions.draft} onDraftChange={sessions.editDraft}
         readOnly={!sessions.canCompose || sessions.transitioning} onSend={sessions.canCompose ? sessions.send : undefined}
         imageLocation={sessions.imageLocation} prepareAttachments={sessions.prepareAttachments}
+        onSendStart={preview.begin} pendingSend={!!pending}
         onStop={sessions.running ? () => { void sessions.stop(); } : undefined} stopLabel={sessions.turn?.phase === "compacting" ? "Stop compaction" : "Stop response"} saveOnly={!sessions.projectDraftId && !active?.settings} />
     </div>
     {discarding && <SessionDialog title="Discard unsaved draft?" busy={sessions.busy} error={sessions.error}

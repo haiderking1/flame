@@ -44,11 +44,12 @@ export async function agentLoop(client: Pick<CodexInferenceClient, "run">, reque
       if (seen.has(tool.call_id)) throw new InferenceFailure("The provider repeated a tool call identifier. Nothing was replayed.");
       seen.add(tool.call_id);
       const result = isFileTool(tool.name)
-        ? files ? await files.execute(location, turnId, tool, signal) : { error: "File tools are not available in this session." }
+        ? files ? await files.execute(location, turnId, tool, signal, request.supportsImages !== false) : { error: "File tools are not available in this session." }
         : runtime ? await executeCall(runtime, location, turnId, account, tool, signal) : { error: "Bash is not available in this session." };
       const item = { type: "function_call_output", call_id: tool.call_id, output: JSON.stringify(result) };
-      output.push(item); input.push(item); checkpoint(text, output);
-      context?.append([item]);
+      output.push(item); checkpoint(text, output);
+      const modelItem = { ...item, output: isFileTool(tool.name) && files ? files.modelOutput(location, item.output) : item.output };
+      input.push(modelItem); context?.append([modelItem]);
     }
     const pending = runtime?.pending(location, account) ?? [];
     if (pending.length) {

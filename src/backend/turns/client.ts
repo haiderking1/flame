@@ -7,7 +7,7 @@ import { isContextOverflow, providerFailure, readProviderError, ContextOverflow 
 import type { ModelSelection } from "../../contracts/models.js";
 import { events, InferenceFailure } from "./sse.js";
 export { InferenceFailure } from "./sse.js";
-export type InferenceRequest = { accountId: string; access: string; sessionId: string; settings: ModelSelection; input: unknown[]; cwd?: string; projectInstructions?: string; tools?: boolean; fileTools?: boolean; bashTools?: boolean; instructionsOverride?: string; promptCacheKey?: string };
+export type InferenceRequest = { accountId: string; access: string; sessionId: string; settings: ModelSelection; input: unknown[]; supportsImages?: boolean; cwd?: string; projectInstructions?: string; tools?: boolean; fileTools?: boolean; bashTools?: boolean; instructionsOverride?: string; promptCacheKey?: string };
 import { object, ResponseOutput, type InferenceResult } from "./output.js";
 export type { InferenceResult } from "./output.js";
 const failure = (message: string): never => { throw new InferenceFailure(message); };

@@ -10,7 +10,9 @@ export function imageHandlers(images: Images) {
     "images.begin": input => sync(() => images.sessions.images(input, store => store.begin(input.id, input.name, input.bytes, input.sha256))),
     "images.chunk": input => sync(() => images.sessions.images(input, store => store.chunk(input.id, input.offset, input.data))),
     "images.finish": input => Effect.tryPromise({ try: signal => images.finish(input, input.id, signal), catch: failure }),
-    "images.read": input => sync(() => images.sessions.images(input, store => store.read(input.id, input.offset, input.preview))),
+    "images.staged": input => sync(() => images.staged(input, input.ids)),
+    "images.adopt": input => sync(() => images.adopt(input, input.ids)),
+    "images.read": input => sync(() => images.read(input, input.id, input.offset, input.preview)),
     "images.discard": input => sync(() => images.discard(input, input.id)),
   });
 }

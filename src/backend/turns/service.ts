@@ -16,6 +16,7 @@ import { CodexInferenceClient, InferenceFailure } from "./client.js";
 import { paragraphBoundary } from "./paragraphs.js";
 import { turnContext } from "./compaction-context.js";
 import { agentContext } from "./agent-context.js";
+import { hasImageInput } from "./image-input.js";
 
 type Running = { controller: AbortController; task: Promise<void>; account: string; epoch: number; status: "cancelled" | "interrupted" };
 const key = (location: SessionLocation) => `${location.projectId}:${location.sessionId}`;
@@ -65,8 +66,7 @@ export class Turns extends EventEmitter {
   };
   snapshot(location: SessionLocation) { return this.failedWrites.get(key(location)) ?? this.sessions.turns(location, (store) => store.snapshot()); }
   private assertImageModel(account: string, settings: ModelSelection, input: unknown[]) {
-    const hasImages = input.some(item => !!item && typeof item === "object" && "content" in item && Array.isArray(item.content) && item.content.some(part => part.type === "input_image"));
-    if (hasImages && this.models.supportsImages?.(account, settings.modelId) === false) throw turnInvalid("This model does not accept images. Choose an image-capable model; your attachments have been kept.");
+    if (hasImageInput(input) && this.models.supportsImages?.(account, settings.modelId) === false) throw turnInvalid("This model does not accept images. Choose an image-capable model; your attachments have been kept.");
   }
   async start(input: SessionLocation & { revision: number; requestId: string; text: string; accountKey: string; images?: readonly string[] }) {
     if (this.closed) throw turnInvalid("Flame is shutting down.");
@@ -145,15 +145,20 @@ export class Turns extends EventEmitter {
     let message: string | null = null, output: unknown[] = [...initialOutput];
     try {
       running.controller.signal.throwIfAborted();
-      const request = { ...account, settings, input: [], sessionId: location.sessionId };
-      const context = turnContext(this.sessions, this.models, this.client, location, settings, request, running.controller.signal, manual,
+      const supportsImages = this.models.supportsImages?.(account.key, settings.modelId) !== false;
+      const request = { ...account, settings, input: [], sessionId: location.sessionId, supportsImages };
+      const client: Pick<CodexInferenceClient, "run"> = { run: (next, stream, signal) => {
+        if (!supportsImages && hasImageInput(next.input)) throw new InferenceFailure("This model does not accept images. Choose an image-capable model; saved image reads and attachments have been preserved.");
+        return this.client.run(next, stream, signal);
+      } };
+      const context = turnContext(this.sessions, this.models, client, location, settings, request, running.controller.signal, manual,
         account.key, () => output.length, () => [...(this.bash?.ledger(location) ?? []), ...(this.files?.ledger(location) ?? [])], () => this.emit("change", key(location)));
-      this.assertImageModel(account.key, settings, context.input);
+      if (!supportsImages && hasImageInput(context.input)) throw new InferenceFailure("This model does not accept images. Choose an image-capable model; saved image reads and attachments have been preserved.");
       if (manual) {
         context.setOverhead((await agentContext(location, this.bash, this.files, running.controller.signal)).overhead);
         await context.compact("manual");
       } else {
-        const result = await agentLoop(this.client, { ...request, input: context.input }, this.bash,
+        const result = await agentLoop(client, { ...request, input: context.input }, this.bash,
           location, location.requestId, account.key, running.controller.signal, next => { text = next; }, (next, items) => {
             try { this.sessions.turns(location, store => store.progress(location.requestId, next, items)); output = [...items]; delivered = next; this.emit("change", key(location)); }
             catch (error) { storageFailed = true; running.controller.abort(); throw error; }

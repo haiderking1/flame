@@ -18,6 +18,7 @@ import { FileOperationStore } from "../file-tools/store.js";
 import { migrateFileTools } from "./file-tools-migration.js";
 import { migrateLs } from "./ls-migration.js";
 import { migrateCompaction } from "./compaction-migration.js";
+import { migrateReadImages } from "./read-images-migration.js";
 import { CompactionStore } from "./compaction-store.js";
 
 const conflict = () => new SessionError({ code: "CONFLICT", message: "This session changed elsewhere. Reopen it before saving again. Your unsaved text has been kept." });
@@ -38,20 +39,21 @@ export class SessionDatabase {
       if (version === 0 && settings !== undefined) {
         this.db.exec("PRAGMA journal_mode=WAL;");
         initializeSession(this.db, location, settings);
-      } else if (version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8) throw storageError();
-      const legacySettlement = version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8;
+      } else if (typeof version !== "number" || version < 1 || version > 9) throw storageError();
+      const legacySettlement = typeof version !== "number" || version < 4;
       this.read(true, legacySettlement);
       if (version === 0 || version === 1) migrateSession(this.db);
       if (version === 0 || version === 1 || version === 2) migrateBash(this.db);
       if (legacySettlement) migrateSettlement(this.db);
-      if (version !== 5 && version !== 6 && version !== 7 && version !== 8) migrateFileTools(this.db);
-      if (version !== 6 && version !== 7 && version !== 8) migrateLs(this.db);
-      if (version !== 7 && version !== 8) migrateImages(this.db);
-      if (version !== 8) migrateCompaction(this.db);
+      if (typeof version !== "number" || version < 5) migrateFileTools(this.db);
+      if (typeof version !== "number" || version < 6) migrateLs(this.db);
+      if (typeof version !== "number" || version < 7) migrateImages(this.db);
+      if (typeof version !== "number" || version < 8) migrateCompaction(this.db);
+      if (version !== 9) migrateReadImages(this.db);
       this.images = new ImageStore(this.db, join(dirname(filename), "images"), () => this.read(), work => this.transaction(work));
-      this.files = new FileOperationStore(this.db, () => this.read());
+      this.files = new FileOperationStore(this.db, () => this.read(), work => this.transaction(work), this.images);
       this.jobs = new BashStore(this.db, () => this.read());
-      this.compactions = new CompactionStore(this.db, () => this.read(), work => this.transaction(work), this.images);
+      this.compactions = new CompactionStore(this.db, () => this.read(), work => this.transaction(work), this.images, (id, output) => this.files.restoreResults(id, output));
       this.turns = new TurnStore(this.db, () => this.read(), (work) => this.transaction(work), (revision, id, text, images) => this.append(revision, id, text, images),
         (id, output) => this.files.restoreResults(id, output), this.images, this.compactions);
     } catch (error) { this.db.close(); throw error; }
@@ -61,7 +63,7 @@ export class SessionDatabase {
       updated_at AS updatedAt, revision, draft, settings, deleted, leaf_id AS leafId, ${legacy ? "NULL" : "settled_at"} AS settledAt FROM session WHERE singleton = 1`).get();
     if (!row || row.sessionId !== this.location.sessionId || row.projectId !== this.location.projectId) throw storageError();
     if (!includeDeleted && row.deleted === 1) throw missing();
-    const hasCompaction = this.db.prepare("PRAGMA user_version").get()?.user_version === 8;
+    const hasCompaction = Number(this.db.prepare("PRAGMA user_version").get()?.user_version) >= 8;
     const meter = hasCompaction ? this.db.prepare("SELECT context,settings FROM turns WHERE context IS NOT NULL ORDER BY created_at DESC,rowid DESC LIMIT 1").get() : null;
     const settings = JSON.parse(String(row.settings));
     const storedContext = meter && JSON.parse(String(meter.settings)).modelId === settings?.modelId ? meter.context : null;

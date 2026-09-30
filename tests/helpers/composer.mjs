@@ -17,7 +17,7 @@ export async function checkComposer({ evaluate, send }) {
     const style = getComputedStyle(send);
     return { attachmentDisabled: attach.disabled, attachmentType: attach.type,
       round: style.borderRadius, square: style.width === style.height };
-  })()`), { attachmentDisabled: true, attachmentType: "button", round: "50%", square: true });
+  })()`), { attachmentDisabled: false, attachmentType: "button", round: "50%", square: true });
   const value = () => evaluate("document.querySelector('textarea').value");
   const height = () => evaluate("document.querySelector('textarea').getBoundingClientRect().height");
   const replaceText = async (text) => {

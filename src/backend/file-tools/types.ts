@@ -1,3 +1,5 @@
+import type { ImageInfo } from "../../contracts/image-types.js";
+
 export const MAX_FILE_BYTES = 16 * 1024 * 1024;
 export const MAX_ARGUMENT_BYTES = 1024 * 1024;
 export const MAX_OUTPUT_BYTES = 64 * 1024;
@@ -24,6 +26,7 @@ export type FileResult = {
   end_line?: number;
   total_lines?: number;
   next_offset?: number | null;
+  image?: ImageInfo;
 };
 export class FileToolError extends Error {
   constructor(message: string, readonly uncertain = false) { super(message); }

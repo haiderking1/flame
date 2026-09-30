@@ -16,6 +16,19 @@ export class SessionRepository {
     checkId(location.projectId); checkId(location.sessionId);
     if (!this.projects.list().some((project) => project.id === location.projectId)) throw missing();
   }
+  assertUploadTarget(location: SessionLocation) {
+    this.project(location);
+    const parent = join(this.root, location.projectId, "sessions");
+    if (existsSync(parent)) {
+      projectDirectory(this.root, location.projectId, false);
+      const trash = join(parent, ".trash");
+      if (existsSync(trash)) {
+        directory(trash);
+        if (existsSync(join(trash, location.sessionId))) throw missing();
+      }
+      if (existsSync(join(parent, location.sessionId))) this.use(location, db => db.read());
+    }
+  }
   use<T>(location: SessionLocation, work: (db: SessionDatabase) => T): T {
     this.project(location);
     let db;

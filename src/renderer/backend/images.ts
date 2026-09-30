@@ -2,28 +2,13 @@ import { Effect } from "effect";
 import { Atom } from "effect/unstable/reactivity";
 import { Backend, backendRuntime } from "./client";
 import type { SessionLocation } from "@contracts/sessions";
-import { IMAGE_CHUNK_BYTES, type ImageInfo } from "@contracts/image-types";
-import type { DraftImage } from "../components/images/draft-storage";
+import { type ImageInfo } from "@contracts/image-types";
 
-export const uploadImage = Atom.family((_key: string) => backendRuntime.fn((input: SessionLocation & { image: DraftImage; signal?: AbortSignal }) => Effect.gen(function* () {
-  const client = yield* Backend, { image, signal, projectId, sessionId } = input;
-  const location = { projectId, sessionId };
-  yield* Effect.sync(() => signal?.throwIfAborted());
-  const bytes = new Uint8Array(yield* Effect.promise(() => image.file.arrayBuffer()));
-  const hash = new Uint8Array(yield* Effect.promise(() => crypto.subtle.digest("SHA-256", bytes)));
-  const sha256 = Array.from(hash, byte => byte.toString(16).padStart(2, "0")).join("");
-  const target = { ...location, id: image.id };
-  yield* Effect.sync(() => signal?.throwIfAborted());
-  const existing = yield* client["images.begin"]({ ...target, name: image.name, bytes: bytes.length, sha256 });
-  if (existing) return existing;
-  for (let offset = 0; offset < bytes.length; offset += IMAGE_CHUNK_BYTES) {
-    yield* Effect.sync(() => signal?.throwIfAborted());
-    const data = btoa(String.fromCharCode(...bytes.subarray(offset, offset + IMAGE_CHUNK_BYTES)));
-    yield* client["images.chunk"]({ ...target, offset, data });
-  }
-  yield* Effect.sync(() => signal?.throwIfAborted());
-  return yield* client["images.finish"](target);
-})));
+export { uploadImageBinary, imageDigest } from "./image-upload";
+export const stagedImages = Atom.family((_key: string) => backendRuntime.fn((input: SessionLocation & { ids: readonly string[] }) =>
+  Effect.flatMap(Backend, client => client["images.staged"](input)).pipe(Effect.timeout("15 seconds")), { concurrent: true }));
+export const adoptImages = Atom.family((_key: string) => backendRuntime.fn((input: SessionLocation & { ids: readonly string[] }) =>
+  Effect.flatMap(Backend, client => client["images.adopt"](input)).pipe(Effect.timeout("30 seconds")), { concurrent: true }));
 export const downloadImage = Atom.family((_key: string) => backendRuntime.fn((input: SessionLocation & { image: ImageInfo; preview?: boolean }) => Effect.gen(function* () {
   const client = yield* Backend, chunks: Uint8Array<ArrayBuffer>[] = [];
   const expected = input.preview ? input.image.modelBytes : input.image.bytes;

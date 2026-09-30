@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+import { ImageInfo } from "../../contracts/image-types.js";
 import type { FileWorkDetail } from "../../contracts/work.js";
 import { isFileTool } from "../file-tools/definitions.js";
 
@@ -12,5 +14,9 @@ export function fileWork(name: string, args: Record<string, unknown>, result: Re
   // Explicitly project presentation fields only. Arguments, hashes, and provider envelopes remain backend-only.
   const content = typeof result?.content === "string" ? result.content : "";
   const preview = content.slice(0, 16 * 1024).replace(/[\uD800-\uDBFF]$/, "");
-  return { command: `${label} ${path}`, file: { status, summary, output: preview, truncated: preview.length < content.length } };
+  let image: typeof ImageInfo.Type | undefined;
+  if (status === "completed" && result?.image) {
+    try { image = Schema.decodeUnknownSync(ImageInfo)(result.image); } catch { /* Invalid historical metadata must not become an asset request. */ }
+  }
+  return { command: `${label} ${path}`, file: { status, summary, output: preview, truncated: preview.length < content.length, ...(image ? { image } : {}) } };
 }

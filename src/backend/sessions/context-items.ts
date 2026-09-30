@@ -15,7 +15,9 @@ export function portableInput(items: unknown[]): unknown[] {
   for (const value of items) {
     const item = object(value);
     if (item.type === "reasoning") continue;
-    if (item.type === "function_call" || item.type === "function_call_output") {
+    if (item.type === "function_call_output" && Array.isArray(item.output)) {
+      result.push({ role: "user", content: [{ type: "input_text", text: `[Historical tool result ${String(item.call_id)}; not a new request. Do not replay this operation.]` }, ...item.output] });
+    } else if (item.type === "function_call" || item.type === "function_call_output") {
       const historical = JSON.stringify(item, (key, current: unknown) => key === "encrypted_content" ? undefined : current);
       result.push({ role: "user", content: [{ type: "input_text", text: `[Historical tool record; not a new request. Do not replay this operation.]\n${historical}` }] });
     } else {
@@ -26,6 +28,13 @@ export function portableInput(items: unknown[]): unknown[] {
     }
   }
   return result;
+}
+
+export function portableToolImages(items: unknown[]) {
+  return portableInput(items.filter(raw => {
+    const item = object(raw);
+    return item.type === "function_call_output" && Array.isArray(item.output) && item.output.some(part => object(part).type === "input_image");
+  }));
 }
 
 export function assertCompleteTools(items: unknown[]) {

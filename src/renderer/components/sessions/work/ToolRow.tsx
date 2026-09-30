@@ -16,7 +16,7 @@ function statusLabel(job?: BashJob) {
 }
 type Props = { step: Extract<WorkStep, { kind: "tool" }>; job?: BashJob; location: SessionLocation };
 export function ToolRow(props: Props) {
-  return props.step.file ? <FileToolRow step={props.step} detail={props.step.file} /> : <BashToolRow {...props} />;
+  return props.step.file ? <FileToolRow step={props.step} detail={props.step.file} location={props.location} /> : <BashToolRow {...props} />;
 }
 function BashToolRow({ step, job: live, location }: Props) {
   const detailId = useId();

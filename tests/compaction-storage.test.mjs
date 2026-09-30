@@ -217,15 +217,16 @@ test('old histories larger than 8 MiB and 10,000 entries remain available to the
   assert.equal(h.db.compactions.capture(settings, 'account').input.length, 2);
 });
 
-test('schema v8 migration preserves IDs and requires valid compaction references', t => {
+test('compaction and Read-image migrations preserve IDs and require valid compaction references', t => {
   const h = setup(t); h.append('Existing entry'); const before = h.db.read();
   const raw = new DatabaseSync(h.file);
-  raw.exec(`DROP TABLE compactions; ALTER TABLE turns DROP COLUMN operation;
+  raw.exec(`DROP INDEX file_operations_image; ALTER TABLE file_operations DROP COLUMN image_id;
+    DROP TABLE compactions; ALTER TABLE turns DROP COLUMN operation;
     ALTER TABLE turns DROP COLUMN phase; ALTER TABLE turns DROP COLUMN context;
     ALTER TABLE turns DROP COLUMN context_projection; PRAGMA user_version=7;`);
   raw.close();
   h.restart(); assert.equal(h.db.read().leafId, before.leafId); assert.equal(h.db.read().revision, before.revision);
   const migrated = new DatabaseSync(h.file);
-  assert.equal(migrated.prepare('PRAGMA user_version').get().user_version, 8);
+  assert.equal(migrated.prepare('PRAGMA user_version').get().user_version, 9);
   assert.deepEqual(migrated.prepare('PRAGMA foreign_key_check').all(), []); migrated.close();
 });

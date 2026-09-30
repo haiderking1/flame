@@ -100,7 +100,7 @@ test('version 3 databases migrate without changing content; settled sessions can
   assert.equal(loaded.settledAt, null);
   assert.equal(loaded.draft, 'Legacy draft');
   const check = new DatabaseSync(h.file);
-  assert.equal(check.prepare('PRAGMA user_version').get().user_version, 8);
+  assert.equal(check.prepare('PRAGMA user_version').get().user_version, 9);
   assert.deepEqual(check.prepare('PRAGMA foreign_key_check').all(), []); check.close();
   const settled = h.repository.use(h.location, db => db.settle(loaded.revision, true));
   h.repository.remove(h.location, settled.revision);

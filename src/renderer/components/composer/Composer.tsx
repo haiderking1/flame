@@ -12,12 +12,14 @@ import "./composer.css";
 type ComposerProps = {
   onSend?: (message: string, images: readonly DraftImage[], signal?: AbortSignal) => Promise<readonly string[] | void> | void;
   imageLocation?: SessionLocation; prepareAttachments?: () => Promise<void>;
+  onSendStart?: (message: string, images: readonly DraftImage[]) => ((accepted: boolean) => void) | undefined;
+  pendingSend?: boolean;
   onStop?: () => void;
   stopLabel?: string;
   draft?: string; onDraftChange?: (value: string) => void; readOnly?: boolean; saveOnly?: boolean;
 };
 
-export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, onDraftChange, readOnly = false, saveOnly = false, imageLocation, prepareAttachments }: ComposerProps) {
+export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, onDraftChange, readOnly = false, saveOnly = false, imageLocation, prepareAttachments, onSendStart, pendingSend = false }: ComposerProps) {
   const [localDraft, setLocalDraft] = useState("");
   const draft = controlledDraft ?? localDraft;
   const setDraft = onDraftChange ?? setLocalDraft;
@@ -32,8 +34,8 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
   const attachments = useImageDraft(imageLocation);
   const picker = useRef<HTMLInputElement>(null), dragDepth = useRef(0);
   const [dragging, setDragging] = useState(false);
-  const canAttach = Boolean(imageLocation && attachments.ready && !sending && !readOnly && !attachments.saving);
-  const canSend = Boolean(onSend && (draft.trim() || attachments.images.length) && attachments.ready && !attachments.saving && !sending && !readOnly && !onStop);
+  const canAttach = Boolean(imageLocation && attachments.ready && !sending && !pendingSend && !readOnly && !attachments.saving);
+  const canSend = Boolean(onSend && (draft.trim() || attachments.images.length) && attachments.ready && !attachments.saving && !sending && !pendingSend && !readOnly && !onStop);
   async function attach(files: File[]) {
     if (!canAttach || !files.length) return;
     try { await prepareAttachments?.(); await attachments.add(files); textarea.current?.focus(); }
@@ -48,16 +50,20 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
     const controller = new AbortController(); sendController.current = controller;
     setSending(true);
     setError(null);
+    const sent = [...attachments.images];
+    const finishPreview = onSendStart?.(draft, sent);
+    let acceptedSend = false;
     try {
       if (imageLocation) await attachments.flush();
-      const sent = [...attachments.images];
       controller.signal.throwIfAborted();
       const accepted = await onSend(draft, sent, controller.signal);
+      acceptedSend = true;
       if (sent.length) await attachments.sent(accepted ?? sent.map(image => image.id));
       if (controlledDraft === undefined) setDraft("");
     } catch (error) {
       setError(error instanceof SessionError ? error.message : controller.signal.aborted ? "Sending stopped. Your unsent message and attachments have been kept." : "Could not send. Your message and attachments are still here. Try again.");
     } finally {
+      finishPreview?.(acceptedSend);
       inFlight.current = false; sendController.current = null;
       setSending(false);
       textarea.current?.focus();
@@ -82,7 +88,7 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
         unavailable={commands.unavailable} onHighlight={commands.highlight} onExecute={command => { void commands.execute(command); }} />}
       <input ref={picker} className="image-sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple tabIndex={-1} aria-label="Choose images" disabled={!canAttach}
         onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void attach(files); }} />
-      <ImageGallery images={attachments.images} draft disabled={!canAttach} onRemove={id => { void attachments.remove(id); }} />
+      <ImageGallery images={pendingSend ? [] : attachments.images} draft disabled={!canAttach} onRemove={id => { void attachments.remove(id); }} />
       {attachments.error && <p className="composer__images-error" role="alert">{attachments.error}<button type="button" onClick={attachments.retry} disabled={attachments.saving}>Retry</button></p>}
       <textarea
         ref={textarea}
@@ -97,13 +103,13 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
         onFocus={commands.onFocus}
         onBlur={commands.onBlur}
         placeholder="Ask for changes, send follow-ups, or attach images"
-        value={draft}
+        value={pendingSend ? "" : draft}
         onChange={(event) => commands.onChange(event.target.value)}
         onPaste={event => { const files = Array.from(event.clipboardData.items).filter(item => item.kind === "file").map(item => item.getAsFile()).filter((file): file is File => file !== null); if (files.length) { event.preventDefault(); void attach(files); } }}
         onKeyDown={handleKeyDown}
         onCompositionStart={() => { composing.current = true; }}
         onCompositionEnd={() => { composing.current = false; }}
-        readOnly={sending || readOnly || commands.launching}
+        readOnly={sending || pendingSend || readOnly || commands.launching}
         rows={1}
         spellCheck={false}
       />

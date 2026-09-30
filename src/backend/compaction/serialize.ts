@@ -27,16 +27,17 @@ export function serializeForSummary(prefix: readonly unknown[]): SummaryContent 
       }
       continue;
     }
-    if (item.type === "function_call_output") { text("Tool result", truncated(String(item.output ?? ""))); continue; }
-    const label = item.role === "assistant" ? "Assistant" : item.role === "user" ? "User" : "Conversation record";
-    if (typeof item.content === "string") { text(label, item.content); continue; }
-    if (Array.isArray(item.content)) {
-      for (const rawPart of item.content) {
+    const toolResult = item.type === "function_call_output";
+    const parts = toolResult ? item.output : item.content;
+    const label = toolResult ? "Tool result" : item.role === "assistant" ? "Assistant" : item.role === "user" ? "User" : "Conversation record";
+    if (typeof parts === "string") { text(label, toolResult ? truncated(parts) : parts); continue; }
+    if (Array.isArray(parts)) {
+      for (const rawPart of parts) {
         const part = record(rawPart);
-        if (typeof part.text === "string") text(label, part.text);
+        if (typeof part.text === "string") text(label, toolResult ? truncated(part.text) : part.text);
         else if (typeof part.refusal === "string") text(label, part.refusal);
         else if (part.type === "input_image" && typeof part.image_url === "string") {
-          text(label, "An image attached to this conversation message follows.");
+          text(label, toolResult ? "An image returned by this tool follows." : "An image attached to this conversation message follows.");
           const image: SummaryImage = { type: "input_image", image_url: part.image_url };
           if (part.detail === "auto" || part.detail === "low" || part.detail === "high") image.detail = part.detail;
           content.push(image);

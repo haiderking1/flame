@@ -5,7 +5,8 @@ import { CompactionInfo, type CompactionInfo as Info } from "../../contracts/com
 import type { ModelSelection } from "../../contracts/models.js";
 import { SessionError, type SessionDocument } from "../../contracts/sessions.js";
 import type { ImageStore } from "../images/store.js";
-import { assertCompleteTools, outputDigest, portableInput, summaryInput } from "./context-items.js";
+import { expandImageResults } from "../file-tools/image-results.js";
+import { assertCompleteTools, outputDigest, portableInput, portableToolImages, summaryInput } from "./context-items.js";
 import { storageError } from "./files.js";
 
 export type CompactionCapture = { leafId: string | null; checkpointId: string | null; input: unknown[]; compactionCount: number; lastCompactedAt: number | null; tokenAnchor?: { tokens: number; count: number; ledgerTokens?: number; overhead?: number } };
@@ -25,7 +26,8 @@ const array = (encoded: unknown): unknown[] => {
 
 export class CompactionStore {
   constructor(private db: DatabaseSync, private read: () => SessionDocument,
-    private transaction: <T>(work: () => T) => T, private images?: ImageStore) {}
+    private transaction: <T>(work: () => T) => T, private images?: ImageStore,
+    private restoreToolResults: (id: string, output: unknown[]) => unknown[] = (_id, output) => output) {}
 
   // Only ancestry IDs are loaded up front. Transcript payloads are loaded after
   // locating the latest valid checkpoint, avoiding deserializing covered history.
@@ -74,7 +76,7 @@ export class CompactionStore {
     let start = 0;
     if (checkpoint) {
       input.push(summaryInput(String(checkpoint.summary)));
-      const kept = array(checkpoint.kept);
+      const kept = expandImageResults(array(checkpoint.kept), this.images);
       input.push(...(checkpoint.account_key === accountKey && (!settings || checkpoint.model_id === settings.modelId) ? kept : portableInput(kept)));
       start = checkpoint.leaf_id === null ? 0 : chain.indexOf(String(checkpoint.leaf_id)) + 1;
     }
@@ -87,20 +89,26 @@ export class CompactionStore {
         const ids = this.images?.list(String(row.id)).map(image => image.id) ?? [];
         input.push({ role: "user", content: [{ type: "input_text", text: row.text }, ...(this.images?.content(ids) ?? [])] });
       } else if (row.kind === "assistant") {
-        const output = array(row.output ?? "[]");
+        const output = expandImageResults(this.restoreToolResults(String(row.turn_id), array(row.output ?? "[]")), this.images);
         const covered = checkpoint?.turn_id === row.turn_id ? Number(checkpoint.output_count) : 0;
         const suffix = output.slice(covered);
         if (row.status === "completed" && output.length) {
           const sameScope = row.account_key === accountKey && (!settings || JSON.parse(String(row.settings)).modelId === settings.modelId);
           if (sameScope) input.push(...suffix);
           else if (covered) input.push(...portableInput(suffix));
-          else input.push({ role: "assistant", content: [{ type: "output_text", text: row.text }] });
-        } else input.push({ role: "assistant", content: [{ type: "output_text", text: `${row.text}${row.status !== "completed" ? "\n[Response interrupted.]" : ""}` }] });
+          else {
+            input.push({ role: "assistant", content: [{ type: "output_text", text: row.text }] });
+            input.push(...portableToolImages(suffix));
+          }
+        } else {
+          input.push({ role: "assistant", content: [{ type: "output_text", text: `${row.text}${row.status !== "completed" ? "\n[Response interrupted.]" : ""}` }] });
+          input.push(...portableToolImages(suffix));
+        }
       }
     }
     const active = this.db.prepare("SELECT id,settings,account_key,output FROM turns WHERE status='running' AND operation='response'").get();
     if (active) {
-      const output = array(active.output).slice(checkpoint?.turn_id === active.id ? Number(checkpoint.output_count) : 0);
+      const output = expandImageResults(this.restoreToolResults(String(active.id), array(active.output)), this.images).slice(checkpoint?.turn_id === active.id ? Number(checkpoint.output_count) : 0);
       const sameScope = active.account_key === accountKey && (!settings || JSON.parse(String(active.settings)).modelId === settings.modelId);
       input.push(...(sameScope ? output : portableInput(output)));
     }

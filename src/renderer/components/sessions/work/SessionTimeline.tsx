@@ -1,4 +1,5 @@
-import { ImageGallery } from "../../images/ImageGallery";
+import { UserMessage } from "./UserMessage";
+import type { PendingImageMessage } from "../usePendingImageMessage";
 import type { ImageInfo } from "@contracts/image-types";
 import { Fragment } from "react";
 import { useAtomValue } from "@effect/atom-react";
@@ -23,8 +24,9 @@ function jobActivity(turnId: string, jobs: readonly BashJob[], text = ""): WorkA
     ...own.map(job => ({ kind: "tool" as const, id: job.callId, callId: job.callId, name: "bash", command: job.command, jobId: job.id, error: null })),
   ] };
 }
-export function SessionTimeline({ location, entries, compactions = [], turn, revision }: {
+export function SessionTimeline({ location, entries, compactions = [], turn, revision, imagePreview }: {
   location: SessionLocation; entries: readonly SessionEntry[]; compactions?: readonly CompactionInfo[]; turn: TurnSnapshot | null; revision: number;
+  imagePreview?: PendingImageMessage | null;
 }) {
   const result = useAtomValue(bashJobsAtom(`${location.projectId}:${location.sessionId}`));
   const jobs = Option.getOrElse(AsyncResult.value(result), () => []);
@@ -46,10 +48,12 @@ export function SessionTimeline({ location, entries, compactions = [], turn, rev
   }
   timeline.push(...markers.map(compaction => ({ type: "marker" as const, compaction })));
   const compacting = turn?.status === "running" && turn.phase === "compacting";
+  const pending = imagePreview?.sending && !rows.some(row => row.kind === "user" && imagePreview.images.every(image => row.images.some(saved => saved.id === image.id))) ? imagePreview : null;
   return <>
     {timeline.map(item => item.type === "marker" ? <CompactionMarker key={item.compaction.id} compaction={item.compaction} /> : <Fragment key={item.row.key}>{item.row.kind === "user"
-      ? <article className="session-message session-message--user" aria-label="You"><ImageGallery images={item.row.images.map(image => ({ id: image.id, name: image.name, image, location }))} />{item.row.text && <p>{item.row.text}</p>}</article>
+      ? <UserMessage text={item.row.text} images={item.row.images.map(image => imagePreview?.images.find(source => source.id === image.id) ?? { id: image.id, name: image.name, image, location })} />
       : <AssistantContent text={item.row.text} activity={item.row.activity} status={item.row.status} compacting={compacting && item.row.key === turn.id} jobs={jobs} location={location} />}</Fragment>)}
+    {pending && <UserMessage text={pending.text} images={pending.images} pending />}
     {compacting && turn.operation === "compaction" && <p className="turn-status" role="status"><ThinkingLabel>Compacting conversation</ThinkingLabel></p>}
     {offscreen.map(id => <WorkGroup key={id} activity={jobActivity(id, jobs)} running={false} jobs={jobs} location={location} />)}
     {turn?.message && <p className="turn-feedback" role="status">{turn.message}</p>}

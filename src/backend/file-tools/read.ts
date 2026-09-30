@@ -1,8 +1,8 @@
-import { existingPath, snapshot } from "./filesystem.js";
+import { existingPath, snapshot, type FileSnapshot } from "./filesystem.js";
 import { FileToolError, MAX_OUTPUT_BYTES, type FileOperation, type FileResult } from "./types.js";
 
-export async function readText(path: string, operation: Extract<FileOperation, { name: "read" }>, signal: AbortSignal): Promise<FileResult> {
-  const file = await snapshot(await existingPath(path), signal);
+export async function readText(path: string, operation: Extract<FileOperation, { name: "read" }>, signal: AbortSignal, supplied?: FileSnapshot): Promise<FileResult> {
+  const file = supplied ?? await snapshot(await existingPath(path), signal);
   // Keep raw-byte hashes, but expose editor-friendly text. Edit restores the original BOM/CRLF.
   const text = file.text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
   const start = operation.offset - 1;
