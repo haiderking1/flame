@@ -9,7 +9,7 @@
 - `read` uses 1-based `offset` and returns at most 2000 complete lines / 64 KiB. `next_offset` is the explicit continuation cursor; `null` means EOF. Individual oversized lines get an explicit error. Empty files have zero lines. Output omits the BOM and normalizes CRLF to LF; `sha256` always hashes original bytes, including BOM and line endings. No unbounded split/line array is allocated.
 - `edit` matches every nonempty `oldText` exactly once in the same original file. Even overlapping occurrences count as ambiguous. Multiple ranges must be disjoint; validation of every replacement precedes writing. There is no fuzzy matching. Uniform CRLF and UTF-8 BOM are preserved. Mixed endings or lone CR are rejected explicitly rather than normalizing unrelated text.
 - `write` writes content exactly as provided. `expected_sha256: null` means create only. Replacing an existing file requires its current raw-byte SHA-256, obtained from `read`. Edit accepts the same hash guard, with null permitting exact matching against a fresh snapshot. Stale hashes fail without replacing the file.
-- Encoded file-tool arguments are limited to 1 MiB. There are at most 100 replacements per edit and 1024 durable file-operation records per session. Existing 32-step and 16-calls-per-response limits still apply. Provider input retains separate 8 MiB text/tool and 64 MiB image budgets; durable turn output retains its 256 MiB limit.
+- Encoded file-tool arguments are limited to 1 MiB. There are at most 100 replacements per edit and 1024 durable file-operation records per session. The 16-calls-per-response limit still applies. Provider input retains separate 8 MiB text/tool and 64 MiB image budgets; durable turn output retains its 256 MiB limit.
 
 ## Image reads
 

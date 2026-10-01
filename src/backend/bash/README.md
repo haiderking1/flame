@@ -1,6 +1,6 @@
 # Bash execution
 
-The backend connects Responses function calls to durable session-owned Bash jobs. `agent-loop.ts` returns each tool result to the provider and continues until an answer, cancellation, failure, or the 32-step limit. Execution is direct: there is no approval system or systemd dependency.
+The backend connects Responses function calls to durable session-owned Bash jobs. `agent-loop.ts` returns each tool result to the provider and continues until an answer, cancellation, or failure; there is no step limit. Execution is direct: there is no approval system or systemd dependency.
 
 ## Lifecycle
 

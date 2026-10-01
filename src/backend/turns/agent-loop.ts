@@ -19,7 +19,8 @@ export async function agentLoop(client: Pick<CodexInferenceClient, "run">, reque
   const seen = new Set<string>();
   const prepared = await agentContext(location, runtime, files, signal);
   context?.setOverhead(prepared.overhead);
-  for (let step = 0; step < 32; step++) {
+  // No step limit: the agent works until it answers, or until the user stops it.
+  for (;;) {
     signal.throwIfAborted();
     const prefix = text ? `${text}\n\n` : "";
     let streamed = prefix;
@@ -64,5 +65,4 @@ export async function agentLoop(client: Pick<CodexInferenceClient, "run">, reque
     // A follow-up the user sent while the agent worked takes over at this tool step, as the next message.
     if (yieldTo?.()) return { text, output };
   }
-  throw new InferenceFailure("The agent reached its 32-step limit. No operations will be replayed. Inspect files and jobs before continuing.");
 }

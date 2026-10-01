@@ -62,6 +62,18 @@ test('actual Responses parser executes Bash once, sends the result back, and per
   assert.equal(h.sessions.jobs(h.location, store => store.list()).length, 1);
 });
 
+test('the agent has no step limit: it keeps working until it answers', { ...opts, timeout: 30000 }, async t => {
+  const steps = 40;
+  const h = setup(t, (_body, n) => n <= steps
+    ? [{ ...call(`printf ${n} >> steps`), id: `fc_${n}`, call_id: `call_${n}` }]
+    : [message('Done after every step.')]);
+  await h.turns.start(h.input);
+  await until(() => ['completed', 'failed'].includes(h.turns.snapshot(h.location)?.status));
+  assert.equal(h.turns.snapshot(h.location).status, 'completed');
+  assert.equal(h.requests.length, steps + 1);
+  assert.equal(readFileSync(join(h.root, 'steps'), 'utf8'), Array.from({ length: steps }, (_, i) => i + 1).join(''));
+});
+
 test('background completion wakes an idle model once without polling or inventing a user message', opts, async t => {
   const h = setup(t, (_body, n) => n === 1 ? [call('sleep 0.2; printf x >> marker; printf finished', true)] : [message(n === 2 ? 'Background job started.' : 'Background job finished.')]);
   await h.turns.start(h.input);
