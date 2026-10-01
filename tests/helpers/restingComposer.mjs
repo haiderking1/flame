@@ -26,6 +26,10 @@ export async function checkRestingComposer({ evaluate, type, wait, input, captur
   assert.ok(Math.abs(rested.height - 50) <= 1, `a resting composer is one 32px line: ${JSON.stringify(rested)}`);
   assert.ok(rested.inputHeight <= 32.5 && rested.hostedModel && rested.footerModel === 'absolute' && rested.send, JSON.stringify(rested));
   assert.ok(fullHeight > rested.height + 40);
+  // The strip's clear top 16px stays tucked behind the resting composer, so history never shows through the seam.
+  const seam = await evaluate(`(() => { const form = document.querySelector('.composer').getBoundingClientRect(), strip = document.querySelector('.branch-toolbar').getBoundingClientRect();
+    return { overlap: form.bottom - strip.top, formBottom: form.bottom, stripTop: strip.top }; })()`);
+  assert.ok(Math.abs(seam.overlap - 16) <= 1, `the strip tucks 16px behind the resting composer: ${JSON.stringify(seam)}`);
   await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))'); await capture('composer-resting');
   assert.equal(await reserve(), fullReserve, 'the history keeps the full composer reserve, so expanding never covers what was in view');
 

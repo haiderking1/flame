@@ -14,7 +14,9 @@
 .composer::before {
   content: "";
   position: absolute;
-  inset: 0;
+  /* Under the border too: its 5% white would otherwise show the history behind it through a raw sliver, which at
+     fractional display scales reads as a band of text along the seam with the context strip. */
+  inset: -1px;
   z-index: -1;
   border-radius: inherit;
   background: rgb(17 17 17 / 80%);
