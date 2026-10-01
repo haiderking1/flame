@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAtomSet } from "@effect/atom-react";
 import type { ModelSelection } from "@contracts/models";
 import { fitsSessionText, SessionError, type SessionDocument, type SessionLocation, type SessionPage, type SessionSummary } from "@contracts/sessions";
-import { changeSession, createSession, deleteSession, readSession, rewindSession, sessionErrorMessage, sessionHistory } from "../../backend/sessions";
+import { changeSession, createSession, deleteSession, readSession, regenerateSessionTitle, rewindSession, sessionErrorMessage, sessionHistory } from "../../backend/sessions";
 import { configureWorkspace } from "../../backend/worktrees";
 import type { SessionWorkspace } from "@contracts/session-workspace";
 import { startTurn, stopTurn } from "../../backend/turns";
@@ -28,6 +28,7 @@ export function useSessionWorkspace() {
   const remove = useAtomSet(deleteSession, { mode: "promise" });
   const place = useAtomSet(configureWorkspace, { mode: "promise" });
   const rewindTo = useAtomSet(rewindSession, { mode: "promise" });
+  const regenerate = useAtomSet(regenerateSessionTitle, { mode: "promise" });
   const [document, setDocument] = useState<SessionDocument | null>(null);
   const turnState = useTurnState(document);
   const [page, setPage] = useState<SessionPage>({ entries: [], nextBefore: null });
@@ -254,6 +255,8 @@ export function useSessionWorkspace() {
     stop: () => turnState.stop().catch((error) => { setError(sessionErrorMessage(error)); }), busy: pending > 0 || transitioning, dirty: !!document && draft !== document.draft,
     editDraft, open, newSession, placeSession, rewind, send, loadOlder, reload, flushDraft, compact, accountKey: turnState.accountKey,
     renameSession: (target: SessionSummary, title: string) => editSession(target, { type: "rename", title }),
+    // Not a revisioned edit: the title changes in the background when the model answers.
+    regenerateTitle: (target: SessionSummary) => regenerate({ projectId: target.projectId, sessionId: target.sessionId }).then(() => {}),
     settleSession: (target: SessionSummary, settled: boolean) => editSession(target, { type: "settle", settled }),
     deleteSession: (target: SessionSummary) => editSession(target, { type: "delete" }),
     configure: async (accountKey: string, settings: ModelSelection) => {

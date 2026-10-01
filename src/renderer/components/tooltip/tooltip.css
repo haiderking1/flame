@@ -1,0 +1,12 @@
+/* T3 Code's tooltip: a small bordered label 4px above its element, fading and growing in slightly. */
+.tooltip {
+  position: fixed; inset: auto; position-area: top; position-try-fallbacks: flip-block; margin: 0 0 4px;
+  box-sizing: border-box; max-width: min(320px, calc(100vw - 16px)); padding: 4px 8px; overflow: visible;
+  border: 1px solid var(--dropdown-border); border-radius: 6px; background: rgb(22 22 22); color: var(--dropdown-text);
+  box-shadow: 0 4px 12px #0000000d; font-size: 12px; line-height: 1.375; text-wrap: balance; overflow-wrap: anywhere; pointer-events: none;
+  opacity: 1; scale: 1; transform-origin: bottom center;
+  transition: opacity 100ms, scale 100ms, overlay 100ms allow-discrete, display 100ms allow-discrete;
+}
+.tooltip:not(:popover-open) { opacity: 0; scale: .98; }
+@starting-style { .tooltip:popover-open { opacity: 0; scale: .98; } }
+@media (prefers-reduced-motion: reduce) { .tooltip { transition: none; } }

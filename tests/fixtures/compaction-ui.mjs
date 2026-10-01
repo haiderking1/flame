@@ -9,6 +9,7 @@ import { Effect } from 'effect';
 import { createWindow } from '../../dist/main/window.js';
 import { installImageUploadOrigin } from '../../dist/main/imageUploadOrigin.js';
 import { startServer } from '../../dist/backend/server.js';
+import { isTitleRun, titleResult } from '../helpers/titleModel.mjs';
 import { ProjectStore } from '../../dist/backend/projects/store.js';
 import { SessionRepository } from '../../dist/backend/sessions/repository.js';
 import { CodexModelsClient } from '../../dist/backend/models/client.js';
@@ -39,6 +40,7 @@ void app.whenReady().then(async () => {
   const result = text => ({ text, output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }] });
   let summaryCalls = 0, answerCalls = 0;
   const inferenceClient = { async run(request, onText, signal) {
+    if (isTitleRun(request)) return titleResult();
     if (request.instructionsOverride?.includes('context checkpoint')) {
       summaryCalls++;
       assert.equal(request.tools, false, 'summary generation has no tools');
@@ -87,7 +89,8 @@ void app.whenReady().then(async () => {
   };
   const type = async value => {
     window.focus(); window.webContents.focus();
-    await evaluate("document.querySelector('.composer__input').focus()");
+    // A run ending reloads the session, briefly making the composer read-only; focus it once it can take text.
+    await wait("(() => { const input = document.querySelector('.composer__input'); if (!input || input.readOnly) return false; input.focus(); return document.activeElement === input; })()");
     await press('A', ['control']); await press('Backspace');
     await wait("document.querySelector('.composer__input').value === ''");
     if (value) await window.webContents.insertText(value);

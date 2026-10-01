@@ -23,6 +23,8 @@ export const changeSession = backendRuntime.fn((input: SessionChange) => Effect.
   }
 }).pipe(Effect.timeout("10 seconds")));
 export const deleteSession = backendRuntime.fn((input: SessionLocation & { revision: number }) => Effect.flatMap(Backend, (client) => client["sessions.delete"](input)).pipe(Effect.timeout("10 seconds")));
+/** Starts "Regenerate title"; the new title arrives with the session list. */
+export const regenerateSessionTitle = backendRuntime.fn((location: SessionLocation) => Effect.flatMap(Backend, (client) => client["sessions.regenerateTitle"](location)).pipe(Effect.timeout("10 seconds")));
 export const rewindSession = backendRuntime.fn((input: SessionLocation & { revision: number; entryId: string; restoreFiles: boolean }) =>
   Effect.flatMap(Backend, (client) => client["sessions.rewind"](input)).pipe(Effect.timeout("6 minutes")));
 export const sessionErrorMessage = (error: unknown) => error instanceof SessionError ? error.message : "Could not reach session storage. Your unsaved text is still here. Try again.";

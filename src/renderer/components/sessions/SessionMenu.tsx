@@ -2,9 +2,9 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import "./session-menu.css";
 
-export function SessionMenu({ id, x, y, trigger, settled, branch, onSettle, onClose, onRename, onDelete, onNewOnBranch, onMarkUnread }: {
-  id: string; x: number; y: number; trigger: RefObject<HTMLButtonElement | null>; settled: boolean; branch: string | null; onMarkUnread: (() => void) | null;
-  onSettle(): void; onClose(restoreFocus: boolean): void; onRename(): void; onDelete(): void; onNewOnBranch(): void;
+export function SessionMenu({ id, x, y, trigger, settled, branch, regenerating, onSettle, onClose, onRename, onRegenerateTitle, onDelete, onNewOnBranch, onMarkUnread }: {
+  id: string; x: number; y: number; trigger: RefObject<HTMLButtonElement | null>; settled: boolean; branch: string | null; regenerating: boolean; onMarkUnread: (() => void) | null;
+  onSettle(): void; onClose(restoreFocus: boolean): void; onRename(): void; onRegenerateTitle(): void; onDelete(): void; onNewOnBranch(): void;
 }) {
   const menu = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -42,13 +42,14 @@ export function SessionMenu({ id, x, y, trigger, settled, branch, onSettle, onCl
         if (event.key === "Escape") event.preventDefault();
         onClose(true); return;
       }
-      const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button")];
+      const items = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
       const index = items.indexOf(document.activeElement as HTMLButtonElement);
       const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
         : event.key === "ArrowDown" ? (index + 1) % items.length : event.key === "ArrowUp" ? (index + items.length - 1) % items.length : null;
       if (next !== null) { event.preventDefault(); items[next]?.focus({ preventScroll: true }); }
     }}>
     <button role="menuitem" type="button" onClick={() => { onClose(true); onRename(); }}>Rename</button>
+    <button role="menuitem" type="button" disabled={regenerating} onClick={() => { onClose(true); onRegenerateTitle(); }}>{regenerating ? "Regenerating…" : "Regenerate title"}</button>
     <button role="menuitem" type="button" onClick={() => { onClose(true); onSettle(); }}>{settled ? "Unsettle" : "Settle"}</button>
     {onMarkUnread && <button role="menuitem" type="button" onClick={() => { onClose(true); onMarkUnread(); }}>Mark unread</button>}
     {branch && <button role="menuitem" type="button" title={`New thread on ${branch}`} onClick={() => { onClose(false); onNewOnBranch(); }}>New thread on {branch}</button>}

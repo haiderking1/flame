@@ -7,6 +7,7 @@ import type { CodexInferenceClient } from "../../turns/client.js";
 import { InferenceFailure } from "../../turns/sse.js";
 import { sanitizeFeatureBranchName } from "../branch-names.js";
 import { WRITER_INSTRUCTIONS } from "./prompts.js";
+import { TITLE_INSTRUCTIONS } from "../../titles/prompts.js";
 
 const GENERATION_TIMEOUT_MS = 180_000;
 export type CommitText = { subject: string; body: string; branch: string | null };
@@ -14,6 +15,10 @@ export type ChangeRequestText = { title: string; body: string };
 /** Names a session's worktree branch from its first message. */
 export interface BranchNamer {
   branch(prompt: string, images: readonly unknown[], signal: AbortSignal): Promise<string>;
+}
+/** Titles a thread with the text model; `prompt` is a full thread title prompt. */
+export interface TitleWriter {
+  title(prompt: string, model: ModelSelection | null, images: readonly unknown[], signal: AbortSignal): Promise<{ title: string; needsRefinement: boolean }>;
 }
 export interface GitWriter {
   commit(prompt: string, model: ModelSelection | null, includeBranch: boolean, signal: AbortSignal): Promise<CommitText>;
@@ -42,8 +47,8 @@ export function commitText(reply: Record<string, unknown>, includeBranch: boolea
 export function changeRequestText(reply: Record<string, unknown>): ChangeRequestText {
   return { title: commitSubject(field(reply, "title"), "Update project changes").slice(0, 256), body: field(reply, "body") };
 }
-/** Writes commit messages and change request text with the Git text model from Settings, else the chat model. */
-export class CodexGitWriter implements GitWriter, BranchNamer {
+/** Writes commit messages, change request text, branch names and thread titles with the text model from Settings, else the chat model. */
+export class CodexGitWriter implements GitWriter, BranchNamer, TitleWriter {
   constructor(private readonly auth: Pick<CodexAuth, "usageSession" | "refresh">, private readonly models: Pick<CodexModels, "validateSelection" | "state"> & Partial<Pick<CodexModels, "supportsImages">>,
     private readonly client: Pick<CodexInferenceClient, "run">) {}
   async commit(prompt: string, model: ModelSelection | null, includeBranch: boolean, signal: AbortSignal) {
@@ -58,7 +63,13 @@ export class CodexGitWriter implements GitWriter, BranchNamer {
     if (!name) throw new GitError({ code: "COMMAND", message: "The model did not suggest a branch name." });
     return name;
   }
-  private async generate(prompt: string, model: ModelSelection | null, signal: AbortSignal, images: readonly unknown[] = []) {
+  /** A thread title, raw; the caller cleans it up. Images go along only when the text model reads them. */
+  async title(prompt: string, model: ModelSelection | null, images: readonly unknown[], signal: AbortSignal) {
+    const reply = parseReply(await this.generate(prompt, model, signal, images, TITLE_INSTRUCTIONS));
+    if (typeof reply.title !== "string") throw new GitError({ code: "COMMAND", message: "The model did not suggest a title." });
+    return { title: reply.title, needsRefinement: reply.needsRefinement === true };
+  }
+  private async generate(prompt: string, model: ModelSelection | null, signal: AbortSignal, images: readonly unknown[] = [], instructions = WRITER_INSTRUCTIONS) {
     if (!this.auth.usageSession()) await this.auth.refresh().catch(() => {});
     const account = this.auth.usageSession();
     if (!account) throw new GitError({ code: "INVALID", message: "Sign in to OpenAI in Providers to generate text, or write the commit message yourself." });
@@ -68,7 +79,7 @@ export class CodexGitWriter implements GitWriter, BranchNamer {
     try {
       const result = await this.client.run({ accountId: account.accountId, access: account.access, sessionId: id, promptCacheKey: id,
         settings, tools: false, fileTools: false, bashTools: false,
-        instructionsOverride: WRITER_INSTRUCTIONS, input: [{ role: "user", content: [{ type: "input_text", text: prompt }, ...withImages] }] }, () => {},
+        instructionsOverride: instructions, input: [{ role: "user", content: [{ type: "input_text", text: prompt }, ...withImages] }] }, () => {},
         AbortSignal.any([signal, AbortSignal.timeout(GENERATION_TIMEOUT_MS)]));
       return result.text;
     } catch (error) {

@@ -11,6 +11,7 @@ import { CodexModelsClient } from '../../dist/backend/models/client.js';
 import { CodexInferenceClient } from '../../dist/backend/turns/client.js';
 import { gitCommand } from '../../dist/backend/git/command.js';
 import { rendererDriver } from '../helpers/rendererDriver.mjs';
+import { isTitleRequest, titleReply } from '../helpers/titleModel.mjs';
 import { captureUI } from '../helpers/captureUI.mjs';
 import { installFakeGitHub } from '../helpers/fakeHosting.mjs';
 
@@ -33,6 +34,7 @@ void app.whenReady().then(async () => {
   const cwds = [];
   const inferenceClient = new CodexInferenceClient(async (_url, options) => {
     const body = JSON.parse(options.body);
+    if (isTitleRequest(body)) return titleReply();
     if (/git commit messages/.test(body.instructions)) return reply(JSON.stringify(/git branch names/.test(JSON.stringify(body.input)) ? { branch: 'Fix login redirect' } : { subject: 'Change', body: '' }));
     cwds.push(/<cwd>\n(.*)\n<\/cwd>/.exec(body.instructions)?.[1]);
     return reply('Done in the worktree.');

@@ -17,6 +17,7 @@ import { SessionRepository } from '../../dist/backend/sessions/repository.js';
 import { checkFloatingComposer } from '../helpers/floatingComposer.mjs';
 import { CodexModelsClient } from '../../dist/backend/models/client.js';
 import { CodexInferenceClient } from '../../dist/backend/turns/client.js';
+import { isTitleRequest, titleReply } from '../helpers/titleModel.mjs';
 
 // Keep Electron alive through asynchronous cleanup so assertions cannot turn
 // into a successful exit merely because the test window was destroyed.
@@ -38,6 +39,7 @@ void app.whenReady().then(async () => {
   const abort = new AbortController();
   let inferenceCalls = 0;
   const inferenceClient = new CodexInferenceClient(async (_url, options) => {
+    if (isTitleRequest(JSON.parse(options.body))) return titleReply();
     const call = ++inferenceCalls;
     const input = JSON.parse(options.body).input;
     const prompt = [...input].reverse().find(item => item.role === 'user')?.content?.[0]?.text;

@@ -8,6 +8,7 @@ import { Effect } from 'effect';
 import { createWindow } from '../../dist/main/window.js';
 import { installImageUploadOrigin } from '../../dist/main/imageUploadOrigin.js';
 import { startServer } from '../../dist/backend/server.js';
+import { isTitleRun, titleResult } from '../helpers/titleModel.mjs';
 import { ProjectStore } from '../../dist/backend/projects/store.js';
 import { SessionRepository } from '../../dist/backend/sessions/repository.js';
 import { CodexModelsClient } from '../../dist/backend/models/client.js';
@@ -28,6 +29,7 @@ void app.whenReady().then(async () => {
   writeFileSync(join(work, 'read-source.png'), png(640, 240));
   let requests = 0;
   const inferenceClient = { async run(request) {
+    if (isTitleRun(request)) return titleResult();
     requests++;
     const images = request.input.flatMap(item => Array.isArray(item.output) ? item.output : item.content ?? []).filter(part => part.type === 'input_image');
     assert.equal(images.length, requests === 1 ? 3 : requests === 4 ? 2 : 1); assert.ok(images.every(part => part.image_url.startsWith('data:image/png;base64,')));

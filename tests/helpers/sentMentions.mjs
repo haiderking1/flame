@@ -16,5 +16,5 @@ export async function checkSentMentions({ evaluate, wait, repository, location, 
   assert.deepEqual(await evaluate(`[...document.querySelectorAll('.session-message--user .file-mention')].map(chip => ({ name: chip.textContent, title: chip.title, icon: chip.querySelector('.file-icon').dataset.fileIcon }))`),
     [{ name: 'app.ts', title: 'src/app.ts', icon: 'typescript' }, { name: 'lib', title: 'src/lib', icon: 'folder' }]);
   assert.equal(await evaluate("document.querySelector('.session-message--user p').textContent"), 'Fix app.ts and lib\nthanks', 'the rest of the message stays plain text');
-  assert.equal(repository.use(location, db => db.read()).title, 'Fix app.ts and lib', 'titles show mentioned names, not link syntax');
+  assert.equal(repository.use(location, db => db.read()).title, 'Fix app.ts and lib thanks', 'titles show mentioned names, not link syntax, on one line');
 }

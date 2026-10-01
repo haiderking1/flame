@@ -6,6 +6,7 @@ import { TurnStatus } from "./turn-status.js";
 import { ModelSelection, ServiceTier } from "./models.js";
 import { CompactionInfo, ContextInfo } from "./compaction.js";
 import { SessionWorkspace } from "./session-workspace.js";
+import { SessionTitleState } from "./session-title.js";
 
 export const SessionId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
 export const SessionLocation = Schema.Struct({ projectId: SessionId, sessionId: SessionId });
@@ -16,7 +17,7 @@ const Revision = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqual
 const Title = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(160));
 export const SessionSummary = Schema.Struct({
   ...SessionLocation.fields, title: Title, createdAt: Schema.Number, updatedAt: Schema.Number, revision: Revision, settledAt: Schema.NullOr(Revision),
-  workspace: SessionWorkspace,
+  workspace: SessionWorkspace, titleState: SessionTitleState,
 });
 export type SessionSummary = typeof SessionSummary.Type;
 export const SessionDocument = Schema.Struct({
@@ -46,6 +47,8 @@ export const SessionRpc = RpcGroup.make(
   Rpc.make("sessions.history", { payload: { ...SessionLocation.fields, before: Schema.NullOr(SessionId) }, success: SessionPage, error: SessionError }),
   Rpc.make("sessions.draft", { payload: { ...edit, draft: Text }, success: SessionDocument, error: SessionError }),
   Rpc.make("sessions.rename", { payload: { ...edit, title: Title }, success: SessionDocument, error: SessionError }),
+  // Retitles the session from its conversation with the text model, as T3 Code's "Regenerate title"; returns once started.
+  Rpc.make("sessions.regenerateTitle", { payload: SessionLocation, success: SessionDocument, error: SessionError }),
   Rpc.make("sessions.settle", { payload: { ...edit, settled: Schema.Boolean }, success: SessionDocument, error: SessionError }),
   Rpc.make("sessions.append", { payload: { ...edit, requestId: SessionId, text: Text, images: Schema.optionalKey(ImageIds) }, success: SessionDocument, error: SessionError }),
   Rpc.make("sessions.configure", { payload: { ...edit, accountKey: Schema.String, modelId: Schema.String,

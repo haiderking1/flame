@@ -5,8 +5,9 @@ import { storageError } from "./files.js";
 import type { Sessions } from "./service.js";
 import { SessionRewinds } from "./rewinds.js";
 import { GitError } from "../../contracts/git.js";
+import type { ThreadTitles } from "../titles/service.js";
 
-export function sessionHandlers(sessions: Sessions, rewinds: SessionRewinds = new SessionRewinds(sessions)) {
+export function sessionHandlers(sessions: Sessions, rewinds: SessionRewinds = new SessionRewinds(sessions), titles?: Pick<ThreadTitles, "regenerate">) {
   const work = <A>(run: () => A) => Effect.try({ try: run, catch: (error) => error instanceof SessionError ? error
     : error instanceof ModelsError ? new SessionError({ code: "INVALID", message: error.message }) : storageError() }).pipe(Effect.uninterruptible);
   return SessionRpc.toLayer({
@@ -20,6 +21,10 @@ export function sessionHandlers(sessions: Sessions, rewinds: SessionRewinds = ne
     "sessions.history": (input) => work(() => sessions.history(input, input.before)),
     "sessions.draft": (input) => work(() => sessions.draft(input, input.revision, input.draft)),
     "sessions.rename": (input) => work(() => sessions.rename(input, input.revision, input.title)),
+    "sessions.regenerateTitle": (location) => work(() => {
+      if (!titles) throw new SessionError({ code: "INVALID", message: "Thread titles cannot be generated here." });
+      return titles.regenerate(location);
+    }),
     "sessions.settle": (input) => work(() => sessions.settle(input, input.revision, input.settled)),
     "sessions.append": (input) => work(() => sessions.append(input, input.revision, input.requestId, input.text, input.images)),
     "sessions.configure": (input) => work(() => sessions.configure(input, input.revision, input.accountKey,

@@ -30,6 +30,9 @@
 .session-list__rename { position: absolute; left: 9px; top: 31px; width: calc(100% - 18px); min-width: 0; height: 22px; border: 1px solid #777; border-radius: 2px; padding: 0 4px; background: #191919; color: #eee; font: inherit; font-size: 14px; font-weight: 500; outline: none; }
 .session-list__rename:focus { border-color: #ddd; }
 .session-list__row[data-editing] .session-list__title { visibility: hidden; }
+.session-list__title { transition: opacity 150ms ease; }
+.session-list__title[data-regenerating] { opacity: .55; }
+.session-list__sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .session-list__warning { margin: 4px 10px; color: #d39d93; font-size: 11px; overflow-wrap: anywhere; }
 @media (hover: none) { .session-list__actions { opacity: 1; pointer-events: auto; } .session-list__time { visibility: hidden; } .session-list__row:not([data-settled]) .session-list__project { padding-right: 88px; } .session-list__row[data-settled] .session-list__item { padding-right: 84px; } }
 @media (forced-colors: active) { .session-list__item[aria-current], .session-list__item:focus-visible, .session-list__options:focus-visible { outline: 1px solid Highlight; } }
@@ -38,9 +41,16 @@
 .session-list__branch { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-list__mismatch { display: inline-flex; color: #e5b567; }
 .session-list__mismatch svg { width: 12px; height: 12px; }
-.session-list__status { flex-shrink: 0; margin-right: auto; padding: 0 6px; border-radius: 999px; font-size: 11px; line-height: 16px; }
-.session-list__status[data-status="working"] { background: #0ea5e91f; color: #7dd3fc; animation: session-status-pulse 1.6s ease-in-out infinite; }
-.session-list__status[data-status="completed"] { background: #10b9811f; color: #6ee7b7; }
+/* T3 Code's thread status: a dot and a small label in the status color, the dot blinking while it works. */
+.session-list__status { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; margin-right: auto; font-size: 10px; line-height: 14px; }
+.session-list__status-dot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: currentColor; }
+.session-list__status[data-status="working"] { color: #7dd3fccc; }
+.session-list__status[data-status="working"] .session-list__status-dot { animation: session-status-pulse 2s infinite; }
+.session-list__status[data-status="completed"] { color: #6ee7b7e6; }
 .session-list__status + .session-list__worktree { margin-right: 0; }
-@keyframes session-status-pulse { 50% { opacity: .55; } }
-@media (prefers-reduced-motion: reduce) { .session-list__status[data-status="working"] { animation: none; } }
+@keyframes session-status-pulse {
+  0%, 40% { opacity: 1; animation-timing-function: steps(6); }
+  50%, 90% { opacity: .5; animation-timing-function: steps(6); }
+  100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .session-list__status[data-status="working"] .session-list__status-dot { animation: none; } }

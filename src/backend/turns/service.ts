@@ -28,6 +28,10 @@ export type TurnWorkspace = {
 };
 type Running = { controller: AbortController; task: Promise<void>; account: string; epoch: number; status: "cancelled" | "interrupted" };
 const key = (location: SessionLocation) => `${location.projectId}:${location.sessionId}`;
+/**
+ * Runs responses. Emits "change" and "states" as runs progress, "message" when a user message starts a response, and
+ * "finished" with the status when a response ends.
+ */
 export class Turns extends EventEmitter {
   private active = new Map<string, Running>();
   private failedWrites = new Map<string, TurnSnapshot>();
@@ -138,6 +142,8 @@ export class Turns extends EventEmitter {
     const running: Running = { controller, task: Promise.resolve(), account: account.key, epoch: account.epoch, status: "cancelled" };
     this.active.set(key(input), running);
     this.sessions.publish(saved); this.emit("change", key(input));
+    // A new user message, such as the first one that titles the thread.
+    this.emit("message", { projectId: input.projectId, sessionId: input.sessionId });
     running.task = Promise.resolve().then(() => this.execute(input, settings, account, running, [], false, { text: input.text, images: input.images ?? [] }));
     return saved;
   }
@@ -261,7 +267,7 @@ export class Turns extends EventEmitter {
         else this.followUps.release(location, location.requestId);
       }
       this.emit("change", key(location));
-      if (!manual) this.workspace?.finished(location);
+      if (!manual) { this.workspace?.finished(location); this.emit("finished", { projectId: location.projectId, sessionId: location.sessionId }, status); }
       for (const session of this.sessions.snapshot().sessions) this.backgroundCompleted(session);
     }
   }

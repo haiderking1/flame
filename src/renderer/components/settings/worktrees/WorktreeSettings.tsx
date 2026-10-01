@@ -8,6 +8,7 @@ import { useWorktreeSettings } from "../../composer/workspace/worktreeDefaults";
 import { CleanupRules } from "./CleanupRules";
 import { ProjectWorktreeSettingsPanel } from "./ProjectWorktreeSettings";
 import { Choice, SettingsRow, Toggle } from "../SettingsControls";
+import { SelectMenu } from "../../workspace/SelectMenu";
 import { SUBMODULE_LABELS } from "./submoduleLabels";
 import { useWorktreeSettingsEditor } from "./useWorktreeSettingsEditor";
 import "../git/git-settings.css";
@@ -45,9 +46,7 @@ export function WorktreeSettings() {
     </div>
     <div className="worktree-settings__project-heading">
       <h1>Project</h1>
-      {list.length > 1 && <select className="settings-select" aria-label="Project" value={project?.id ?? ""} onChange={event => setChosen(event.target.value)}>
-        {list.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-      </select>}
+      {list.length > 1 && project && <SelectMenu value={project.id} options={list.map(item => ({ value: item.id, label: item.name }))} onChange={setChosen} label="Project" triggerClassName="settings-select" menuClassName="settings-select-menu" />}
     </div>
     <div className="git-settings__list">
       {project ? <ProjectWorktreeSettingsPanel key={project.id} project={project} settings={settings} busy={editor.busy} onSave={next => { void editor.project(next); }} />

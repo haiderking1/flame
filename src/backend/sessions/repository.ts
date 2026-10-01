@@ -7,8 +7,8 @@ import type { ProjectStore } from "../projects/store.js";
 import { SessionDatabase } from "./database.js";
 import { checkId, directory, isMissing, missing, projectDirectory, sessionDirectory, storageError, syncDirectory, validId } from "./files.js";
 
-export function summary({ projectId, sessionId, title, createdAt, updatedAt, revision, settledAt, workspace }: SessionDocument): SessionSummary {
-  return { projectId, sessionId, title, createdAt, updatedAt, revision, settledAt, workspace };
+export function summary({ projectId, sessionId, title, createdAt, updatedAt, revision, settledAt, workspace, titleState }: SessionDocument): SessionSummary {
+  return { projectId, sessionId, title, createdAt, updatedAt, revision, settledAt, workspace, titleState };
 }
 export class SessionRepository {
   constructor(private readonly root: string, private readonly projects: Pick<ProjectStore, "list">) {}

@@ -8,6 +8,7 @@ import { Schema } from "effect";
 import { SessionDocument, SessionEntry, SessionError, fitsSessionText, type SessionLocation, type SessionPage } from "../../contracts/sessions.js";
 import type { ModelSelection } from "../../contracts/models.js";
 import { LOCAL_WORKSPACE } from "../../contracts/session-workspace.js";
+import { initialTitleState } from "../../contracts/session-title.js";
 import { checkDatabase, missing, storageError } from "./files.js";
 import { initializeSession } from "./schema.js";
 import { migrateSession } from "./migrations.js";
@@ -22,11 +23,13 @@ import { migrateCompaction } from "./compaction-migration.js";
 import { migrateReadImages } from "./read-images-migration.js";
 import { migrateWorkspace } from "./workspace-migration.js";
 import { WorkspaceRecord } from "./workspace-record.js";
+import { migrateTitles } from "./title-migration.js";
+import { TitleRecord } from "./title-record.js";
 import { CompactionStore } from "./compaction-store.js";
-import { mentionNames } from "../../contracts/file-mentions.js";
 import { CHAIN } from "./chain.js";
 import { Rewind } from "./rewind.js";
 
+const LEGACY_TITLE_STATE = initialTitleState("legacy");
 const conflict = () => new SessionError({ code: "CONFLICT", message: "This session changed elsewhere. Reopen it before saving again. Your unsaved text has been kept." });
 const invalid = (message: string) => new SessionError({ code: "INVALID", message });
 export class SessionDatabase {
@@ -38,6 +41,7 @@ export class SessionDatabase {
   readonly compactions: CompactionStore;
   readonly workspace: WorkspaceRecord;
   readonly rewind: Rewind;
+  readonly titles: TitleRecord;
   constructor(filename: string, private readonly location: SessionLocation, settings?: ModelSelection | null) {
     checkDatabase(filename);
     this.db = new DatabaseSync(filename);
@@ -47,7 +51,7 @@ export class SessionDatabase {
       if (version === 0 && settings !== undefined) {
         this.db.exec("PRAGMA journal_mode=WAL;");
         initializeSession(this.db, location, settings);
-      } else if (typeof version !== "number" || version < 1 || version > 10) throw storageError();
+      } else if (typeof version !== "number" || version < 1 || version > 11) throw storageError();
       const legacySettlement = typeof version !== "number" || version < 4;
       this.read(true, legacySettlement);
       if (version === 0 || version === 1) migrateSession(this.db);
@@ -58,7 +62,8 @@ export class SessionDatabase {
       if (typeof version !== "number" || version < 7) migrateImages(this.db);
       if (typeof version !== "number" || version < 8) migrateCompaction(this.db);
       if (typeof version !== "number" || version < 9) migrateReadImages(this.db);
-      if (version !== 10) migrateWorkspace(this.db);
+      if (typeof version !== "number" || version < 10) migrateWorkspace(this.db);
+      if (version !== 11) migrateTitles(this.db);
       this.images = new ImageStore(this.db, join(dirname(filename), "images"), () => this.read(), work => this.transaction(work));
       this.files = new FileOperationStore(this.db, () => this.read(), work => this.transaction(work), this.images);
       this.jobs = new BashStore(this.db, () => this.read());
@@ -69,12 +74,13 @@ export class SessionDatabase {
         () => this.jobs.list().some(job => job.status === "running" || job.status === "claimed"), () => this.hasMessages());
       this.rewind = new Rewind(this.db, () => this.read(), revision => this.expect(revision), work => this.transaction(work), () => this.turns.assertIdle(),
         () => this.jobs.list().some(job => job.status === "running" || job.status === "claimed"), entryId => this.images.list(entryId));
+      this.titles = new TitleRecord(this.db, () => this.read(), work => this.transaction(work), entryId => this.images.list(entryId));
     } catch (error) { this.db.close(); throw error; }
   }
   read(includeDeleted = false, legacy = false): SessionDocument {
     const row = this.db.prepare(`SELECT id AS sessionId, project_id AS projectId, title, created_at AS createdAt,
       updated_at AS updatedAt, revision, draft, settings, deleted, leaf_id AS leafId, ${legacy ? "NULL" : "settled_at"} AS settledAt,
-      ${this.version() >= 10 ? "workspace" : "NULL"} AS workspace FROM session WHERE singleton = 1`).get();
+      ${this.version() >= 10 ? "workspace" : "NULL"} AS workspace, ${this.version() >= 11 ? "title_state" : "NULL"} AS titleState FROM session WHERE singleton = 1`).get();
     if (!row || row.sessionId !== this.location.sessionId || row.projectId !== this.location.projectId) throw storageError();
     if (!includeDeleted && row.deleted === 1) throw missing();
     const hasCompaction = this.version() >= 8;
@@ -82,7 +88,9 @@ export class SessionDatabase {
     const settings = JSON.parse(String(row.settings));
     const storedContext = meter && JSON.parse(String(meter.settings)).modelId === settings?.modelId ? meter.context : null;
     const workspace = row.workspace === null ? LOCAL_WORKSPACE : JSON.parse(String(row.workspace));
-    return Schema.decodeUnknownSync(SessionDocument)({ ...row, settings, workspace, ...(storedContext ? { context: JSON.parse(String(storedContext)) } : {}) });
+    // Before version 11 only the migration reads the session, which then records who wrote the title.
+    const titleState = row.titleState === null ? LEGACY_TITLE_STATE : JSON.parse(String(row.titleState));
+    return Schema.decodeUnknownSync(SessionDocument)({ ...row, settings, workspace, titleState, ...(storedContext ? { context: JSON.parse(String(storedContext)) } : {}) });
   }
   private version() { return Number(this.db.prepare("PRAGMA user_version").get()?.user_version); }
   /** Whether anyone has sent a message yet; a new worktree can only be chosen before the first one. */
@@ -123,6 +131,7 @@ export class SessionDatabase {
       this.expect(revision);
       this.turns.assertIdle();
       this.db.prepare("UPDATE session SET title=?, custom_title=1, revision=revision+1, updated_at=? WHERE singleton=1").run(title, Date.now());
+      this.titles.renamed();
       return this.read();
     });
   }
@@ -166,9 +175,10 @@ export class SessionDatabase {
       this.turns.assertIdle();
       this.images.assertIds(images);
       this.entry(current, "user", text, current.settings, requestId);
-      this.images.bind(this.read().leafId!, images);
-      this.db.prepare("UPDATE session SET settled_at=NULL, draft=CASE WHEN draft=? THEN '' ELSE draft END, title=CASE WHEN custom_title=0 THEN ? ELSE title END, custom_title=1 WHERE singleton=1")
-        .run(text, mentionNames(text.trim().split(/\r?\n/)[0]!).replace(/\s+/g, " ").slice(0, 120).replace(/[\uD800-\uDBFF]$/, "") || "Image attachment");
+      const entryId = this.read().leafId!;
+      this.images.bind(entryId, images);
+      this.db.prepare("UPDATE session SET settled_at=NULL, draft=CASE WHEN draft=? THEN '' ELSE draft END WHERE singleton=1").run(text);
+      this.titles.seed(entryId, text);
       return this.read();
     });
   }

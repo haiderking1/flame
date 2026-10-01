@@ -9,6 +9,7 @@ import type { TurnStore } from "./turn-store.js";
 import type { CompactionStore } from "./compaction-store.js";
 import { SessionRepository, summary } from "./repository.js";
 import type { WorkspaceRecord } from "./workspace-record.js";
+import type { TitleRecord } from "./title-record.js";
 import type { SessionWorkspace } from "../../contracts/session-workspace.js";
 
 export class Sessions extends EventEmitter {
@@ -58,6 +59,7 @@ export class Sessions extends EventEmitter {
     return this.publish(this.repository.use(location, (db) => db.configure(revision, validated)));
   }
   workspace<T>(location: SessionLocation, work: (record: WorkspaceRecord) => T) { return this.repository.use(location, db => work(db.workspace)); }
+  titles<T>(location: SessionLocation, work: (record: TitleRecord) => T) { return this.repository.use(location, db => work(db.titles)); }
   /** The session's index entry, without opening its database. */
   find(location: SessionLocation) {
     return this.index.sessions.find(item => item.sessionId === location.sessionId && item.projectId === location.projectId) ?? null;

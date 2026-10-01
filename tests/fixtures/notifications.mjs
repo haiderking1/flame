@@ -11,6 +11,9 @@ import { CodexModelsClient } from '../../dist/backend/models/client.js';
 import { CodexInferenceClient } from '../../dist/backend/turns/client.js';
 import { rendererDriver } from '../helpers/rendererDriver.mjs';
 import { captureUI } from '../helpers/captureUI.mjs';
+import { chooseFirstModel } from '../helpers/modelPicker.mjs';
+import { chooseOption, chosenOption } from '../helpers/selectMenu.mjs';
+import { isTitleRequest, titleReply } from '../helpers/titleModel.mjs';
 
 const events = items => [...items.map((item, output_index) => ({ type: 'response.output_item.done', output_index, item })), { type: 'response.completed', response: { status: 'completed', output: [] } }]
   .map(event => `data: ${JSON.stringify(event)}\n\n`).join('');
@@ -25,6 +28,7 @@ void app.whenReady().then(async () => {
   let release = () => {};
   const inferenceClient = new CodexInferenceClient(async (_url, options) => {
     const body = JSON.parse(options.body);
+    if (isTitleRequest(body)) return titleReply();
     const last = body.input.filter(item => item.role === 'user').at(-1)?.content?.find(part => part.type === 'input_text')?.text ?? '';
     if (/^Slow job/.test(last)) await new Promise(resolve => { release = resolve; });
     return new Response(events([say(`Answered: ${last}`)]));
@@ -47,7 +51,7 @@ void app.whenReady().then(async () => {
   const openSettings = async () => {
     await click('.sidebar-footer [aria-label="Settings"]'); await wait("!!document.querySelector('.settings-navigation')");
     await evaluate("[...document.querySelectorAll('.settings-navigation button')].find(button => button.textContent === 'General').click()");
-    await wait("!!document.querySelector('select[aria-label=\"Thread notifications\"]')");
+    await wait("!!document.querySelector('button[aria-label=\"Thread notifications\"]')");
   };
   const status = title => `document.querySelector('[aria-label=${JSON.stringify(title)}]')?.closest('.session-list__row')?.querySelector('.session-list__status')?.textContent ?? null`;
   const newThread = async () => {
@@ -59,18 +63,16 @@ void app.whenReady().then(async () => {
     if (await evaluate("document.querySelector('.sidebar-toggle')?.getAttribute('aria-expanded') === 'false'")) await click('.sidebar-toggle');
     // Settings: system notifications only when the system can show them; in-app toasts on.
     await openSettings();
-    await evaluate("(() => { const select = document.querySelector('select[aria-label=\"Thread notifications\"]'); select.value = 'notifications-and-sound'; select.dispatchEvent(new Event('change', { bubbles: true })); })()");
-    if (Notification.isSupported()) await wait("document.querySelector('select[aria-label=\"Thread notifications\"]').value === 'notifications-and-sound'");
-    else await wait("document.querySelector('#thread-notifications-description').textContent === 'Notifications are unavailable on this system. Sound only is still available.' && document.querySelector('select[aria-label=\"Thread notifications\"]').value === 'off'");
+    await chooseOption(driver, 'Thread notifications', 'Notifications with sound');
+    if (Notification.isSupported()) await wait(`${chosenOption('Thread notifications')} === 'Notifications with sound'`);
+    else await wait(`document.querySelector('#thread-notifications-description').textContent === 'Notifications are unavailable on this system. Sound only is still available.' && ${chosenOption('Thread notifications')} === 'Off'`);
     await click('[aria-label="In-app notifications"]');
     await wait("document.querySelector('[aria-label=\"In-app notifications\"]').checked");
     await captureUI(driver, 'notification-settings');
     await click('[aria-label="Close settings"]'); await wait("!document.querySelector('.settings-page')");
 
     await newThread();
-    await click('.composer .composer-settings__model'); await wait("!!document.querySelector('.model-picker:popover-open .model-picker__option')");
-    await evaluate("document.querySelector('.model-picker:popover-open .model-picker__option').click()");
-    await wait("document.querySelector('.composer .composer-settings__model').getAttribute('aria-label') === 'Select model: Test model'");
+    await chooseFirstModel(driver);
     await set('.composer__input', 'Slow job'); await enter();
     await wait(`${status('Slow job')} === 'Working'`);
 
@@ -84,6 +86,17 @@ void app.whenReady().then(async () => {
     await wait("[...document.querySelectorAll('.toast')].some(toast => toast.textContent.includes('Thread completed') && toast.textContent.includes('Slow job'))");
     await wait(`${status('Slow job')} === 'Completed'`);
     await captureUI(driver, 'notification-toast');
+    // Hovering the label shows T3 Code's tooltip above it; leaving hides it, and the label's own text is unchanged.
+    const label = await evaluate(`(() => { const rect = document.querySelector('[aria-label="Slow job"]').closest('.session-list__row').querySelector('.session-list__status').getBoundingClientRect(); return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2), top: rect.top }; })()`);
+    await window.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: label.x, y: label.y });
+    await wait("[...document.querySelectorAll('.tooltip')].some(tip => tip.matches(':popover-open') && tip.textContent === 'Completed')");
+    const tip = await evaluate("(() => { const rect = [...document.querySelectorAll('.tooltip')].find(tip => tip.matches(':popover-open')).getBoundingClientRect(); return { bottom: rect.bottom, height: rect.height }; })()");
+    assert.ok(tip.bottom <= label.top && label.top - tip.bottom <= 6 && tip.height > 0, `the tooltip sits just above the label: ${JSON.stringify({ tip, label })}`);
+    assert.equal(await evaluate(status('Slow job')), 'Completed');
+    await wait("getComputedStyle([...document.querySelectorAll('.tooltip')].find(tip => tip.matches(':popover-open'))).opacity === '1'");
+    await captureUI(driver, 'status-tooltip');
+    await window.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 900, y: 500 });
+    await wait("![...document.querySelectorAll('.tooltip')].some(tip => tip.matches(':popover-open'))");
     await evaluate("[...document.querySelectorAll('.toast button')].find(button => button.textContent === 'Open thread').click()");
     await wait("[...document.querySelectorAll('.session-history')].some(node => node.textContent.includes('Answered: Slow job'))");
     await wait(`${status('Slow job')} === null`);

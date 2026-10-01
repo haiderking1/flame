@@ -10,6 +10,9 @@ import { CodexModelsClient } from '../../dist/backend/models/client.js';
 import { CodexInferenceClient } from '../../dist/backend/turns/client.js';
 import { rendererDriver } from '../helpers/rendererDriver.mjs';
 import { captureUI } from '../helpers/captureUI.mjs';
+import { chooseFirstModel } from '../helpers/modelPicker.mjs';
+import { chooseOption, chosenOption } from '../helpers/selectMenu.mjs';
+import { isTitleRequest, titleReply } from '../helpers/titleModel.mjs';
 
 const events = items => [...items.map((item, output_index) => ({ type: 'response.output_item.done', output_index, item })), { type: 'response.completed', response: { status: 'completed', output: [] } }]
   .map(event => `data: ${JSON.stringify(event)}\n\n`).join('');
@@ -25,6 +28,7 @@ void app.whenReady().then(async () => {
   const asked = [];
   const inferenceClient = new CodexInferenceClient(async (_url, options) => {
     const body = JSON.parse(options.body);
+    if (isTitleRequest(body)) return titleReply();
     const users = body.input.filter(item => item.role === 'user' && !JSON.stringify(item).includes('Saved'));
     const last = users.at(-1)?.content?.find(part => part.type === 'input_text')?.text ?? '';
     const answered = body.input.some(item => item.type === 'function_call_output' && item.call_id === `call-${asked.length}`);
@@ -61,9 +65,7 @@ void app.whenReady().then(async () => {
     await click('[aria-label^="Filter threads by project"]'); await wait("document.querySelector('.project-filter').matches(':popover-open')");
     await evaluate(`[...document.querySelectorAll('.project-filter__option')].find(option => option.title === ${JSON.stringify(project.path)}).click()`);
     await wait("document.querySelector('.composer__input').readOnly === false");
-    await click('.composer .composer-settings__model'); await wait("!!document.querySelector('.model-picker:popover-open .model-picker__option')");
-    await evaluate("document.querySelector('.model-picker:popover-open .model-picker__option').click()");
-    await wait("document.querySelector('.composer .composer-settings__model').getAttribute('aria-label') === 'Select model: Test model'");
+    await chooseFirstModel(driver);
 
     // A message written while the agent runs a tool queues, then goes at that tool step as the next message.
     await set('.composer__input', 'Run the build'); await enter();
@@ -95,8 +97,22 @@ void app.whenReady().then(async () => {
     // Settings: Steer sends at once; Ctrl+Enter queues for one message instead.
     await click('.sidebar-footer [aria-label="Settings"]'); await wait("!!document.querySelector('.settings-navigation')");
     await evaluate("[...document.querySelectorAll('.settings-navigation button')].find(button => button.textContent === 'General').click()");
-    await wait("!!document.querySelector('select[aria-label=\"Follow-up behavior\"]')");
-    await evaluate("(() => { const select = document.querySelector('select[aria-label=\"Follow-up behavior\"]'); select.value = 'steer'; select.dispatchEvent(new Event('change', { bubbles: true })); })()");
+    await wait("!!document.querySelector('button[aria-label=\"Follow-up behavior\"]')");
+    await click('button[aria-label="Follow-up behavior"]'); await wait("!!document.querySelector('[role=menu][aria-label=\"Follow-up behavior\"]:popover-open')");
+    await captureUI(driver, 'settings-select-menu');
+    await evaluate("document.querySelector('[role=menu][aria-label=\"Follow-up behavior\"]').hidePopover()");
+    // Every settings menu opens under its own button, also one wider than the button at the window's edge.
+    for (const label of ['Follow-up behavior', 'Thread notifications']) {
+      await click(`button[aria-label="${label}"]`); await wait(`!!document.querySelector('[role=menu][aria-label="${label}"]:popover-open')`);
+      const box = await evaluate(`(() => { const button = document.querySelector('button[aria-label="${label}"]').getBoundingClientRect(), menu = document.querySelector('[role=menu][aria-label="${label}"]').getBoundingClientRect();
+        return { gap: Math.round(menu.top - button.bottom), below: menu.top >= button.bottom, near: menu.top - button.bottom < 16, right: Math.abs(menu.right - button.right) < 2, inside: menu.left >= 0 && menu.right <= innerWidth }; })()`);
+      const { gap: _gap, ...placed } = box;
+      assert.deepEqual(placed, { below: true, near: true, right: true, inside: true }, label);
+      if (label === 'Thread notifications') await captureUI(driver, 'settings-select-wide');
+      await evaluate(`document.querySelector('[role=menu][aria-label="${label}"]').hidePopover()`);
+    }
+    await chooseOption(driver, 'Follow-up behavior', 'Steer');
+    await wait(`${chosenOption('Follow-up behavior')} === 'Steer'`);
     await captureUI(driver, 'follow-up-settings');
     await click('[aria-label="Close settings"]'); await wait("!document.querySelector('.settings-page')");
     await set('.composer__input', 'Run the build again'); await enter();

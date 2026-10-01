@@ -2,6 +2,7 @@ import { useCallback, useId, useRef, useState, useSyncExternalStore } from "reac
 import type { Project } from "@contracts/projects";
 import type { SessionSummary } from "@contracts/sessions";
 import { sessionErrorMessage } from "../../backend/sessions";
+import { toastStore } from "../toasts/toastStore";
 import { ProjectIcon } from "../projects/ProjectIcon";
 import { useSessions } from "./SessionContext";
 import { SessionMenu } from "./SessionMenu";
@@ -11,6 +12,7 @@ import { WorkspaceIcon } from "../workspace/WorkspaceIcon";
 import { branchMismatch, folderName, movedWorkspace } from "../composer/workspace/workspaceLogic";
 import { gitStatusStore } from "../workspace/git/gitStatusStore";
 import { useThreadStatus } from "../notifications/useThreadStatus";
+import { Tooltip } from "../tooltip/Tooltip";
 
 export function SessionRow({ session, project, now, onOpened, onDelete }: {
   now: number; session: SessionSummary; project?: Project; onOpened(): void; onDelete(session: SessionSummary): void;
@@ -32,6 +34,14 @@ export function SessionRow({ session, project, now, onOpened, onDelete }: {
   const checkout = useSyncExternalStore(subscribe, () => gitStatusStore.snapshot(session.projectId));
   const mismatch = branchMismatch(session.workspace, checkout.status?.branch ?? null);
   const status = useThreadStatus(session);
+  const regenerating = session.titleState.regeneration !== null;
+  function regenerateTitle() {
+    if (regenerating) return;
+    void workspace.regenerateTitle(session).catch(error => {
+      const text = sessionErrorMessage(error);
+      toastStore.show({ id: `title:${session.projectId}:${session.sessionId}`, scope: session.projectId, type: "error", title: "Failed to regenerate thread title", description: text, copy: text });
+    });
+  }
   function startRename() {
     editValue.current = session.title; setEditing(session.title); setError(null);
   }
@@ -71,7 +81,7 @@ export function SessionRow({ session, project, now, onOpened, onDelete }: {
       if (editing !== null || workspace.busy) return;
       event.preventDefault(); opener.current = row.current; setMenu({ x: event.clientX, y: event.clientY });
     }}>
-    <button ref={row} id={rowId} type="button" className="session-list__item" aria-label={session.title}
+    <button ref={row} id={rowId} type="button" className="session-list__item" aria-label={session.title} aria-busy={regenerating || undefined}
       aria-current={active ? "page" : undefined} disabled={workspace.busy || editing !== null}
       onClick={() => { void workspace.open(session).then(onOpened, () => {}); }}
       onDoubleClick={startRename}
@@ -83,8 +93,8 @@ export function SessionRow({ session, project, now, onOpened, onDelete }: {
         }
       }}>
       <span className="session-list__project">{project && <ProjectIcon project={project} />}<span className="session-list__project-name">{project?.name ?? "Project"}</span><time className="session-list__time" dateTime={new Date(session.updatedAt).toISOString()} title={new Date(session.updatedAt).toLocaleString()}>{sessionTime(session.settledAt ?? session.updatedAt, now)}</time></span>
-      <span className="session-list__title" title={session.title}>{session.title}</span>
-      <span className="session-list__detail">{status.label && <span className="session-list__status" data-status={status.label.toLowerCase()}>{status.label}</span>}
+      <span className="session-list__title" title={session.title} data-regenerating={regenerating || undefined}>{session.title}</span>
+      <span className="session-list__detail">{status.label && <Tooltip label={status.label} delay={150} className="session-list__status" data-status={status.label.toLowerCase()}><span className="session-list__status-dot" aria-hidden="true" />{status.label}</Tooltip>}
         {session.workspace.worktreePath && <span className="session-list__worktree"
         title={`Worktree: ${folderName(session.workspace.worktreePath)}${session.workspace.branch ? ` (${session.workspace.branch})` : ""}`}>
         <WorkspaceIcon name="folder-git-2" /><span className="session-list__branch">{session.workspace.branch ?? folderName(session.workspace.worktreePath)}</span></span>}
@@ -108,8 +118,10 @@ export function SessionRow({ session, project, now, onOpened, onDelete }: {
         const bounds = event.currentTarget.getBoundingClientRect(); opener.current = event.currentTarget;
         setMenu({ x: bounds.right - 128, y: bounds.bottom + 4 });
       }}><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1" /><circle cx="8" cy="8" r="1" /><circle cx="13" cy="8" r="1" /></svg></button></div>}
+    {regenerating && <span role="status" className="session-list__sr-only">Regenerating title</span>}
     {error && <p id={`${menuId}-error`} className="session-list__warning" role="alert">{error}</p>}
     {menu && <SessionMenu id={menuId} {...menu} trigger={optionsButton} settled={session.settledAt !== null} onSettle={() => { void toggleSettled(); }} onClose={closeMenu} onRename={startRename} onDelete={() => onDelete(session)}
+      regenerating={regenerating} onRegenerateTitle={regenerateTitle}
       onMarkUnread={status.markUnread}
       branch={session.workspace.branch} onNewOnBranch={() => {
         // T3 Code's "New thread on <branch>": the new session shares this one's worktree, or its branch in the checkout.

@@ -13,6 +13,7 @@ import { SessionRepository } from '../../dist/backend/sessions/repository.js';
 import { CodexModelsClient } from '../../dist/backend/models/client.js';
 import { CodexInferenceClient } from '../../dist/backend/turns/client.js';
 import { rendererDriver } from '../helpers/rendererDriver.mjs';
+import { isTitleRequest, titleReply } from '../helpers/titleModel.mjs';
 import { checkGitUI } from '../helpers/checklistGit.mjs';
 import { checkPanels } from '../helpers/checklistPanels.mjs';
 import { checkMentions } from '../helpers/checklistMentions.mjs';
@@ -46,6 +47,7 @@ void app.whenReady().then(async () => {
   const inferenceClient = new CodexInferenceClient(async (_url, options) => {
     // Git text requests answer at once with JSON, like the model would; chat requests stream paced paragraphs.
     const body = JSON.parse(options.body);
+    if (isTitleRequest(body)) return titleReply();
     if (/git commit messages/.test(body.instructions)) {
       gitModels.push(body.model);
       const reply = JSON.stringify(/keys: title, body/.test(JSON.stringify(body.input)) ? { title: 'Generated change request', body: '## Summary\n- test' } : { subject: 'Add base source', body: '' });

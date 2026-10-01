@@ -40,6 +40,8 @@ export async function checkSessionSidebar({ evaluate, wait, click, pointerClick,
   await menu('Hello from B');
   assert.equal(await evaluate('document.activeElement.textContent'), 'Rename');
   await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowDown',bubbles:true}))");
+  assert.equal(await evaluate('document.activeElement.textContent'), 'Regenerate title');
+  await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowDown',bubbles:true}))");
   assert.equal(await evaluate('document.activeElement.textContent'), 'Settle');
   await evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowDown',bubbles:true}))");
   assert.equal(await evaluate('document.activeElement.textContent'), 'Mark unread', 'a finished, seen thread can be marked unread');
