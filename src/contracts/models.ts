@@ -20,6 +20,8 @@ export type ModelSelection = typeof ModelSelection.Type;
 export const ModelsState = Schema.Struct({
   connected: Schema.Boolean, accountKey: Schema.NullOr(Schema.String),
   catalog: Schema.NullOr(ModelCatalog), selection: Schema.NullOr(ModelSelection), message: Schema.NullOr(Schema.String),
+  /** Model that writes commit messages and change requests; null follows the chat model. Kept even when the catalog no longer lists it. */
+  gitText: Schema.NullOr(ModelSelection),
 });
 export type ModelsState = typeof ModelsState.Type;
 export class ModelsError extends Schema.TaggedError<ModelsError>()("ModelsError", { message: Schema.String }) {}
@@ -29,4 +31,5 @@ export const ModelsRpc = RpcGroup.make(
   Rpc.make("codex.models.select", { payload: { accountKey: Id, modelId: Id }, success: Schema.Void, error: ModelsError }),
   Rpc.make("codex.models.tier", { payload: { accountKey: Id, modelId: Id, serviceTier: ServiceTier }, success: Schema.Void, error: ModelsError }),
   Rpc.make("codex.models.thinking", { payload: { accountKey: Id, modelId: Id, effort: Id }, success: Schema.Void, error: ModelsError }),
+  Rpc.make("codex.models.gitText", { payload: { accountKey: Id, selection: Schema.NullOr(ModelSelection) }, success: Schema.Void, error: ModelsError }),
 );

@@ -38,7 +38,7 @@ export function commitText(reply: Record<string, unknown>, includeBranch: boolea
 export function changeRequestText(reply: Record<string, unknown>): ChangeRequestText {
   return { title: commitSubject(field(reply, "title"), "Update project changes").slice(0, 256), body: field(reply, "body") };
 }
-/** Writes commit messages and change request text with the user's selected OpenAI model. */
+/** Writes commit messages and change request text with the Git text model from Settings, else the chat model. */
 export class CodexGitWriter implements GitWriter {
   constructor(private readonly auth: Pick<CodexAuth, "usageSession" | "refresh">, private readonly models: Pick<CodexModels, "validateSelection" | "state">,
     private readonly client: Pick<CodexInferenceClient, "run">) {}
@@ -52,17 +52,11 @@ export class CodexGitWriter implements GitWriter {
     if (!this.auth.usageSession()) await this.auth.refresh().catch(() => {});
     const account = this.auth.usageSession();
     if (!account) throw new GitError({ code: "INVALID", message: "Sign in to OpenAI in Providers to generate text, or write the commit message yourself." });
-    // Without an explicit or default selection, any available model can write a commit message.
-    const fallback = this.models.state.catalog?.models[0];
-    const chosen = model ?? this.models.state.selection ?? (fallback ? { modelId: fallback.id, effort: null, serviceTier: "default" as const } : null);
-    if (!chosen) throw new GitError({ code: "INVALID", message: "Choose a model to generate text, or write the commit message yourself." });
-    let settings: ModelSelection;
-    try { settings = this.models.validateSelection(account.key, chosen); }
-    catch { throw new GitError({ code: "INVALID", message: "The selected model is no longer available. Choose another model or write the commit message yourself." }); }
+    const settings = this.settings(account.key, model);
     const id = randomUUID();
     try {
       const result = await this.client.run({ accountId: account.accountId, access: account.access, sessionId: id, promptCacheKey: id,
-        settings: { ...settings, effort: null, serviceTier: "default" }, tools: false, fileTools: false, bashTools: false,
+        settings, tools: false, fileTools: false, bashTools: false,
         instructionsOverride: WRITER_INSTRUCTIONS, input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }] }, () => {},
         AbortSignal.any([signal, AbortSignal.timeout(GENERATION_TIMEOUT_MS)]));
       return result.text;
@@ -71,5 +65,22 @@ export class CodexGitWriter implements GitWriter {
       if (error instanceof InferenceFailure) throw new GitError({ code: "COMMAND", message: `Text generation failed: ${error.message}` });
       throw new GitError({ code: "COMMAND", message: "Text generation failed. Write the commit message yourself or retry." });
     }
+  }
+  /**
+   * The Git text model from Settings, used exactly as configured. Without one, or when the catalog dropped it, the chat
+   * model writes the text at its default thinking level and standard tier, so Git text never spends priority quota unasked.
+   */
+  private settings(accountKey: string, model: ModelSelection | null): ModelSelection {
+    const configured = this.models.state.gitText;
+    if (configured) {
+      try { return this.models.validateSelection(accountKey, configured); }
+      catch { /* Fall back to the chat model below. */ }
+    }
+    // Without an explicit or default selection, any available model can write a commit message.
+    const fallback = this.models.state.catalog?.models[0];
+    const chosen = model ?? this.models.state.selection ?? (fallback ? { modelId: fallback.id, effort: null, serviceTier: "default" as const } : null);
+    if (!chosen) throw new GitError({ code: "INVALID", message: "Choose a model to generate text, or write the commit message yourself." });
+    try { return { ...this.models.validateSelection(accountKey, chosen), effort: null, serviceTier: "default" }; }
+    catch { throw new GitError({ code: "INVALID", message: "The selected model is no longer available. Choose another model or write the commit message yourself." }); }
   }
 }

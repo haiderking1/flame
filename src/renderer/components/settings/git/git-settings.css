@@ -1,0 +1,16 @@
+.git-settings { width: 100%; max-width: 960px; margin-inline: auto; }
+.git-settings > h1 { margin: 0 0 16px; color: #aaa; font-size: 14px; line-height: 20px; font-weight: 500; }
+.git-settings__list { border: 1px solid #ffffff08; border-radius: 16px; background: #ffffff02; }
+.git-settings__row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; min-height: 72px; padding: 12px 16px; box-sizing: border-box; }
+.git-settings__text { flex: 1 1 240px; min-width: 0; }
+.git-settings__row h2 { margin: 0; color: #ededed; font-size: 14px; line-height: 20px; font-weight: 500; }
+.git-settings__row p { margin: 2px 0 0; color: #818181cc; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+.git-settings__row p[data-warning] { color: #e5b567; }
+.git-settings__controls.composer-settings { flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.git-settings__controls .composer-settings__control { font-size: 13px; }
+.git-settings__controls .composer-settings__model { max-width: 240px; }
+.git-settings__reset { height: 28px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: #858585; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.git-settings__reset:hover:not(:disabled), .git-settings__reset:focus-visible { background: #ffffff08; color: #dedede; }
+.git-settings__reset:disabled { cursor: default; }
+.git-settings__error { margin: 0; padding: 0 16px 12px; color: #ef9696; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+@media (max-width: 639px) { .git-settings__row { padding-inline: 12px; } .git-settings__controls.composer-settings { margin-left: -10px; justify-content: flex-start; } }

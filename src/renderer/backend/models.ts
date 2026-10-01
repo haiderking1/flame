@@ -7,7 +7,7 @@ export const modelsAtom = backendRuntime.atom(Stream.unwrap(Effect.map(Backend, 
   client["codex.models.watch"]().pipe(Stream.retry(Schedule.spaced("3 seconds"))),
 )));
 export const refreshModels = backendRuntime.fn(() => Effect.flatMap(Backend, (client) => client["codex.models.refresh"]()));
-import type { ServiceTier } from "@contracts/models";
+import type { ModelSelection, ServiceTier } from "@contracts/models";
 
 export type ModelChoice = { accountKey: string; modelId: string } & ({ type: "model" } | { type: "thinking"; effort: string } | { type: "tier"; serviceTier: ServiceTier });
 export const changeModelChoice = backendRuntime.fn((choice: ModelChoice) => Effect.flatMap(Backend, (client) =>
@@ -15,6 +15,9 @@ export const changeModelChoice = backendRuntime.fn((choice: ModelChoice) => Effe
     : choice.type === "tier" ? client["codex.models.tier"]({ accountKey: choice.accountKey, modelId: choice.modelId, serviceTier: choice.serviceTier })
     : client["codex.models.thinking"]({ accountKey: choice.accountKey, modelId: choice.modelId, effort: choice.effort }),
 ).pipe(Effect.timeout("10 seconds")));
+/** Saves the model that writes commit messages and change requests; null follows the chat model. */
+export const changeGitTextModel = backendRuntime.fn((change: { accountKey: string; selection: ModelSelection | null }) => Effect.flatMap(Backend, (client) =>
+  client["codex.models.gitText"](change)).pipe(Effect.timeout("10 seconds")));
 export function modelsErrorMessage(result: AsyncResult.AsyncResult<unknown, unknown>) {
   if (!AsyncResult.isFailure(result)) return null;
   const error = Cause.findErrorOption(result.cause);

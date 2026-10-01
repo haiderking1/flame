@@ -14,6 +14,9 @@ export class ModelsStore {
       ) STRICT;
       CREATE TABLE IF NOT EXISTS codex_model_selection (
         account TEXT PRIMARY KEY, selection TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS codex_git_text_model (
+        account TEXT PRIMARY KEY, selection TEXT NOT NULL
       ) STRICT;`);
   }
   load(account: string): ModelCatalog | null {
@@ -30,17 +33,29 @@ export class ModelsStore {
       .run(account, CATALOG_URL, JSON.stringify(catalog));
   }
   loadSelection(account: string): ModelSelection | null {
-    const row = this.db.prepare("SELECT selection FROM codex_model_selection WHERE account = ?").get(account);
+    return this.readSelection("codex_model_selection", account);
+  }
+  saveSelection(account: string, selection: ModelSelection) {
+    this.db.prepare("INSERT INTO codex_model_selection VALUES (?, ?) ON CONFLICT(account) DO UPDATE SET selection=excluded.selection")
+      .run(account, JSON.stringify(selection));
+  }
+  /** The account's dedicated Git text model; null when Git text follows the chat model. */
+  loadGitText(account: string): ModelSelection | null {
+    return this.readSelection("codex_git_text_model", account);
+  }
+  saveGitText(account: string, selection: ModelSelection | null) {
+    if (!selection) { this.db.prepare("DELETE FROM codex_git_text_model WHERE account = ?").run(account); return; }
+    this.db.prepare("INSERT INTO codex_git_text_model VALUES (?, ?) ON CONFLICT(account) DO UPDATE SET selection=excluded.selection")
+      .run(account, JSON.stringify(selection));
+  }
+  private readSelection(table: "codex_model_selection" | "codex_git_text_model", account: string): ModelSelection | null {
+    const row = this.db.prepare(`SELECT selection FROM ${table} WHERE account = ?`).get(account);
     if (!row) return null;
     try {
       const saved = JSON.parse(String(row.selection));
       return Schema.decodeUnknownSync(ModelSelection)({ serviceTier: "default", ...saved });
     }
     catch { return null; }
-  }
-  saveSelection(account: string, selection: ModelSelection) {
-    this.db.prepare("INSERT INTO codex_model_selection VALUES (?, ?) ON CONFLICT(account) DO UPDATE SET selection=excluded.selection")
-      .run(account, JSON.stringify(selection));
   }
   close() { this.db.close(); }
 }

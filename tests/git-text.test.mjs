@@ -55,6 +55,18 @@ test('the writer calls the selected model without tools and turns failures into 
   await assert.rejects(gone.commit('p', null, false, new AbortController().signal), { message: /no longer available/ });
 });
 
+test('the Git text model from Settings is used exactly, and a dropped one falls back to the chat model', async () => {
+  const requests = [], auth = { usageSession: () => ({ key: 'k', accountId: 'acct', access: 'token', epoch: 1 }), refresh: async () => {} };
+  const run = async request => { requests.push(request); return { text: '{"subject":"Add tests","body":""}', output: [] }; };
+  const configured = { modelId: 'small', effort: 'low', serviceTier: 'priority' };
+  const models = { state: { selection: null, gitText: configured }, validateSelection: (_key, selection) => selection };
+  await new CodexGitWriter(auth, models, { run }).changeRequest('p', { modelId: 'chat', effort: 'high', serviceTier: 'priority' }, new AbortController().signal);
+  assert.deepEqual(requests[0].settings, configured, 'thinking level and tier chosen in Settings are honored');
+  const dropped = { state: { selection: null, gitText: configured }, validateSelection: (_key, selection) => { if (selection.modelId === 'small') throw new Error('gone'); return selection; } };
+  await new CodexGitWriter(auth, dropped, { run }).commit('p', { modelId: 'chat', effort: 'high', serviceTier: 'priority' }, false, new AbortController().signal);
+  assert.deepEqual(requests[1].settings, { modelId: 'chat', effort: null, serviceTier: 'default' }, 'the chat model writes at its default thinking level and standard tier');
+});
+
 test('completion toasts summarize the result and offer the next step', () => {
   const none = { branch: null, commit: null, push: null, pr: null, pull: null, publish: null };
   const commit = { sha: 'abcdef1234567', subject: 'Add search' }, push = { branch: 'feature/a', upstream: 'origin/feature/a', setUpstream: true, skipped: false };

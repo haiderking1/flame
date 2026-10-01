@@ -13,6 +13,7 @@ export function modelsHandlers(models: CodexModels) {
     "codex.models.select": ({ accountKey, modelId }) => change(() => models.selectModel(accountKey, modelId)),
     "codex.models.tier": ({ accountKey, modelId, serviceTier }) => change(() => models.selectTier(accountKey, modelId, serviceTier)),
     "codex.models.thinking": ({ accountKey, modelId, effort }) => change(() => models.selectThinking(accountKey, modelId, effort)),
+    "codex.models.gitText": ({ accountKey, selection }) => change(() => models.selectGitText(accountKey, selection)),
     "codex.models.refresh": () => Effect.tryPromise({ try: () => models.refresh(true),
       catch: () => new ModelsError({ message: "Could not refresh the OpenAI model catalog." }),
     }),

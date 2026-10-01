@@ -6,9 +6,9 @@ import { ModelPickerList } from "./ModelPickerList";
 import { useComposerPopoverPosition } from "../useComposerPopoverPosition";
 import "./model-picker.css";
 
-export function ModelPicker({ models, selectedId, onSelect, emptyMessage = "No models available yet.", error, busy = false }: {
+export function ModelPicker({ models, selectedId, onSelect, emptyMessage = "No models available yet.", error, busy = false, placeholder }: {
   models: readonly ModelOption[]; selectedId: string | null; onSelect(id: string): void | Promise<void>;
-  emptyMessage?: string; error?: string | null; busy?: boolean;
+  emptyMessage?: string; error?: string | null; busy?: boolean; placeholder?: string;
 }) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -38,10 +38,10 @@ export function ModelPicker({ models, selectedId, onSelect, emptyMessage = "No m
     try { await onSelect(model.id); close(); } catch { /* Keep the picker open to show the save error. */ }
   }
   return <>
-    <button ref={trigger} type="button" aria-busy={busy} onClick={(event) => { if (busy) event.preventDefault(); }} className="composer-settings__control composer-settings__model" aria-label={selected ? `Select model: ${selected.name}` : "Select model"}
+    <button ref={trigger} type="button" aria-busy={busy} onClick={(event) => { if (busy) event.preventDefault(); }} className="composer-settings__control composer-settings__model" aria-label={selected ? `Select model: ${selected.name}` : !selectedId && placeholder ? `Select model: ${placeholder}` : "Select model"}
       aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-list`} popoverTarget={id}>
       <span className="model-picker__logo model-picker__trigger-logo"><img src={openaiLogo} alt="" /></span>
-      <span className="composer-settings__label">{selected?.name ?? selectedId ?? "Select model"}</span><ComposerChevron />
+      <span className="composer-settings__label">{selected?.name ?? selectedId ?? placeholder ?? "Select model"}</span><ComposerChevron />
     </button>
     <div ref={popup} id={id} popover="auto" className="model-picker" data-keyboard={index >= 0 || undefined} onPointerMove={() => setHighlighted(null)} onToggle={(event) => {
       setOpen(event.newState === "open");

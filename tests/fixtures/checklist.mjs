@@ -20,6 +20,7 @@ import { checkHistory } from '../helpers/checklistHistory.mjs';
 import { checkActivity, seedActivity } from '../helpers/checklistActivity.mjs';
 import { checkSearch } from '../helpers/checklistSearch.mjs';
 import { checkUnavailableGit } from '../helpers/checklistUnavailableGit.mjs';
+import { chooseGitTextModel, resetGitTextModel } from '../helpers/checklistGitSettings.mjs';
 import { processMemory } from '../helpers/checklistMetrics.mjs';
 import { installFakeGitHub } from '../helpers/fakeHosting.mjs';
 const started = performance.now();
@@ -38,13 +39,14 @@ void app.whenReady().then(async () => {
   const model = { slug: 'test-model', display_name: 'Test model', priority: 0, visibility: 'list', default_reasoning_level: 'low', supported_reasoning_levels: [{ effort: 'low', description: 'Fast' }] };
   const modelsClient = new CodexModelsClient(async () => Response.json({ models: [model,...Array.from({length:199}, (_,i)=>({...model,slug:`model-${i+1}`,display_name:`Model ${i+1}`,priority:i+1}))] }));
   if (process.env.FLAME_TEST_GIT_UNAVAILABLE) { const filename = join(userData,'git.sqlite'), future = new DatabaseSync(filename); future.exec('PRAGMA user_version=999'); future.close(); await chmod(filename,0o600); }
-  const opened = [];
+  const opened = [], gitModels = [];
   // Hosting CLIs are faked so tests never reach real GitHub or GitLab accounts.
   await installFakeGitHub({ authenticated: false });
   const inferenceClient = new CodexInferenceClient(async (_url, options) => {
     // Git text requests answer at once with JSON, like the model would; chat requests stream paced paragraphs.
     const body = JSON.parse(options.body);
     if (/git commit messages/.test(body.instructions)) {
+      gitModels.push(body.model);
       const reply = JSON.stringify(/keys: title, body/.test(JSON.stringify(body.input)) ? { title: 'Generated change request', body: '## Summary\n- test' } : { subject: 'Add base source', body: '' });
       const events = [{ type: 'response.output_item.done', output_index: 0, item: { id: 'git', type: 'message', role: 'assistant', content: [{ type: 'output_text', text: reply }] } }, { type: 'response.completed', response: { status: 'completed', output: [] } }];
       return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''));
@@ -77,7 +79,11 @@ void app.whenReady().then(async () => {
     await wait("document.querySelector('textarea').readOnly === false && document.querySelector('.workspace__composer').dataset.empty === 'true'");
     if (process.env.FLAME_TEST_GIT_UNAVAILABLE) { await checkUnavailableGit(driver, repository, location); }
     else {
-    console.log('CHECKLIST_STAGE git'); await checkGitUI(driver, project, other, opened);
+    console.log('CHECKLIST_STAGE git'); await chooseGitTextModel(driver, 'Model 3');
+    await wait("document.querySelector('textarea').readOnly === false");
+    await checkGitUI(driver, project, other, opened);
+    assert.ok(gitModels.length > 0 && gitModels.every(model => model === 'model-3'), `Git text uses the model chosen in Settings: ${gitModels.join(', ')}`);
+    await resetGitTextModel(driver);
     await wait("document.querySelector('textarea').readOnly === false && document.querySelector('.workspace__composer').dataset.empty === 'true'");
     console.log('CHECKLIST_STAGE panels'); await checkPanels(driver, project, measurements);
     console.log('CHECKLIST_STAGE persistence'); await checkPersistence(driver, project, location.sessionId, measurements);

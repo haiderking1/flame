@@ -141,3 +141,51 @@ test('cache write failure keeps the live catalog usable and reports persistence 
     assert.match(h.models.state.message, /cache could not be saved/);
   } finally { await h.close(); }
 });
+
+test('the Git text model is validated, saved per account, kept when the catalog drops it, and resettable', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'flame-models-'));
+  const filename = join(root, 'models.sqlite');
+  let models = [wire('test-model'), wire('small-model', 2)];
+  const client = { read: async () => ({ fetchedAt: Date.now(), etag: null, models: parseModels({ models }) }) };
+  const first = harness(new ModelsStore(filename), client);
+  try {
+    await first.models.refresh();
+    assert.equal(first.models.state.gitText, null, 'Git text follows the chat model until chosen');
+    assert.throws(() => first.models.selectGitText('account-a', { modelId: 'missing', effort: null, serviceTier: 'default' }), /no longer available/);
+    assert.throws(() => first.models.selectGitText('account-a', { modelId: 'small-model', effort: 'medium', serviceTier: 'priority' }), /no longer available/, 'Fast requires model support');
+    assert.throws(() => first.models.selectGitText('account-b', { modelId: 'small-model', effort: null, serviceTier: 'default' }), /Account changed/);
+    assert.throws(() => first.models.selectGitText('account-a', { modelId: 'small-model', effort: 'extreme', serviceTier: 'default' }), /thinking level/);
+    let changes = 0; first.models.on('change', () => changes++);
+    first.models.selectGitText('account-a', { modelId: 'small-model', effort: null, serviceTier: 'default' });
+    assert.deepEqual(first.models.state.gitText, { modelId: 'small-model', effort: 'medium', serviceTier: 'default' }, 'unset thinking resolves to the model default');
+    assert.equal(changes, 1);
+    assert.equal(first.models.state.selection, null, 'the chat selection is untouched');
+    first.models.selectGitText('account-a', { modelId: 'small-model', effort: 'high', serviceTier: 'default' });
+    await first.close();
+    models = [wire('test-model')];
+    const restored = harness(new ModelsStore(filename), client);
+    try {
+      assert.deepEqual(restored.models.state.gitText, { modelId: 'small-model', effort: 'high', serviceTier: 'default' }, 'the choice survives restart');
+      await restored.models.refresh(true);
+      assert.equal(restored.models.state.gitText.modelId, 'small-model', 'a dropped model stays saved so Settings can say it is missing');
+      restored.auth.session = { ...session, key: 'account-b', epoch: 2 };
+      restored.auth.emit('change');
+      assert.equal(restored.models.state.gitText, null, 'other accounts keep their own choice');
+      restored.auth.session = session;
+      restored.auth.emit('change');
+      restored.models.selectGitText('account-a', null);
+      assert.equal(restored.models.state.gitText, null);
+      assert.equal(restored.store.loadGitText('account-a'), null);
+    } finally { await restored.close(); }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('a failed Git text model save reports a storage error and keeps the previous choice', async () => {
+  const h = harness();
+  try {
+    await h.models.refresh();
+    h.store.saveGitText = () => { throw new Error('Disk full'); };
+    assert.throws(() => h.models.selectGitText('account-a', { modelId: 'test-model', effort: null, serviceTier: 'default' }), /Could not save the Git text model/);
+    assert.equal(h.models.state.gitText, null);
+  } finally { await h.close(); }
+});

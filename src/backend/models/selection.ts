@@ -11,6 +11,11 @@ export function reconcileSelection(models: readonly CatalogModel[], saved: Model
   return model ? modelSelection(model, saved?.effort ?? null, saved?.serviceTier) : null;
 }
 
+/** Reconciles a saved Git text model with the catalog, keeping a model the catalog dropped so Settings can say it is missing. */
+export function reconcileGitText(models: readonly CatalogModel[], saved: ModelSelection | null): ModelSelection | null {
+  return saved && (reconcileSelection(models, saved) ?? saved);
+}
+
 export function thinkingSelection(model: CatalogModel, effort: string, serviceTier: ServiceTier = "default"): ModelSelection {
   if (!model.reasoningLevels.some((level) => level.effort === effort)) {
     throw new ModelsError({ message: "This thinking level is not supported by the selected model." });
