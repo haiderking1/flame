@@ -74,6 +74,17 @@ test('the agent has no step limit: it keeps working until it answers', { ...opts
   assert.equal(readFileSync(join(h.root, 'steps'), 'utf8'), Array.from({ length: steps }, (_, i) => i + 1).join(''));
 });
 
+test('one response may ask for any number of tool calls, each answered in order', opts, async t => {
+  const calls = 24;
+  const h = setup(t, (body, n) => n === 1
+    ? Array.from({ length: calls }, (_, i) => ({ ...call(`printf ${String.fromCharCode(97 + i)} >> calls`), id: `fc_${i}`, call_id: `call_${i}` }))
+    : (assert.equal(body.input.filter(item => item.type === 'function_call_output').length, calls), [message('All calls answered.')]));
+  await h.turns.start(h.input);
+  await until(() => ['completed', 'failed'].includes(h.turns.snapshot(h.location)?.status));
+  assert.equal(h.turns.snapshot(h.location).status, 'completed');
+  assert.equal(readFileSync(join(h.root, 'calls'), 'utf8'), 'abcdefghijklmnopqrstuvwx');
+});
+
 test('background completion wakes an idle model once without polling or inventing a user message', opts, async t => {
   const h = setup(t, (_body, n) => n === 1 ? [call('sleep 0.2; printf x >> marker; printf finished', true)] : [message(n === 2 ? 'Background job started.' : 'Background job finished.')]);
   await h.turns.start(h.input);

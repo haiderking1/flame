@@ -64,7 +64,8 @@ export class ResponseOutput {
     }
     if (!text.trim() && !output.some(item => this.tools && object(item).type === "function_call")) return fail("OpenAI finished without an assistant message.");
     const ids = output.filter(item => object(item).type === "function_call").map(item => object(item).call_id);
-    if (new Set(ids).size !== ids.length || ids.length > 16) return fail("OpenAI returned duplicate or excessive tool calls.");
+    // Any number of tool calls is fine; only their IDs must be unique, since each result answers one call.
+    if (new Set(ids).size !== ids.length) return fail("OpenAI returned duplicate tool call IDs.");
     if (Buffer.byteLength(text) > 1024 * 1024) return fail("The response exceeded Flame's storage limit.");
     limit(output);
     const usage = inferenceUsage(response.usage);
