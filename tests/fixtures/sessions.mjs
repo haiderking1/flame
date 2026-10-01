@@ -87,7 +87,8 @@ void app.whenReady().then(async () => {
     for (let i = 0; i < 200; i++) { if (await evaluate(code)) return; await delay(20); }
     assert.fail(`Timed out: ${code}\n${await evaluate("document.body.innerText")}`);
   };
-  const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  // Like a user, a click waits for its control to be there and enabled; clicking a disabled one does nothing.
+  const click = async (selector) => { await wait(`document.querySelector(${JSON.stringify(selector)})?.matches(':disabled') === false`); await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`); };
   const pointerClick = async selector => {
     const point = await evaluate(`(() => { const element = document.querySelector(${JSON.stringify(selector)}); element.scrollIntoView({block:'nearest'}); const box = element.getBoundingClientRect(); return {x:box.left + box.width / 2, y:box.top + box.height / 2}; })()`);
     await window.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', ...point });

@@ -6,7 +6,8 @@ export function rendererDriver(window) {
     for (let i = 0; i < 300; i++) { if (await evaluate(expression)) return; await delay(20); }
     assert.fail(`Timed out: ${expression}\n${await evaluate('document.body.innerText')}`);
   };
-  const click = async selector => { await wait(`!!document.querySelector(${JSON.stringify(selector)})`); await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`); };
+  // Like a user, a click waits for its control to be there and enabled; clicking a disabled one does nothing.
+  const click = async selector => { await wait(`document.querySelector(${JSON.stringify(selector)})?.matches(':disabled') === false`); await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`); };
   const set = async (selector, value) => {
     await evaluate(`(() => { const element=document.querySelector(${JSON.stringify(selector)}); if(!element || element.disabled || element.readOnly) throw new Error('Input is not editable'); element.focus(); if(element.isContentEditable) getSelection().selectAllChildren(element); else element.select(); const started=performance.now(); window.__nextInputFrame=new Promise(resolve=>element.addEventListener('input',()=>{ const eventTime=performance.now(); requestAnimationFrame(()=>{ const frame=performance.now(); (window.__inputPhases ??= []).push({selector:${JSON.stringify(selector)},dispatchMs:eventTime-started,frameMs:frame-eventTime}); resolve(frame-started); }); },{once:true})); })()`);
     if(value) await window.webContents.debugger.sendCommand('Input.insertText',{text:value});

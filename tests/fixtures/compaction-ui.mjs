@@ -76,7 +76,8 @@ void app.whenReady().then(async () => {
     for (let i = 0; i < 250; i++) { if (await evaluate(code)) return; await delay(20); }
     assert.fail(`Timed out: ${code}\n${await evaluate("JSON.stringify({draft:document.querySelector('.composer__input')?.value,focus:document.activeElement?.tagName,readonly:document.querySelector('.composer__input')?.readOnly,hint:document.querySelector('.composer__hint')?.textContent,status:document.querySelector('.turn-feedback')?.textContent})")}`);
   };
-  const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  // Like a user, a click waits for its control to be there and enabled; clicking a disabled one does nothing.
+  const click = async (selector) => { await wait(`document.querySelector(${JSON.stringify(selector)})?.matches(':disabled') === false`); await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`); };
   const reload = async () => {
     const loaded = new Promise(resolve => window.webContents.once('did-finish-load', resolve));
     window.webContents.reload(); await loaded;
