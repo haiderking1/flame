@@ -54,6 +54,8 @@ export async function checkProjectFilter({ evaluate, send, folder }) {
   await type('Search projects', 'All projects');
   await wait("document.querySelectorAll('.project-filter [role=option]').length === 0");
   await type('Search projects', '');
+  // Enter waits for the list to show the cleared search: All projects and both projects.
+  await wait("document.querySelectorAll('.project-filter [role=option]').length === 3");
   await key('Enter', 13);
   await wait("document.querySelector('.sidebar-threads__empty').textContent === 'No threads yet'");
   await open();
