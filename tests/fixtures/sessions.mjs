@@ -38,6 +38,8 @@ void app.whenReady().then(async () => {
   const portReady = new Promise((resolve) => { ready = resolve; });
   const abort = new AbortController();
   let inferenceCalls = 0;
+  // "Answer on cue" waits for the test to release its reply.
+  let answerOnCue = null;
   const inferenceClient = new CodexInferenceClient(async (_url, options) => {
     if (isTitleRequest(JSON.parse(options.body))) return titleReply();
     const call = ++inferenceCalls;
@@ -51,6 +53,12 @@ void app.whenReady().then(async () => {
         { type: 'response.output_item.done', output_index: 1, item },
         { type: 'response.completed', response: { status: 'completed', output: [] } }
       ].map(event => `data: ${JSON.stringify(event)}\n\n`).join(''));
+    }
+    if (prompt === 'Answer on cue') {
+      await new Promise(resolve => { answerOnCue = resolve; });
+      const item = { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Answered on cue' }] };
+      return new Response([{ type: 'response.output_item.done', output_index: 0, item }, { type: 'response.completed', response: { status: 'completed', output: [] } }]
+        .map(event => `data: ${JSON.stringify(event)}\n\n`).join(''));
     }
     let cancelled = false;
     const stream = new ReadableStream({
@@ -249,6 +257,17 @@ void app.whenReady().then(async () => {
     await click('.composer-actions__send[aria-label="Stop response"]');
     await wait("document.querySelector('.session-history').textContent.includes('Response stopped') && !document.querySelector('.composer__input').readOnly");
     assert.equal(repository.use(sessionA, (db) => db.turns.snapshot()).status, 'cancelled');
+    // Typing while a reply finishes: the reload that brings the reply keeps saving the draft, without a conflict warning.
+    await type('.composer__input', 'Answer on cue', true);
+    await click('[aria-label="Send message"]');
+    for (let i = 0; !answerOnCue && i < 250; i++) await delay(20);
+    assert.ok(answerOnCue, 'the reply is waiting for its cue');
+    await type('.composer__input', 'Typed while answering', true);
+    answerOnCue();
+    await wait("document.querySelector('.session-history').textContent.includes('Answered on cue') && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
+    assert.equal(await evaluate("document.querySelector('.session-error')?.textContent ?? null"), null);
+    assert.equal(await evaluate("document.querySelector('.composer__input').value"), 'Typed while answering');
+    assert.equal(repository.use(sessionA, (db) => db.read()).draft, 'Typed while answering');
     repository.use(sessionA, (db) => db.draft(db.read().revision, 'Remote draft'));
     await type('.composer__input', 'Local draft', true);
     await wait("document.querySelector('.session-error')?.textContent.includes('changed elsewhere')");

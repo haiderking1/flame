@@ -77,10 +77,13 @@ export function useSessionWorkspace() {
       adopt(saved); setError(null);
     });
   }
-  function editDraft(value: string) {
-    text.current = value; setDraft(value);
+  function scheduleSave() {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => { void flushDraft().catch(() => {}); }, 400);
+  }
+  function editDraft(value: string) {
+    text.current = value; setDraft(value);
+    scheduleSave();
   }
   const compact = useManualCompaction({ current, accountKey: turnState.accountKey, running: turnState.running, turn: turnState.turn, flushDraft, enqueue, adopt });
   async function open(location: SessionLocation) {
@@ -215,8 +218,13 @@ export function useSessionWorkspace() {
         if (!keepDraft) {
           text.current = loaded.draft; setDraft(loaded.draft);
           if (turnState.turn?.status !== "running" && pendingSend.current?.requestId === turnState.turn?.id) pendingSend.current = null;
+          setError(null);
+        } else if (loaded.draft === target.draft) {
+          // Only typing that was not saved yet: the saved draft did not change, so keep saving it as usual.
+          setError(null); scheduleSave();
+        } else {
+          setError(text.current !== loaded.draft ? "Saved state reloaded. Your local draft is still unsaved; retry saving or discard it." : null);
         }
-        setError(keepDraft && text.current !== loaded.draft ? "Saved state reloaded. Your local draft is still unsaved; retry saving or discard it." : null);
       });
     } finally { navigating.current = false; setTransitioning(false); }
   }
