@@ -6,17 +6,26 @@ import { ThinkingLabel } from "./ThinkingLabel";
 import { isRunning } from "./ToolRow";
 import { ToolGroup } from "./ToolGroup";
 import "./work-group.css";
-import { useMemo, useRef } from "react";
+import { lazy, Suspense, useMemo, useRef } from "react";
 import { MeasuredList } from "../../virtual/MeasuredList";
 import { useHistoryContainer } from "../../virtual/HistoryScrollContext";
 import { shareSteps } from "./rowSharing";
 
-type Block = Extract<WorkStep, { kind: "message" }> | { kind: "tools"; id: string; steps: Extract<WorkStep, { kind: "tool" }>[] };
+// Only threads that start agents show them, so their row loads then rather than at startup.
+const AgentSpawnRow = lazy(() => import("../../agents/AgentSpawnRow").then(module => ({ default: module.AgentSpawnRow })));
+type ToolStep = Extract<WorkStep, { kind: "tool" }>;
+type Block = Extract<WorkStep, { kind: "message" }> | { kind: "tools"; id: string; steps: ToolStep[] } | { kind: "agents"; id: string; steps: ToolStep[] };
 function blocks(steps: readonly WorkStep[]): Block[] {
   const result: Block[] = [];
+  // Every agent a run started shows as one row, where it started the first.
+  let agents: Extract<Block, { kind: "agents" }> | null = null;
   for (const step of steps) {
     const previous = result.at(-1);
-    if (step.kind === "message") result.push(step);
+    if (step.kind === "tool" && step.agent?.action === "spawn") {
+      if (agents) agents.steps.push(step);
+      else { agents = { kind: "agents", id: `agents-${step.id}`, steps: [step] }; result.push(agents); }
+    }
+    else if (step.kind === "message") result.push(step);
     else if (previous?.kind === "tools") previous.steps.push(step);
     else result.push({ kind: "tools", id: step.id, steps: [step] });
   }
@@ -32,6 +41,7 @@ export function WorkGroup({ activity, running, compacting = false, jobs, locatio
   const items = useMemo(() => blocks(steps), [steps]);
   const render = (block: Block) => block.kind === "message"
     ? <Markdown className="work-group__commentary" text={block.text} streaming={running} />
+    : block.kind === "agents" ? <Suspense fallback={null}><AgentSpawnRow id={block.id} steps={block.steps} location={location} /></Suspense>
     : <ToolGroup steps={block.steps} turnId={activity.turnId} jobs={jobs} location={location} />;
   return <section className="work-group" data-running={running || active} aria-label="Agent work">
     <div className="work-group__steps">

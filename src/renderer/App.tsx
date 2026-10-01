@@ -12,6 +12,7 @@ import { SessionProvider, useSessions } from "./components/sessions/SessionConte
 import { PanelBoundary } from "./components/workspace/PanelBoundary";
 import { Sidebar } from "./components/sidebar/Sidebar";
 import { SidebarToggle } from "./components/sidebar/SidebarToggle";
+import { rightPanel, useRightPanel } from "./components/agents/rightPanel";
 const SettingsPage = lazy(() => import("./components/settings/SettingsPage").then(module => ({ default: module.SettingsPage })));
 import type { SettingsSection } from "./components/settings/SettingsNavigation";
 
@@ -25,9 +26,11 @@ function Workspace() {
   useAtomMount(codexAuthAtom);
   const sessions = useSessions();
   const activeProject = sessions?.document?.projectId ?? sessions?.projectDraftId ?? sessions?.projectScope ?? null;
-  const [diffOpen, setDiffOpen] = useState(false);
+  // The right panel shows the diff or the thread's agents, as T3 Code's right panel surfaces.
+  const panel = useRightPanel(), diffOpen = panel.surface === "diff", agentsOpen = panel.surface === "agents";
   const [panelRetry, setPanelRetry] = useState(0);
   const DiffPanel = useMemo(() => lazy(() => import("./components/workspace/DiffPanel")), [panelRetry]);
+  const AgentsPanel = useMemo(() => lazy(() => import("./components/agents/AgentsPanel")), [panelRetry]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("providers");
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
@@ -35,9 +38,9 @@ function Workspace() {
   const [sidebarOpen, setSidebarOpen] = useState(() => !mobile);
   const toggleSidebar = () => setSidebarOpen((open) => !open);
   const closeSidebar = () => setSidebarOpen(false);
-  const diffButton = useRef<HTMLButtonElement>(null);
+  const diffButton = useRef<HTMLButtonElement>(null), agentsButton = useRef<HTMLButtonElement>(null);
   function openSettings() {
-    setDiffOpen(false);
+    rightPanel.close();
     setSettingsOpen(true);
     if (mobile) setSidebarOpen(false);
   }
@@ -50,8 +53,13 @@ function Workspace() {
     });
   }
   function closeDiff() {
-    setDiffOpen(false);
+    rightPanel.close();
     diffButton.current?.focus();
+  }
+  function closeAgents() {
+    rightPanel.close();
+    // The toggle goes away with the thread's last agent; focus then returns to the composer.
+    (agentsButton.current ?? document.querySelector<HTMLElement>(".workspace .composer__input"))?.focus();
   }
 
   return (
@@ -63,21 +71,23 @@ function Workspace() {
       {projectPickerOpen && <ProjectPicker onClose={() => setProjectPickerOpen(false)} onAdded={() => setProjectPickerOpen(false)} />}
       {settingsOpen && <PanelBoundary onClose={closeSettings} onRetry={() => setPanelRetry(value => value + 1)}><SettingsPage section={settingsSection} sidebarVisible={sidebarOpen && !mobile} onClose={closeSettings} /></PanelBoundary>}
       <main className="workspace" hidden={settingsOpen} aria-label="Flame workspace" onKeyDown={(event) => {
-        if (event.key === "Escape" && diffOpen && !event.defaultPrevented) {
+        if (event.key === "Escape" && panel.surface && !event.defaultPrevented) {
           event.preventDefault();
-          closeDiff();
+          if (diffOpen) closeDiff(); else closeAgents();
         }
       }}>
         <ToastViewport scope={activeProject} />
         <UpdateToast />
         <FollowUpSender />
         <ThreadNotifications />
-        <WorkspaceActions diffOpen={diffOpen} diffButtonRef={diffButton} onToggleDiff={() => setDiffOpen((open) => !open)} />
+        <WorkspaceActions diffOpen={diffOpen} diffButtonRef={diffButton} onToggleDiff={() => rightPanel.toggle("diff")}
+          agentsOpen={agentsOpen} agentsButtonRef={agentsButton} onToggleAgents={() => rightPanel.toggle("agents")} />
         <div className="workspace__body">
           <div className="workspace__chat">
             <SessionWorkspace />
           </div>
           {diffOpen && <PanelBoundary key={panelRetry} onClose={closeDiff} onRetry={() => setPanelRetry(value => value + 1)}><DiffPanel open onClose={closeDiff} /></PanelBoundary>}
+          {agentsOpen && <PanelBoundary key={`agents-${panelRetry}`} onClose={closeAgents} onRetry={() => setPanelRetry(value => value + 1)}><AgentsPanel onClose={closeAgents} /></PanelBoundary>}
         </div>
       </main>
     </div>

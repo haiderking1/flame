@@ -1,0 +1,40 @@
+/* Agent status colors, shared by the spawn row, the panel and the banner: working, idle (resumable), failed, stopped. */
+[data-agent-tone] { --agent-dot: #737373; }
+[data-agent-tone="working"] { --agent-dot: #4d9cff; }
+[data-agent-tone="failed"] { --agent-dot: #ff6762; }
+[data-agent-tone="stopped"] { --agent-dot: #a3a3a3; }
+.agent-row__dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--agent-dot); }
+[data-agent-tone="working"] .agent-row__dot { animation: agent-pulse 1.6s ease-in-out infinite; }
+@keyframes agent-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { [data-agent-tone="working"] .agent-row__dot { animation: none; } }
+.agent-row__role { flex-shrink: 0; max-width: 40%; padding: 0 6px; border-radius: 999px; background: #ffffff0a; color: #8f8f8f; font-size: 10px; line-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The chat's spawn row: one line, pulsing while its agents work, opening to them. */
+.agent-spawn[data-agent-tone="working"] .agent-spawn__label { animation: agent-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .agent-spawn[data-agent-tone="working"] .agent-spawn__label { animation: none; } }
+.agent-spawn[data-agent-tone="failed"] .agent-spawn__label { color: #e6908c; }
+.agent-spawn__detail { display: grid; gap: 6px; }
+.agent-spawn__members { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.agent-spawn .agent-spawn__members button { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: #d4d4d4; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.agent-spawn__members button:hover:enabled, .agent-spawn__members button:focus-visible { outline: none; background: #ffffff08; }
+.agent-spawn__members button:disabled { cursor: default; }
+.agent-spawn__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-spawn__status { margin-left: auto; flex-shrink: 0; color: #858585; font-size: 11px; font-variant-numeric: tabular-nums; }
+.agent-spawn .agent-spawn__task { margin: 0 6px 4px 21px; color: #858585; font-size: 11px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.agent-spawn .agent-spawn__panel { justify-self: start; padding: 2px 6px; border: 0; border-radius: 5px; background: transparent; color: #8f8f8f; font: inherit; font-size: 11px; cursor: pointer; }
+.agent-spawn .agent-spawn__panel:hover, .agent-spawn .agent-spawn__panel:focus-visible { outline: none; background: #ffffff08; color: #e5e5e5; }
+
+/* The panel toggle's count of working agents. */
+.agents-toggle { position: relative; }
+.agents-toggle__badge { position: absolute; top: -3px; right: -4px; min-width: 14px; height: 14px; padding: 0 3px; box-sizing: border-box; border-radius: 999px; background: #4d9cff; color: #fff; font-size: 9px; font-weight: 600; line-height: 14px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* T3 Code's background-work banner above the composer. */
+.agents-banner { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 8px 6px 12px; border: 1px solid #ffffff12; border-radius: 12px; background: #111111ed; color: #d4d4d4; font-size: 12px; }
+.agents-banner__dot { width: 7px; height: 7px; border-radius: 50%; background: #4d9cff; animation: agent-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .agents-banner__dot { animation: none; } }
+.agents-banner__title { margin-right: auto; }
+.agents-banner__error { color: #e6908c; }
+.agents-banner button { padding: 3px 9px; border: 1px solid #ffffff14; border-radius: 7px; background: #ffffff06; color: #d4d4d4; font: inherit; font-size: 12px; cursor: pointer; }
+.agents-banner button:hover:enabled, .agents-banner button:focus-visible { outline: none; background: #ffffff10; color: #fff; }
+.agents-banner button:disabled { opacity: 0.6; cursor: default; }
+.agent-tool .work-tool__icon, .agent-spawn .work-tool__icon { width: 14px; height: 14px; flex-shrink: 0; }

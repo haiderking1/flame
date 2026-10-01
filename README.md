@@ -91,6 +91,20 @@ Session cards show the project, title, relative update time, and provider icon. 
 
 Session discovery is rebuilt from the individual databases on backend startup. Unsupported versions, unsafe paths, and unreadable databases produce warnings instead of being replaced. On Unix, session directories are private (`0700`) and databases are private (`0600`); symlinks, hard-linked database files, and unexpected ownership are rejected. History/drafts are plaintext, not encrypted, and may contain sensitive user-provided content. Credentials are never copied into session settings.
 
+## Subagents
+
+A thread's agent can lead a team of subagents with the collaboration tools Codex uses: `spawn_agent` starts an agent on a task, `send_message` passes a running agent a note, `followup_task` gives an agent a new task (starting a run if it is idle), `wait_agent` waits for news (30 seconds by default, 10 seconds to an hour), `interrupt_agent` stops an agent's run, and `list_agents` lists the team. Agents are named by path from `/root`, the thread's own agent, as in `/root/review_api`, and get a scientist's nickname. Subagents have the same tools, including starting their own agents.
+
+- **When it delegates:** only when you, or AGENTS.md or other instructions, ask for subagents, delegation or parallel agent work. At **Ultra** reasoning effort it delegates on its own whenever that saves time or improves quality.
+- **What an agent knows:** the conversation so far (your messages and the final answers, never reasoning or tool records), unless `fork_turns` shares none or only the latest turns, plus its task. It uses its parent's model and effort unless the model asks for another one in the catalog.
+- **Where it works:** in the thread's folder, alongside every other agent; agents are told to own separate files and not to undo each other's edits. Nothing locks files.
+- **Limits:** four agents of a thread work at once, the thread's own included; starting or restarting another fails until one finishes. Subagents do not count toward the four responses threads may run at once.
+- **Results:** an agent's final answer, or why it failed, is mailed to the agent that gave it the task, and read at that agent's next step or when `wait_agent` returns. Mail does not wake an idle thread agent; it is read with your next message.
+
+In the chat, a run's agents show as one row, "Kicked off 2 subagents" while any works and "Ran 2 subagents" after, opening to each agent and its task. The **Agents** button (beside the diff toggle, with how many are working) opens the Agents panel: each agent's status, name and role, elapsed time, latest activity or answer, model, effort and tokens. Choose an agent to read its whole transcript. While agents work after the thread's agent has finished, the sidebar shows the thread as **Working**, and a banner above the composer offers **View** and **Stop**. Stopping the thread's agent stops its team too.
+
+Each agent is a session of its own, stored like a thread but never listed as one, with a mailbox for messages from its team; agents survive restarts and keep their history. Deleting a thread deletes its agents.
+
 ## Composer
 
 Create or open a session before typing. The composer grows up to a capped height, then scrolls. Shift+Enter inserts a newline. With a model selected, Enter sends the session's active-branch conversation to Codex using its saved thinking level and service tier. Without a model, the button explicitly saves a local message only.

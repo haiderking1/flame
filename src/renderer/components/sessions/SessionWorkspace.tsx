@@ -19,6 +19,7 @@ import { usePendingImageMessage } from "./usePendingImageMessage";
 import { UserMessage } from "./work/UserMessage";
 import { HistoryScrollContext } from "../virtual/HistoryScrollContext";
 import { ComposerRestingContext, useComposerResting } from "../composer/resting/useComposerResting";
+import { AgentsBanner } from "../agents/AgentsBanner";
 
 // Loaded when first opened, so the dialog stays out of the startup bundle.
 const EditFromHereDialog = lazy(() => import("./EditFromHereDialog"));
@@ -57,6 +58,7 @@ export function SessionWorkspace() {
           <button disabled={sessions.busy} onClick={() => setDiscarding(true)}>Discard local draft</button></>}
       </div>}
       <BranchMismatchBanner />
+      {active && !sessions.running && <AgentsBanner thread={active} />}
       <Composer key={active ? `${active.projectId}:${active.sessionId}` : sessions.projectDraftId ?? "empty"} draft={sessions.draft} onDraftChange={sessions.editDraft}
         readOnly={!sessions.canCompose || sessions.transitioning} onSend={sessions.canCompose ? sessions.send : undefined}
         imageLocation={sessions.imageLocation} prepareAttachments={sessions.prepareAttachments}

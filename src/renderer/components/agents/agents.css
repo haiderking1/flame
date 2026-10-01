@@ -1,0 +1,23 @@
+/* T3 Code's Agents surface in the right panel. */
+.agents-panel { position: relative; }
+.agents-panel__header h2 { display: flex; align-items: baseline; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; }
+.agents-panel__path { overflow: hidden; color: #707070; font-size: 11px; font-weight: 400; text-overflow: ellipsis; }
+.agents-panel__close { margin-left: auto; }
+.agents-panel__list { display: grid; align-content: start; gap: 2px; flex: 1; min-height: 0; margin: 0; padding: 6px; overflow-y: auto; list-style: none; }
+.agent-row__open { display: grid; gap: 3px; width: 100%; min-width: 0; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: #e5e5e5; font: inherit; text-align: left; cursor: pointer; }
+.agent-row__open:hover, .agent-row__open:focus-visible { outline: none; background: #ffffff07; }
+.agent-row__line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.agent-row__name { min-width: 0; overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.agent-row__time { margin-left: auto; flex-shrink: 0; color: #858585; font-size: 11px; font-variant-numeric: tabular-nums; }
+.agent-row__activity { overflow: hidden; color: #a3a3a3; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; padding-left: 15px; }
+[data-agent-tone="failed"] .agent-row__activity { color: #e6908c; }
+.agent-row__meta { overflow: hidden; color: #6f6f6f; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; padding-left: 15px; font-variant-numeric: tabular-nums; }
+.agents-panel__footer { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; flex-shrink: 0; padding: 8px 14px; border-top: 1px solid #ffffff0f; color: #858585; font-size: 11px; font-variant-numeric: tabular-nums; }
+.agents-panel__working { color: #8fbfff; }
+.agents-panel__tokens { margin-left: auto; }
+.agents-panel__empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; flex: 1; padding: 24px; color: #747474; font-size: 12px; line-height: 1.6; text-align: center; }
+.agents-panel__empty svg { width: 22px; height: 22px; color: #5a5a5a; }
+.agents-panel__empty p { max-width: 34ch; margin: 0; }
+.agents-panel__empty-title { color: #b5b5b5; font-weight: 500; }
+.agents-panel__transcript { flex: 1; min-height: 0; padding: 12px 14px; overflow-y: auto; }
+.agents-panel__error { margin: 0 0 8px; color: #e6908c; font-size: 12px; }

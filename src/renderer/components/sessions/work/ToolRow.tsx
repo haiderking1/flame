@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useState } from "react";
+import { lazy, memo, Suspense, useEffect, useId, useState } from "react";
 import { useAtomSet } from "@effect/atom-react";
 import type { BashJob } from "@contracts/bash";
 import type { SessionLocation } from "@contracts/sessions";
@@ -8,6 +8,8 @@ import { FileToolRow } from "./FileToolRow";
 import { ThinkingLabel } from "./ThinkingLabel";
 import { useToolDisclosure } from "./ToolDisclosure";
 
+// Collaboration tool rows load with the first thread that uses agents.
+const AgentToolRow = lazy(() => import("../../agents/AgentToolRow").then(module => ({ default: module.AgentToolRow })));
 export const isRunning = (job: BashJob) => job.status === "running" || job.status === "claimed";
 export const isFailure = (job: BashJob) => job.status === "failed" || job.status === "interrupted" || (job.status === "exited" && (job.exitCode !== 0 || !!job.message));
 function statusLabel(job?: BashJob) {
@@ -17,7 +19,8 @@ function statusLabel(job?: BashJob) {
 }
 type Props = { step: Extract<WorkStep, { kind: "tool" }>; job?: BashJob; location: SessionLocation };
 export const ToolRow = memo(function ToolRow(props: Props) {
-  return props.step.file ? <FileToolRow step={props.step} detail={props.step.file} location={props.location} /> : <BashToolRow {...props} />;
+  return props.step.file ? <FileToolRow step={props.step} detail={props.step.file} location={props.location} />
+    : props.step.agent ? <Suspense fallback={null}><AgentToolRow step={props.step} /></Suspense> : <BashToolRow {...props} />;
 });
 function BashToolRow({ step, job: live, location }: Props) {
   const detailId = useId();
