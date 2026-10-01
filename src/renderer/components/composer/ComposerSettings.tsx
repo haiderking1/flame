@@ -13,7 +13,8 @@ export function ComposerSettings() {
   const selection = active ? active.settings : catalog.selection;
   const sessionKey = active ? `${active.projectId}:${active.sessionId}` : "defaults";
   const selected = catalog.models.find((model) => model.id === selection?.modelId);
-  const busy = choice.busy || !!sessions?.busy || !!sessions?.running;
+  // The model can change while the agent works; that run keeps its own, and the next message uses the new one.
+  const busy = choice.busy || !!sessions?.busy || sessions?.turn?.phase === "compacting";
   const error = active ? sessions?.error : choice.error;
   return <div className="composer-settings" role="group" aria-label="Model settings">
     <ModelPicker key={`${catalog.accountKey ?? "disconnected"}:${sessionKey}`} models={catalog.models} selectedId={selection?.modelId ?? null}

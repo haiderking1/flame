@@ -181,7 +181,7 @@ test('manual operations are idle-fenced, reject empty conversations and recover 
   assert.throws(() => h.db.turns.manualStart(0, randomUUID(), settings, 'account'), /Send a message/);
   h.append('Task'); const before = h.db.history(null).entries, id = randomUUID();
   h.db.turns.manualStart(h.db.read().revision, id, settings, 'account');
-  assert.throws(() => h.db.configure(h.db.read().revision, { ...settings, effort: 'low' }), /Stop the active/);
+  assert.throws(() => h.db.configure(h.db.read().revision, { ...settings, effort: 'low' }), /Wait for compaction to finish/);
   assert.throws(() => h.turn(), /Stop the active/);
   h.restart(); h.db.turns.recover();
   assert.equal(h.db.turns.snapshot().status, 'interrupted'); assert.equal(h.db.turns.snapshot().operation, 'compaction');

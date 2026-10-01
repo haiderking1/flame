@@ -164,7 +164,8 @@ export class SessionDatabase {
   configure(revision: number, settings: ModelSelection) {
     return this.transaction(() => {
       const current = this.expect(revision);
-      this.turns.assertIdle();
+      // A running response keeps the settings it started with; the next message, or a queued follow-up, uses these.
+      this.turns.assertNotCompacting();
       if (JSON.stringify(settings) === JSON.stringify(current.settings)) return current;
       this.entry(current, "settings", null, settings, null);
       this.db.prepare("UPDATE session SET settings=? WHERE singleton=1").run(JSON.stringify(settings));

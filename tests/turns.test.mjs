@@ -157,8 +157,11 @@ test('one active turn per session, follow-ups wait, checkpointed paragraphs, exp
   const concurrent = h.input('Concurrent'); await h.turns.start(concurrent);
   assert.deepEqual(h.turns.snapshot(h.location).queued, [concurrent.requestId], 'a message sent meanwhile waits as a follow-up');
   const doc = h.sessions.read(h.location);
-  assert.throws(() => h.sessions.configure(h.location, doc.revision, account.key, settings), /Stop the active/);
-  assert.throws(() => h.sessions.remove(h.location, doc.revision), /Stop the active/);
+  // The model can change meanwhile: the running response keeps its own, the follow-up gets the new one.
+  const changed = h.sessions.configure(h.location, doc.revision, account.key, { ...settings, effort: 'low' });
+  assert.equal(changed.settings.effort, 'low');
+  assert.equal(h.turns.snapshot(h.location).status, 'running');
+  assert.throws(() => h.sessions.remove(h.location, changed.revision), /Stop the active/);
   h.turns.stop(h.location, input.requestId);
   const done = await finished(h); assert.equal(done.status, 'cancelled');
   assert.deepEqual(done.returned, [concurrent.requestId], 'Stop gives the follow-up back');

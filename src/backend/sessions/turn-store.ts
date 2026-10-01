@@ -65,6 +65,10 @@ export class TurnStore {
   }
   /** How many responses this session has run. */
   runs() { return Number(this.db.prepare("SELECT count(*) AS count FROM turns WHERE COALESCE(operation,'response')='response'").get()?.count ?? 0); }
+  /** A compaction is tied to the settings it started with; a response is not, since its own run keeps them. */
+  assertNotCompacting() {
+    if (this.db.prepare("SELECT 1 FROM turns WHERE status='running' AND operation='compaction'").get()) throw turnInvalid("Wait for compaction to finish before changing the model.");
+  }
   assertIdle() {
     if (this.db.prepare("SELECT 1 FROM turns WHERE status='running'").get()) throw turnInvalid("Stop the active response before changing this session.");
   }

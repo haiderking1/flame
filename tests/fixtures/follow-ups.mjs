@@ -70,6 +70,7 @@ void app.whenReady().then(async () => {
     // A message written while the agent runs a tool queues, then goes at that tool step as the next message.
     await set('.composer__input', 'Run the build'); await enter();
     await wait(running);
+    assert.equal(await evaluate("document.querySelector('.composer .composer-settings__model').disabled || document.querySelector('.composer .composer-settings__thinking').disabled"), false, 'the model and effort can change while the agent works');
     await set('.composer__input', 'Also check the tests');
     await wait("!!document.querySelector('.composer [aria-label=\"Queue message\"]')");
     await enter();
