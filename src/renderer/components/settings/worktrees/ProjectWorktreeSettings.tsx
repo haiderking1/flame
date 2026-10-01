@@ -2,7 +2,8 @@ import type { Project } from "@contracts/projects";
 import { inheritedProjectSettings, type ProjectWorktreeSettings, type WorktreeSettings, type WorktreeSubmodules } from "@contracts/worktrees";
 import type { WorkspaceMode } from "@contracts/session-workspace";
 import { CleanupRules } from "./CleanupRules";
-import { Choice, SettingsRow, SUBMODULE_LABELS } from "./SettingsControls";
+import { Choice, SettingsRow } from "../SettingsControls";
+import { SUBMODULE_LABELS } from "./submoduleLabels";
 import { SetupScriptEditor } from "./SetupScriptEditor";
 
 type Inherit<T extends string> = T | "inherit";

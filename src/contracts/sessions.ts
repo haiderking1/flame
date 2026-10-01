@@ -36,6 +36,9 @@ export class SessionError extends Schema.TaggedError<SessionError>()("SessionErr
   code: Schema.Literals(["NOT_FOUND", "CONFLICT", "INVALID", "STORAGE"]), message: Schema.String,
 }) {}
 const edit = { ...SessionLocation.fields, revision: Revision };
+/** The conversation after "Edit from here", with the message that was taken back for the composer. */
+export const RewindResult = Schema.Struct({ document: SessionDocument, text: Schema.String, images: Schema.Array(ImageInfo) });
+export type RewindResult = typeof RewindResult.Type;
 export const SessionRpc = RpcGroup.make(
   Rpc.make("sessions.watch", { success: SessionIndex, error: SessionError, stream: true }),
   Rpc.make("sessions.create", { payload: SessionLocation, success: SessionDocument, error: SessionError }),
@@ -48,4 +51,6 @@ export const SessionRpc = RpcGroup.make(
   Rpc.make("sessions.configure", { payload: { ...edit, accountKey: Schema.String, modelId: Schema.String,
     effort: Schema.NullOr(Schema.String), serviceTier: ServiceTier }, success: SessionDocument, error: SessionError }),
   Rpc.make("sessions.delete", { payload: edit, success: Schema.Void, error: SessionError }),
+  // Rewinds to just before a user message; with restoreFiles, a worktree's files go back to how they were then too.
+  Rpc.make("sessions.rewind", { payload: { ...edit, entryId: SessionId, restoreFiles: Schema.Boolean }, success: RewindResult, error: SessionError }),
 );

@@ -4,7 +4,7 @@ Flame includes work adapted from the projects below. Thank you to their authors.
 
 ## T3 Code
 
-Flame's Git workflow, file icons, `@` file mentions and session worktrees are adapted from [T3 Code](https://github.com/pingdotgg/t3code) (commit `6b286ae`). The adapted parts are:
+Flame's Git workflow, file icons, `@` file mentions, session worktrees, follow-ups, thread notifications and "Edit from here" are adapted from [T3 Code](https://github.com/pingdotgg/t3code) (commit `6b286ae`). The adapted parts are:
 
 - the context-aware Git action button, its options menu and their disabled-reason rules
   (`src/renderer/components/workspace/git/gitActionLogic.ts`)
@@ -25,6 +25,14 @@ Flame's Git workflow, file icons, `@` file mentions and session worktrees are ad
   setup card, branch mismatch notice and settings with their wording
   (`src/backend/worktrees/`, `src/contracts/worktrees.ts`, `src/contracts/worktree-setup.ts`,
   `src/renderer/components/composer/workspace/`, `src/renderer/components/settings/worktrees/`)
+- follow-ups sent while the agent works: the Queue and Steer behaviour and its keyboard rules, when a queued message is
+  due, the queued-message rows, Stop returning queued messages to the composer, and the setting's wording
+  (`src/backend/turns/follow-ups.ts`, `src/renderer/components/composer/followUps/`)
+- thread notifications: when a thread alerts, the in-app toast, system notifications and badge, the Working and Completed
+  labels with Mark unread, and the settings' wording (`src/renderer/components/notifications/`, `src/main/notifications.ts`)
+- "Edit from here": rewinding a thread to before a message with the message returned to the composer, file checkpoints
+  for worktree threads and their restore, and the dialog's wording
+  (`src/backend/sessions/rewind.ts`, `src/backend/worktrees/checkpoints.ts`, `src/renderer/components/sessions/EditFromHereDialog.tsx`)
 
 ```
 MIT License

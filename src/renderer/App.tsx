@@ -5,6 +5,8 @@ import { ProjectPicker } from "./components/projects/ProjectPicker";
 import { SessionWorkspace } from "./components/sessions/SessionWorkspace";
 import { WorkspaceActions } from "./components/workspace/WorkspaceActions";
 import { ToastViewport } from "./components/toasts/ToastViewport";
+import { FollowUpSender } from "./components/composer/followUps/FollowUpSender";
+import { ThreadNotifications } from "./components/notifications/ThreadNotifications";
 import { SessionProvider, useSessions } from "./components/sessions/SessionContext";
 import { PanelBoundary } from "./components/workspace/PanelBoundary";
 import { Sidebar } from "./components/sidebar/Sidebar";
@@ -66,6 +68,8 @@ function Workspace() {
         }
       }}>
         <ToastViewport scope={activeProject} />
+        <FollowUpSender />
+        <ThreadNotifications />
         <WorkspaceActions diffOpen={diffOpen} diffButtonRef={diffButton} onToggleDiff={() => setDiffOpen((open) => !open)} />
         <div className="workspace__body">
           <div className="workspace__chat">

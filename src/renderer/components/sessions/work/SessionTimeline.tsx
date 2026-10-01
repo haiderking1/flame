@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { lazy, Suspense, useMemo, useRef } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { Option } from "effect";
@@ -18,10 +18,13 @@ import { TimelineRow } from "./TimelineRow";
 import { shareJobs } from "./rowSharing";
 import { ToolDisclosures } from "./ToolDisclosure";
 import { MeasuredList } from "../../virtual/MeasuredList";
-import { useWorktreeSetup, WorktreeSetupCard } from "./WorktreeSetupCard";
+import { useWorktreeSetup } from "./useWorktreeSetup";
+import { QueuedFollowUps } from "./QueuedFollowUps";
 import { useSessions } from "../SessionContext";
 import { useHistoryContainer } from "../../virtual/HistoryScrollContext";
 const EMPTY_JOBS: readonly BashJob[] = [];
+// Only shown while a worktree is set up, so it loads then rather than at startup.
+const WorktreeSetupCard = lazy(() => import("./WorktreeSetupCard"));
 type Item = { type: "row"; entry: SessionEntry; key: string } | { type: "marker"; compaction: CompactionInfo; key: string };
 const itemKey = (item: Item) => item.key;
 function jobActivity(turnId: string, jobs: readonly BashJob[], text = ""): WorkActivity {
@@ -73,7 +76,7 @@ export function SessionTimeline({ location, entries, compactions = [], turn, rev
   const compacting = turn?.status === "running" && turn.phase === "compacting";
   const pending = imagePreview?.sending && !rows.some(row => row.kind === "user" && imagePreview.images.every(image => row.images?.some(saved => saved.id === image.id))) ? imagePreview : null;
   // A worktree setup shows just before the response it prepared; one with no response in view (a pull request checkout) shows last.
-  const setupCard = setup && <WorktreeSetupCard location={stableLocation} snapshot={setup} onCancel={() => { void sessions?.stop(); }} />;
+  const setupCard = setup && <Suspense fallback={null}><WorktreeSetupCard location={stableLocation} snapshot={setup} onCancel={() => { void sessions?.stop(); }} /></Suspense>;
   const setupRow = setup && timeline.some(item => item.type === "row" && item.key === setup.turnId && item.entry.kind === "assistant") ? setup.turnId : null;
   function render(item: Item) {
     if (item.type === "row" && item.key === setupRow) return <>{setupCard}{row(item)}</>;
@@ -89,6 +92,7 @@ export function SessionTimeline({ location, entries, compactions = [], turn, rev
     {compacting && turn?.operation === "compaction" && <p className="turn-status" role="status"><ThinkingLabel>Compacting conversation</ThinkingLabel></p>}
     {offscreen.map(id => <WorkGroup key={id} activity={jobActivity(id, jobs)} running={false} jobs={groups.get(id) ?? EMPTY_JOBS} location={stableLocation} />)}
     {!setupRow && setupCard}
+    <QueuedFollowUps scope={`${stableLocation.projectId}:${stableLocation.sessionId}`} />
     {turn?.message && <p className="turn-feedback" role="status">{turn.message}</p>}
   </ToolDisclosures>;
 }

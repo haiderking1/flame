@@ -11,7 +11,8 @@ export function notificationInput(jobs: Parameters<typeof jobResult>[0][]) {
 }
 export async function agentLoop(client: Pick<CodexInferenceClient, "run">, request: InferenceRequest,
   runtime: BashRuntime | undefined, location: SessionLocation, turnId: string, account: string, signal: AbortSignal,
-  onText: (text: string) => void, checkpoint: (text: string, output: unknown[]) => void, initialOutput: unknown[] = [], files?: FileTools, context?: CompactionRuntime) {
+  onText: (text: string) => void, checkpoint: (text: string, output: unknown[]) => void, initialOutput: unknown[] = [], files?: FileTools, context?: CompactionRuntime,
+  yieldTo?: () => boolean) {
   let text = "";
   const output = [...initialOutput];
   const input = [...request.input];
@@ -60,6 +61,8 @@ export async function agentLoop(client: Pick<CodexInferenceClient, "run">, reque
       runtime!.acknowledge(location, pending.map(job => job.id));
     }
     if (!tools.length && !pending.length) return { text, output };
+    // A follow-up the user sent while the agent worked takes over at this tool step, as the next message.
+    if (yieldTo?.()) return { text, output };
   }
   throw new InferenceFailure("The agent reached its 32-step limit. No operations will be replayed. Inspect files and jobs before continuing.");
 }

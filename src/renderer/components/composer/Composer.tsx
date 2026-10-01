@@ -11,6 +11,8 @@ import { SlashCommandList } from "./slash/SlashCommandList";
 import { PromptEditor, type PromptEditorHandle } from "./editor/PromptEditor";
 import { useFileMentions } from "./mentions/useFileMentions";
 import { MentionMenu } from "./mentions/MentionMenu";
+import { useComposerFollowUps } from "./followUps/useComposerFollowUps";
+import type { FollowUpMode } from "./followUps/followUpLogic";
 import "./composer.css";
 
 type ComposerProps = {
@@ -21,9 +23,12 @@ type ComposerProps = {
   onStop?: () => void;
   stopLabel?: string;
   draft?: string; onDraftChange?: (value: string) => void; readOnly?: boolean; saveOnly?: boolean;
+  // While the agent works: where follow-ups queue, and how a new one is added.
+  followUpScope?: string | null; onFollowUp?: (text: string, images: readonly DraftImage[], mode: FollowUpMode) => void;
 };
 
-export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, onDraftChange, readOnly = false, saveOnly = false, imageLocation, prepareAttachments, onSendStart, pendingSend = false }: ComposerProps) {
+export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, onDraftChange, readOnly = false, saveOnly = false, imageLocation, prepareAttachments, onSendStart, pendingSend = false,
+  followUpScope = null, onFollowUp }: ComposerProps) {
   const [localDraft, setLocalDraft] = useState("");
   const draft = controlledDraft ?? localDraft;
   const setDraft = onDraftChange ?? setLocalDraft;
@@ -38,6 +43,8 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
   const { key: workspace } = useActiveWorkspace();
   const mentions = useFileMentions({ workspace, text: pendingSend ? "" : draft, cursor, focused, blocked: sending || pendingSend || readOnly || commands.isCommand, editor });
   const attachments = useImageDraft(imageLocation);
+  const followUps = useComposerFollowUps({ scope: followUpScope, running: Boolean(onStop), enqueue: onFollowUp, draft, setDraft, attachments,
+    blocked: sending || pendingSend || readOnly || commands.isCommand });
   const picker = useRef<HTMLInputElement>(null), dragDepth = useRef(0);
   const [dragging, setDragging] = useState(false);
   const canAttach = Boolean(imageLocation && attachments.ready && !sending && !pendingSend && !readOnly && !attachments.saving);
@@ -51,6 +58,11 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (commands.isCommand) { await commands.execute(); return; }
+    if (followUps.canFollowUp) {
+      try { await followUps.submit(); editor.current?.focus(); }
+      catch { setError("Could not queue your message. It and its attachments are still here. Try again."); }
+      return;
+    }
     if (!onSend || !canSend || inFlight.current) return;
     inFlight.current = true;
     const controller = new AbortController(); sendController.current = controller;
@@ -79,9 +91,12 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
   // The editor skips this while an IME is composing; menus take their keys first.
   function handleKeyDown(event: KeyboardEvent): boolean {
     if (mentions.handleKeyDown(event) || commands.handleKeyDown(event)) return true;
+    const modifier = event.ctrlKey || event.metaKey;
+    if (event.key === "Enter" && event.shiftKey && modifier && onStop && !event.repeat) { if (followUps.sendNext()) { event.preventDefault(); return true; } }
     if (event.key !== "Enter" || event.shiftKey) return false;
     event.preventDefault();
-    if ((canSend || commands.isCommand) && !event.repeat) form.current?.requestSubmit();
+    followUps.choose(modifier);
+    if ((canSend || followUps.canFollowUp || commands.isCommand) && !event.repeat) form.current?.requestSubmit();
     return true;
   }
   const menu = commands.open ? { id: commands.listId, active: commands.activeId } : mentions.open ? { id: mentions.listId, active: mentions.activeId } : null;
@@ -120,7 +135,7 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
       </span>
       <div className="composer__footer">
         <ComposerSettings />
-        <ComposerActions canSend={commands.isCommand ? !readOnly && !sending && !commands.launching : canSend} sending={sending} connected={Boolean(onSend)} saveOnly={saveOnly} onStop={sending ? () => { sendController.current?.abort(); onStop?.(); } : onStop} stopLabel={sending ? "Stop sending" : stopLabel} onAttach={canAttach ? () => picker.current?.click() : undefined} />
+        <ComposerActions canQueue={followUps.canFollowUp} queueLabel={followUps.label} canSend={commands.isCommand ? !readOnly && !sending && !commands.launching : canSend} sending={sending} connected={Boolean(onSend)} saveOnly={saveOnly} onStop={sending ? () => { sendController.current?.abort(); onStop?.(); } : onStop} stopLabel={sending ? "Stop sending" : stopLabel} onAttach={canAttach ? () => picker.current?.click() : undefined} />
       </div>
     </form>
   );

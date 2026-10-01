@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 export type WorkspaceIconName = "branch" | "commit" | "push" | "chevron" | "close" | "refresh" | "diff" | "split" | "unified" | "wrap" | "tree" | "file" | "copy" | "check" | "collapse"
   | "loader" | "circle-check" | "circle-alert" | "info" | "cloud-upload" | "cloud-download" | "pull-request" | "branch-plus" | "lock" | "globe" | "chevron-right" | "external"
-  | "folder" | "folder-git" | "folder-git-2" | "history" | "search" | "plus" | "terminal";
+  | "folder" | "folder-git" | "folder-git-2" | "history" | "search" | "plus" | "terminal" | "arrow-up" | "undo";
 const paths: Record<WorkspaceIconName, string> = {
   branch: "M6 3v12m0-6c8 0 12-2 12-6M3 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0M15 3a3 3 0 1 0 6 0a3 3 0 1 0-6 0",
   commit: "M3 12h5m8 0h5M8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0",
@@ -34,6 +34,9 @@ const paths: Record<WorkspaceIconName, string> = {
   search: "M4 10.5a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0M16 16l4 4",
   plus: "M12 5v14M5 12h14",
   terminal: "M4 17l6-6-6-6M12 19h8",
+  "arrow-up": "M12 19V5m-6 6 6-6 6 6",
+  // Lucide's undo-2, T3 Code's "Edit from here".
+  undo: "M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11",
 };
 export function WorkspaceIcon({ name, className, style }: { name: WorkspaceIconName; className?: string; style?: CSSProperties }) {
   return <svg className={className} style={style} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;

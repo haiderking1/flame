@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { WorktreeCleanupRules } from "@contracts/worktrees";
-import { SettingsRow, Toggle } from "./SettingsControls";
+import { SettingsRow, Toggle } from "../SettingsControls";
 
 const DEFAULT_DAYS = 30;
 /** T3 Code's automatic worktree cleanup rules; worktrees with local changes are always kept. */

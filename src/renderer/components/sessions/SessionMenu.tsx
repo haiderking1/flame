@@ -2,8 +2,8 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import "./session-menu.css";
 
-export function SessionMenu({ id, x, y, trigger, settled, branch, onSettle, onClose, onRename, onDelete, onNewOnBranch }: {
-  id: string; x: number; y: number; trigger: RefObject<HTMLButtonElement | null>; settled: boolean; branch: string | null;
+export function SessionMenu({ id, x, y, trigger, settled, branch, onSettle, onClose, onRename, onDelete, onNewOnBranch, onMarkUnread }: {
+  id: string; x: number; y: number; trigger: RefObject<HTMLButtonElement | null>; settled: boolean; branch: string | null; onMarkUnread: (() => void) | null;
   onSettle(): void; onClose(restoreFocus: boolean): void; onRename(): void; onDelete(): void; onNewOnBranch(): void;
 }) {
   const menu = useRef<HTMLDivElement>(null);
@@ -50,6 +50,7 @@ export function SessionMenu({ id, x, y, trigger, settled, branch, onSettle, onCl
     }}>
     <button role="menuitem" type="button" onClick={() => { onClose(true); onRename(); }}>Rename</button>
     <button role="menuitem" type="button" onClick={() => { onClose(true); onSettle(); }}>{settled ? "Unsettle" : "Settle"}</button>
+    {onMarkUnread && <button role="menuitem" type="button" onClick={() => { onClose(true); onMarkUnread(); }}>Mark unread</button>}
     {branch && <button role="menuitem" type="button" title={`New thread on ${branch}`} onClick={() => { onClose(false); onNewOnBranch(); }}>New thread on {branch}</button>}
     <div className="session-menu__separator" role="separator" />
     <button role="menuitem" type="button" className="session-menu__delete" onClick={() => { onClose(true); onDelete(); }}>Delete</button>

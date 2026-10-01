@@ -1,7 +1,7 @@
 import { Cause, Effect, Queue, Stream } from "effect";
 import { ModelsError } from "../../contracts/models.js";
 import { SessionError } from "../../contracts/sessions.js";
-import { TurnRpc, type TurnSnapshot } from "../../contracts/turns.js";
+import { TurnRpc, type SessionRunState, type TurnSnapshot } from "../../contracts/turns.js";
 import { storageError } from "../sessions/files.js";
 import type { Turns } from "./service.js";
 const failure = (error: unknown) => error instanceof SessionError ? error : error instanceof ModelsError
@@ -11,6 +11,11 @@ export function turnHandlers(turns: Turns) {
     "turns.start": (input) => Effect.tryPromise({ try: () => turns.start(input), catch: failure }).pipe(Effect.uninterruptible),
     "turns.compact": (input) => Effect.tryPromise({ try: () => turns.compact(input), catch: failure }).pipe(Effect.uninterruptible),
     "turns.stop": (input) => Effect.try({ try: () => turns.stop(input, input.turnId), catch: failure }),
+    "turns.states": () => Stream.callback<readonly SessionRunState[], SessionError>((queue) => Effect.acquireRelease(Effect.sync(() => {
+      const publish = () => { Queue.offerUnsafe(queue, turns.states()); };
+      turns.on("states", publish); publish();
+      return () => turns.off("states", publish);
+    }), (stop) => Effect.sync(stop)), { bufferSize: 1, strategy: "sliding" }),
     "turns.watch": (location) => Stream.callback<TurnSnapshot | null, SessionError>((queue) => Effect.acquireRelease(Effect.sync(() => {
       const id = `${location.projectId}:${location.sessionId}`;
       const publish = (changed = id) => {

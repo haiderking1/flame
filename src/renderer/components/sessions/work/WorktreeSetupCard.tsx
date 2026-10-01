@@ -1,11 +1,10 @@
 import { useEffect, useId, useState } from "react";
-import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { useAtomSet } from "@effect/atom-react";
 import type { SessionLocation } from "@contracts/sessions";
 import { worktreeSetupStageLabel, type WorktreeSetupSnapshot, type WorktreeSetupStage } from "@contracts/worktree-setup";
-import { workLocally, worktreeErrorMessage, worktreeSetup } from "../../../backend/worktrees";
+import { workLocally, worktreeErrorMessage } from "../../../backend/worktrees";
 import { WorkspaceIcon, type WorkspaceIconName } from "../../workspace/WorkspaceIcon";
-import { agentStarted, visibleSetup } from "../../composer/workspace/workspaceLogic";
+import { agentStarted } from "../../composer/workspace/workspaceLogic";
 import "../../workspace/git/git-dialogs.css";
 import "./worktree-setup-card.css";
 
@@ -21,16 +20,11 @@ function elapsed(stage: WorktreeSetupStage, now: number) {
   const seconds = Math.max(0, Math.round(((stage.endedAt ?? now) - stage.startedAt) / 1000));
   return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
-/** The setup the timeline shows for a session, if any. */
-export function useWorktreeSetup(location: SessionLocation) {
-  const result = useAtomValue(worktreeSetup(`${location.projectId}:${location.sessionId}`));
-  return visibleSetup(AsyncResult.isSuccess(result) ? result.value : null);
-}
 /**
  * T3 Code's worktree setup card: each stage of creating the session's worktree with its progress and time, the setup
  * script's output, and, until the agent takes over, Cancel or "Work locally" to use the project checkout instead.
  */
-export function WorktreeSetupCard({ location, snapshot, onCancel }: { location: SessionLocation; snapshot: WorktreeSetupSnapshot; onCancel(): void }) {
+export default function WorktreeSetupCard({ location, snapshot, onCancel }: { location: SessionLocation; snapshot: WorktreeSetupSnapshot; onCancel(): void }) {
   const local = useAtomSet(workLocally, { mode: "promise" });
   const [details, setDetails] = useState(false), [error, setError] = useState<string | null>(null), [now, setNow] = useState(Date.now);
   const detailsId = useId();

@@ -6,8 +6,8 @@ import { FilePersistenceFailure } from "../file-tools/types.js";
 import { agentLoop, notificationInput } from "./agent-loop.js";
 import { EventEmitter } from "node:events";
 import type { ModelSelection } from "../../contracts/models.js";
-import type { SessionLocation } from "../../contracts/sessions.js";
-import type { TurnSnapshot } from "../../contracts/turns.js";
+import type { SessionDocument, SessionLocation } from "../../contracts/sessions.js";
+import type { SessionRunState, TurnSnapshot } from "../../contracts/turns.js";
 import type { CodexAuth } from "../auth/service.js";
 import type { CodexModels } from "../models/service.js";
 import type { Sessions } from "../sessions/service.js";
@@ -18,6 +18,8 @@ import { turnContext } from "./compaction-context.js";
 import { agentContext } from "./agent-context.js";
 import { hasImageInput } from "./image-input.js";
 import { WorktreeSetupFailure } from "../worktrees/errors.js";
+import { FollowUps } from "./follow-ups.js";
+import { fitsSessionText } from "../../contracts/sessions.js";
 
 /** Readies a session's folder before a response to a new message, and follows it up afterwards (session worktrees). */
 export type TurnWorkspace = {
@@ -29,6 +31,11 @@ const key = (location: SessionLocation) => `${location.projectId}:${location.ses
 export class Turns extends EventEmitter {
   private active = new Map<string, Running>();
   private failedWrites = new Map<string, TurnSnapshot>();
+  private readonly followUps = new FollowUps();
+  // The latest run of every session, announced as "states" whenever one starts or ends.
+  private readonly runStates = new Map<string, SessionRunState>();
+  // Sessions whose next follow-up is being started, so a background notification does not take the slot first.
+  private readonly delivering = new Set<string>();
   private closed = false;
   constructor(private sessions: Sessions, private auth: CodexAuth, private models: Pick<CodexModels, "validateSelection"> & Partial<Pick<CodexModels, "supportsImages" | "contextWindow">>,
     private client: Pick<CodexInferenceClient, "run"> = new CodexInferenceClient(), private bash?: BashRuntime, private files?: FileTools, private workspace?: TurnWorkspace) {
@@ -37,15 +44,33 @@ export class Turns extends EventEmitter {
       try { sessions.publish(sessions.turns(location, (store) => store.recover())); }
       catch { sessions.warn(`Session ${location.sessionId} could not recover its interrupted response. Its history was not replaced.`); }
     }
+    for (const location of sessions.snapshot().sessions) this.trackState(key(location));
+    this.on("change", this.trackState);
+    sessions.on("removed", this.forgetState);
     auth.on("change", this.accountChanged);
     bash?.on("completed", this.backgroundCompleted);
     bash?.on("storageFailure", this.bashStorageFailure);
     queueMicrotask(() => { for (const location of sessions.snapshot().sessions) this.backgroundCompleted(location); });
   }
+  private trackState = (changed: string) => {
+    const [projectId, sessionId] = changed.split(":") as [string, string];
+    let state: SessionRunState | null = null;
+    try { const brief = this.sessions.turns({ projectId, sessionId }, store => store.state()); state = brief && { projectId, sessionId, ...brief }; }
+    catch { /* A session that cannot be read keeps its last known state. */ return; }
+    const failed = this.failedWrites.get(changed);
+    if (state && failed?.id === state.turnId) state = { ...state, status: failed.status, finishedAt: state.finishedAt ?? Date.now() };
+    const previous = this.runStates.get(changed);
+    if (JSON.stringify(previous ?? null) === JSON.stringify(state)) return;
+    if (state) this.runStates.set(changed, state); else this.runStates.delete(changed);
+    this.emit("states");
+  };
+  private forgetState = (session: SessionLocation) => { if (this.runStates.delete(key(session))) this.emit("states"); };
+  /** The latest run of every session. */
+  states() { return [...this.runStates.values()]; }
   private bashStorageFailure = (location: SessionLocation) => { this.active.get(key(location))?.controller.abort(); };
   private backgroundCompleted = (location: SessionLocation) => {
     queueMicrotask(() => {
-      if (this.closed || !this.bash || this.active.has(key(location)) || this.failedWrites.has(key(location)) || this.active.size >= 4) return;
+      if (this.closed || !this.bash || this.active.has(key(location)) || this.delivering.has(key(location)) || this.followUps.has(location) || this.failedWrites.has(key(location)) || this.active.size >= 4) return;
       const account = this.auth.usageSession();
       if (!account) return;
       try {
@@ -72,23 +97,32 @@ export class Turns extends EventEmitter {
   };
   /** Whether a response or compaction is running in the session. */
   isRunning(location: SessionLocation) { return this.active.has(key(location)); }
-  snapshot(location: SessionLocation) { return this.failedWrites.get(key(location)) ?? this.sessions.turns(location, (store) => store.snapshot()); }
+  snapshot(location: SessionLocation) {
+    const snapshot = this.failedWrites.get(key(location)) ?? this.sessions.turns(location, (store) => store.snapshot());
+    if (!snapshot) return snapshot;
+    const queued = this.followUps.queued(location), returned = this.followUps.returnedBy(location, snapshot.id);
+    return { ...snapshot, ...(queued.length ? { queued } : {}), ...(returned.length ? { returned } : {}) };
+  }
   private assertImageModel(account: string, settings: ModelSelection, input: unknown[]) {
     if (hasImageInput(input) && this.models.supportsImages?.(account, settings.modelId) === false) throw turnInvalid("This model does not accept images. Choose an image-capable model; your attachments have been kept.");
   }
-  async start(input: SessionLocation & { revision: number; requestId: string; text: string; accountKey: string; images?: readonly string[] }) {
+  async start(input: SessionLocation & { revision: number; requestId: string; text: string; accountKey: string; images?: readonly string[] }): Promise<SessionDocument> {
     if (this.closed) throw turnInvalid("Flame is shutting down.");
+    if (this.followUps.holds(input, input.requestId)) return this.sessions.read(input);
     // A retry only acknowledges the existing turn, never starts another provider request.
     const existing = this.sessions.turns(input, (store) => store.snapshot(input.requestId));
     if (existing) {
       const settings = this.sessions.read(input).settings;
       return this.sessions.turns(input, (store) => store.start(input.revision, input.requestId, input.text, settings!, "", input.images));
     }
+    if (this.active.has(key(input))) return this.follow(input);
     if (this.active.size >= 4) throw turnInvalid("Four responses are already running. Stop one before starting another.");
     if (!this.auth.usageSession()) await this.auth.refresh();
     if (this.closed) throw turnInvalid("Flame is shutting down.");
     const account = this.auth.usageSession();
     if (!account || account.key !== input.accountKey) throw turnInvalid("Account changed or disconnected. Check Providers before sending.");
+    // The agent may have started working while credentials refreshed.
+    if (this.active.has(key(input))) return this.follow(input);
     const retried = this.sessions.turns(input, (store) => store.snapshot(input.requestId));
     if (!retried && this.active.size >= 4) throw turnInvalid("Four responses are already running. Stop one before starting another.");
     const document = this.sessions.read(input);
@@ -106,6 +140,32 @@ export class Turns extends EventEmitter {
     this.sessions.publish(saved); this.emit("change", key(input));
     running.task = Promise.resolve().then(() => this.execute(input, settings, account, running, [], false, { text: input.text, images: input.images ?? [] }));
     return saved;
+  }
+  /** Holds a message sent while the session's agent works, until its next tool step or the end of the run. */
+  private async follow(input: SessionLocation & { revision: number; requestId: string; text: string; accountKey: string; images?: readonly string[] }): Promise<SessionDocument> {
+    if (!this.auth.usageSession()) await this.auth.refresh();
+    const account = this.auth.usageSession();
+    if (!account || account.key !== input.accountKey) throw turnInvalid("Account changed or disconnected. Check Providers before sending.");
+    const images = input.images ?? [];
+    if ((!input.text.trim() && !images.length) || !fitsSessionText(input.text)) throw turnInvalid("Messages must contain text or images and text must fit within 48 KiB when encoded.");
+    const document = this.sessions.read(input);
+    if (!document.settings) throw turnInvalid("Choose a model before sending to OpenAI.");
+    const settings = this.models.validateSelection(input.accountKey, document.settings);
+    this.assertImageModel(account.key, settings, [{ content: this.sessions.images(input, store => store.content(images)) }]);
+    // Delivered meanwhile: the run ended between the checks above, so this is an ordinary send.
+    if (!this.active.has(key(input))) return this.start(input);
+    this.followUps.hold(input, { requestId: input.requestId, text: input.text, images, accountKey: input.accountKey });
+    this.emit("change", key(input));
+    return document;
+  }
+  /** Starts the next follow-up after the run `after` ended; one the session cannot take is given back to the composer. */
+  private async deliver(location: SessionLocation, after: string) {
+    const next = this.followUps.next(location);
+    if (!next) return;
+    this.delivering.add(key(location));
+    try { await this.start({ ...location, revision: this.sessions.read(location).revision, requestId: next.requestId, text: next.text, accountKey: next.accountKey, images: next.images }); }
+    catch { this.followUps.release(location, after, [next.requestId]); this.emit("change", key(location)); }
+    finally { this.delivering.delete(key(location)); }
   }
   async compact(input: SessionLocation & { revision: number; requestId: string; accountKey: string }) {
     if (this.closed) throw turnInvalid("Flame is shutting down.");
@@ -172,7 +232,7 @@ export class Turns extends EventEmitter {
           location, location.requestId, account.key, running.controller.signal, next => { text = next; }, (next, items) => {
             try { this.sessions.turns(location, store => store.progress(location.requestId, next, items)); output = [...items]; delivered = next; this.emit("change", key(location)); }
             catch (error) { storageFailed = true; running.controller.abort(); throw error; }
-          }, initialOutput, this.files, context);
+          }, initialOutput, this.files, context, () => this.followUps.has(location));
         running.controller.signal.throwIfAborted();
         text = result.text; output = result.output;
         context.publish();
@@ -194,7 +254,13 @@ export class Turns extends EventEmitter {
       this.failedWrites.set(key(location), { id: location.requestId, status: "interrupted", text: delivered, ...(activity ? { activity } : {}),
         message: "The response could not be saved. Check disk space, then restart Flame to recover. It will not be replayed.", revision: -1, entryId: null });
     } finally {
-      this.active.delete(key(location)); this.emit("change", key(location));
+      this.active.delete(key(location));
+      // Follow-ups go next when the run finished or failed; a stopped or interrupted run gives them back.
+      if (this.followUps.has(location)) {
+        if (!this.closed && (status === "completed" || status === "failed")) void this.deliver(location, location.requestId);
+        else this.followUps.release(location, location.requestId);
+      }
+      this.emit("change", key(location));
       if (!manual) this.workspace?.finished(location);
       for (const session of this.sessions.snapshot().sessions) this.backgroundCompleted(session);
     }
@@ -209,7 +275,7 @@ export class Turns extends EventEmitter {
     }
   }
   async close() {
-    this.closed = true; this.auth.off("change", this.accountChanged);
+    this.closed = true; this.auth.off("change", this.accountChanged); this.sessions.off("removed", this.forgetState);
     this.bash?.off("completed", this.backgroundCompleted); this.bash?.off("storageFailure", this.bashStorageFailure);
     for (const running of this.active.values()) { running.status = "interrupted"; running.controller.abort(); }
     await Promise.all([...this.active.values()].map((running) => running.task));

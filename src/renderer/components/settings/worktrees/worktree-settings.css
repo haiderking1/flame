@@ -2,15 +2,6 @@
 .worktree-settings__project-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .worktree-settings__project-heading h1 { margin: 0; color: #aaa; font-size: 14px; line-height: 20px; font-weight: 500; }
 .worktree-settings .git-settings__list > * + * { border-top: 1px solid #ffffff06; }
-.worktree-settings__controls { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.worktree-settings__select { height: 28px; max-width: 220px; padding: 0 8px; border: 1px solid #ffffff14; border-radius: 8px; background: #ffffff07; color: #dedede; font: inherit; font-size: 13px; }
-.worktree-settings__select:focus-visible { outline: none; border-color: var(--accent); }
-.worktree-settings__switch { appearance: none; position: relative; width: 32px; height: 18px; margin: 0; border-radius: 999px; background: #ffffff1f; cursor: pointer; transition: background .15s; flex-shrink: 0; }
-.worktree-settings__switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #dedede; transition: transform .15s; }
-.worktree-settings__switch:checked { background: var(--accent); }
-.worktree-settings__switch:checked::after { transform: translateX(14px); background: #fff; }
-.worktree-settings__switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.worktree-settings__switch:disabled { opacity: .6; cursor: default; }
 .worktree-settings__days { display: inline-flex; align-items: center; gap: 6px; color: #858585; font-size: 12px; }
 .worktree-settings__days input { width: 64px; height: 26px; box-sizing: border-box; padding: 0 6px; border: 1px solid #ffffff14; border-radius: 6px; background: #ffffff07; color: #dedede; font: inherit; font-size: 13px; }
 .worktree-settings__nested { padding-left: 16px; border-left: 2px solid #ffffff0a; margin: 0 16px; }

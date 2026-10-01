@@ -10,6 +10,7 @@ import type { ModelSelection } from "../../contracts/models.js";
 import type { CompactionStore } from "./compaction-store.js";
 import { ManualTurnStore } from "./manual-turn-store.js";
 import { outputDigest } from "./context-items.js";
+import { CHAIN } from "./chain.js";
 
 export const turnInvalid = (message: string) => new SessionError({ code: "INVALID", message });
 export class TurnStore {
@@ -51,7 +52,16 @@ export class TurnStore {
     const finished = row.entryId ? this.db.prepare("SELECT created_at FROM entries WHERE id=?").get(String(row.entryId)) : null;
     const activity = workActivity(String(row.id), String(row.text), this.restoreToolResults(String(row.id), JSON.parse(String(row.output))), String(row.status), Number(row.created_at), finished ? Number(finished.created_at) : null);
     const { context: storedContext, ...snapshot } = row;
-    return Schema.decodeUnknownSync(TurnSnapshot)({ ...snapshot, ...(storedContext ? { context: JSON.parse(String(storedContext)) } : {}), ...(activity ? { activity } : {}) });
+    const toolResults = (JSON.parse(String(row.output)) as unknown[]).filter(item => (item as { type?: unknown } | null)?.type === "function_call_output").length;
+    return Schema.decodeUnknownSync(TurnSnapshot)({ ...snapshot, toolResults, ...(storedContext ? { context: JSON.parse(String(storedContext)) } : {}), ...(activity ? { activity } : {}) });
+  }
+  /** The latest run in brief: no output is decoded, so every session can be checked often. */
+  state() {
+    const row = this.db.prepare(`SELECT t.id AS turnId, t.status, COALESCE(t.operation,'response') AS operation, t.created_at AS startedAt, e.created_at AS finishedAt
+      FROM turns t LEFT JOIN entries e ON e.id=t.entry_id ORDER BY t.created_at DESC, t.rowid DESC LIMIT 1`).get();
+    if (!row) return null;
+    return { turnId: String(row.turnId), status: String(row.status) as TurnStatus, operation: String(row.operation) as "response" | "compaction", startedAt: Number(row.startedAt),
+      finishedAt: row.status === "running" ? null : row.finishedAt === null ? Number(row.startedAt) : Number(row.finishedAt) };
   }
   assertIdle() {
     if (this.db.prepare("SELECT 1 FROM turns WHERE status='running'").get()) throw turnInvalid("Stop the active response before changing this session.");
@@ -80,7 +90,7 @@ export class TurnStore {
         this.db.prepare("UPDATE session SET settled_at=NULL, revision=revision+1, updated_at=? WHERE singleton=1").run(Date.now());
         current = this.read();
       }
-      const prior = this.db.prepare("SELECT user_id FROM turns WHERE operation='response' ORDER BY created_at DESC,rowid DESC LIMIT 1").get();
+      const prior = this.db.prepare(`${CHAIN} SELECT user_id FROM turns WHERE operation='response' AND user_id IN (SELECT id FROM chain) ORDER BY created_at DESC,rowid DESC LIMIT 1`).get();
       if (!prior) throw turnInvalid("No prior user request for this background notification.");
       this.db.prepare("INSERT INTO turns(id,user_id,status,settings,account_key,output,revision,created_at) VALUES (?,?,'running',?,?,?,?,?)")
         .run(id, String(prior.user_id), JSON.stringify(settings), accountKey, JSON.stringify(output), current.revision, Date.now());

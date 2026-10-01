@@ -22,6 +22,9 @@ import { SetupTracker } from "./setup-tracker.js";
 import type { WorktreeStore } from "./store.js";
 import { switchRef } from "./switch-ref.js";
 import { validateWorkspace } from "./workspace-config.js";
+import { captureCheckpoint, checkpointRef, deleteCheckpoints, restoreCheckpoint, sessionCheckpoints } from "./checkpoints.js";
+import type { FileCheckpoints } from "../sessions/rewinds.js";
+import { SessionError } from "../../contracts/sessions.js";
 import { Schema } from "effect";
 
 export type WorktreesOptions = {
@@ -45,7 +48,7 @@ export function reconcileInterruptedSetup(snapshot: WorktreeSetupSnapshot): Work
  * Session worktrees: where each session works, creating a worktree on a first message, keeping it in step with its branch,
  * checking out change requests, and removing worktrees on request or by the cleanup rules. Emits "settings" on changes.
  */
-export class Worktrees extends EventEmitter {
+export class Worktrees extends EventEmitter implements FileCheckpoints {
   readonly tracker: SetupTracker;
   private readonly context: WorktreeContext;
   private readonly cleanup: WorktreeCleanup;
@@ -78,11 +81,19 @@ export class Worktrees extends EventEmitter {
   }
   /** Keeps track of a deleted session's worktree that no other session uses, for cleanup. */
   private removed = (session: SessionSummary) => {
+    void this.dropCheckpoints(session);
     const { worktreePath: path, branch } = session.workspace;
     if (!path || !branch || this.options.sessions.snapshot().sessions.some(other => other.workspace.worktreePath === path)) return;
     try { this.options.store.keep({ path, projectId: session.projectId, branch, deletedAt: Date.now() }); } catch { return; }
     if (projectSettings(this.options.store.settings(), session.projectId).cleanup.onDelete) this.cleanup.schedule();
   };
+  /** A deleted session's file checkpoints are no longer needed; they live in the repository shared by all its worktrees. */
+  private async dropCheckpoints(session: SessionSummary) {
+    try {
+      const project = this.options.roots.project(session.projectId);
+      await deleteCheckpoints(project, await sessionCheckpoints(project, session.sessionId));
+    } catch { /* Not a repository, or it went away. */ }
+  }
   settings() { return this.options.store.settings(); }
   saveDefaults(defaults: WorktreeDefaults) {
     this.options.store.saveDefaults(Schema.decodeUnknownSync(WorktreeDefaults)(defaults));
@@ -150,6 +161,9 @@ export class Worktrees extends EventEmitter {
         if (branch && branch !== workspace.branch) this.options.sessions.updateWorkspace(location, current => current.mode === "local" ? { ...current, branch } : null);
       } else if (await restoreMissingWorktree(project, workspace, signal)) this.options.changed(workspace.worktreePath!);
     }
+    // The files as they are before this response, so "Edit from here" can put them back (worktrees only, as in T3 Code).
+    const folder = this.options.sessions.find(location)?.workspace.worktreePath;
+    if (folder) await captureCheckpoint(folder, checkpointRef(location.sessionId, turn.id), signal).catch(() => { /* That message then cannot restore files. */ });
     const current = this.options.sessions.find(location)?.workspace;
     if (!current?.worktreePath || !current.branch || !isTemporaryWorktreeBranch(current.branch) || !this.options.namer) return;
     let images: readonly unknown[] = [];
@@ -163,6 +177,24 @@ export class Worktrees extends EventEmitter {
   finished(location: SessionLocation) {
     const workspace = this.options.sessions.find(location)?.workspace;
     if (workspace?.worktreePath) void followWorktreeBranch({ sessions: this.options.sessions, changed: this.options.changed }, location, workspace, this.closing.signal).catch(() => {});
+  }
+  /** The worktree whose files this session can restore; only a worktree no other session shares, as in T3 Code. */
+  restorable(location: SessionLocation) {
+    const workspace = this.options.sessions.find(location)?.workspace;
+    if (!workspace?.worktreePath) throw new SessionError({ code: "INVALID", message: "Files stay as they are because this thread shares the project directory. Rewind the conversation without restoring files instead." });
+    const path = workspace.worktreePath;
+    if (this.options.sessions.snapshot().sessions.filter(session => session.workspace.worktreePath === path).length > 1)
+      throw new SessionError({ code: "INVALID", message: "File restore requires an isolated worktree. This workspace may contain changes from another thread. Rewind the conversation without restoring files instead." });
+    return path;
+  }
+  async restore(location: SessionLocation, turnId: string) {
+    const path = this.restorable(location);
+    await restoreCheckpoint(path, checkpointRef(location.sessionId, turnId));
+    this.options.changed(path);
+  }
+  async forget(location: SessionLocation, turnIds: readonly string[]) {
+    const path = this.options.sessions.find(location)?.workspace.worktreePath;
+    if (path && turnIds.length) await deleteCheckpoints(path, turnIds.map(turnId => checkpointRef(location.sessionId, turnId)));
   }
   resolvePullRequest(projectId: string, reference: string, signal?: AbortSignal) {
     return resolvePullRequest(this.options.roots.project(projectId), reference, signal).then(result => result.pullRequest, error => { throw asWorktreeError(error, "The change request could not be found."); });

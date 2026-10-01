@@ -67,3 +67,7 @@
     height: 32px;
   }
 }
+
+/* Queue/steer sits beside Stop while the agent works, in a quieter style than Stop. */
+.composer-actions__queue { background: #ffffff14; color: #ededed; }
+.composer-actions__queue:hover:not(:disabled) { background: #ffffff21; }

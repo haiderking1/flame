@@ -3,8 +3,10 @@ import { ModelsError } from "../../contracts/models.js";
 import { SessionError, SessionRpc, type SessionIndex } from "../../contracts/sessions.js";
 import { storageError } from "./files.js";
 import type { Sessions } from "./service.js";
+import { SessionRewinds } from "./rewinds.js";
+import { GitError } from "../../contracts/git.js";
 
-export function sessionHandlers(sessions: Sessions) {
+export function sessionHandlers(sessions: Sessions, rewinds: SessionRewinds = new SessionRewinds(sessions)) {
   const work = <A>(run: () => A) => Effect.try({ try: run, catch: (error) => error instanceof SessionError ? error
     : error instanceof ModelsError ? new SessionError({ code: "INVALID", message: error.message }) : storageError() }).pipe(Effect.uninterruptible);
   return SessionRpc.toLayer({
@@ -23,5 +25,7 @@ export function sessionHandlers(sessions: Sessions) {
     "sessions.configure": (input) => work(() => sessions.configure(input, input.revision, input.accountKey,
       { modelId: input.modelId, effort: input.effort, serviceTier: input.serviceTier })),
     "sessions.delete": (input) => work(() => sessions.remove(input, input.revision)),
+    "sessions.rewind": ({ entryId, restoreFiles, revision, ...location }) => Effect.tryPromise({ try: () => rewinds.rewind(location, revision, entryId, restoreFiles),
+      catch: (error) => error instanceof SessionError ? error : error instanceof GitError ? new SessionError({ code: "INVALID", message: error.message }) : storageError() }).pipe(Effect.uninterruptible),
   });
 }

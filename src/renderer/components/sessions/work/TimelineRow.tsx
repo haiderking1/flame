@@ -10,5 +10,5 @@ export const TimelineRow = memo(function TimelineRow({ entry, jobs, location, co
 }) {
   recordRowRender(entry.turnId ?? entry.activity?.turnId ?? entry.id);
   const images = useMemo(() => (entry.images ?? []).map(image => imagePreview?.images.find(source => source.id === image.id) ?? { id: image.id, name: image.name, image, location }), [entry.images, imagePreview, location]);
-  return <div data-history-entry={entry.id}>{entry.kind === "user" ? <UserMessage text={entry.text ?? ""} images={images} /> : <AssistantContent text={entry.text ?? ""} activity={entry.activity} status={entry.turnStatus ?? "completed"} compacting={compacting} jobs={jobs} location={location} />}</div>;
+  return <div data-history-entry={entry.id}>{entry.kind === "user" ? <UserMessage text={entry.text ?? ""} images={images} entry={entry} /> : <AssistantContent text={entry.text ?? ""} activity={entry.activity} status={entry.turnStatus ?? "completed"} compacting={compacting} jobs={jobs} location={location} />}</div>;
 });

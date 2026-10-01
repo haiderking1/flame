@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAtomSet } from "@effect/atom-react";
 import type { ModelSelection } from "@contracts/models";
 import { fitsSessionText, SessionError, type SessionDocument, type SessionLocation, type SessionPage, type SessionSummary } from "@contracts/sessions";
-import { changeSession, createSession, deleteSession, readSession, sessionErrorMessage, sessionHistory } from "../../backend/sessions";
+import { changeSession, createSession, deleteSession, readSession, rewindSession, sessionErrorMessage, sessionHistory } from "../../backend/sessions";
 import { configureWorkspace } from "../../backend/worktrees";
 import type { SessionWorkspace } from "@contracts/session-workspace";
 import { startTurn, stopTurn } from "../../backend/turns";
@@ -27,6 +27,7 @@ export function useSessionWorkspace() {
   const change = useAtomSet(changeSession, { mode: "promise" });
   const remove = useAtomSet(deleteSession, { mode: "promise" });
   const place = useAtomSet(configureWorkspace, { mode: "promise" });
+  const rewindTo = useAtomSet(rewindSession, { mode: "promise" });
   const [document, setDocument] = useState<SessionDocument | null>(null);
   const turnState = useTurnState(document);
   const [page, setPage] = useState<SessionPage>({ entries: [], nextBefore: null });
@@ -104,6 +105,19 @@ export function useSessionWorkspace() {
       const saved = await place({ projectId: latest.projectId, sessionId: latest.sessionId, revision: latest.revision, workspace });
       adopt(saved); setError(null);
       return saved;
+    }, false);
+  }
+  /** "Edit from here": rewinds to before a user message and returns that message (the caller puts it in the composer). */
+  function rewind(entryId: string, restoreFiles: boolean) {
+    const target = current.current;
+    return enqueue(async () => {
+      const latest = current.current;
+      if (!target || !latest || latest.sessionId !== target.sessionId || latest.projectId !== target.projectId) throw new Error("Session changed");
+      const result = await rewindTo({ projectId: latest.projectId, sessionId: latest.sessionId, revision: latest.revision, entryId, restoreFiles });
+      adopt(result.document);
+      setPage(await history({ projectId: latest.projectId, sessionId: latest.sessionId, before: null }));
+      setError(null);
+      return result;
     }, false);
   }
   async function newSession(projectId: string, workspace?: SessionWorkspace) {
@@ -221,6 +235,14 @@ export function useSessionWorkspace() {
     window.document.addEventListener("visibilitychange", visibility);
     return () => { window.removeEventListener("beforeunload", guard); window.document.removeEventListener("visibilitychange", visibility); };
   }, [pending]);
+  // A run the backend started on its own (a delivered follow-up or a background notice) brings new history with it.
+  const seenRun = useRef("");
+  useEffect(() => {
+    const turn = turnState.turn;
+    if (!turn || turn.status !== "running" || !current.current || turn.revision <= current.current.revision || pending > 0 || transitioning || seenRun.current === turn.id) return;
+    seenRun.current = turn.id;
+    void reload().catch(() => {});
+  }, [turnState.turn?.id, turnState.turn?.status, pending, transitioning, document?.revision]);
   useEffect(() => {
     const turn = turnState.turn;
     if (turn && turn.status !== "running" && current.current && turn.revision > current.current.revision && pending === 0 && !transitioning && restoredTurn.current !== `${turn.id}:${turn.revision}`) {
@@ -230,7 +252,7 @@ export function useSessionWorkspace() {
   }, [turnState.turn?.id, turnState.turn?.status, turnState.turn?.revision, pending, transitioning, document?.revision]);
   return { document, page, draft, error, transitioning, turn: awaitingMessageHistory ? null : turnState.turn, running: turnState.running,
     stop: () => turnState.stop().catch((error) => { setError(sessionErrorMessage(error)); }), busy: pending > 0 || transitioning, dirty: !!document && draft !== document.draft,
-    editDraft, open, newSession, placeSession, send, loadOlder, reload, flushDraft, compact, accountKey: turnState.accountKey,
+    editDraft, open, newSession, placeSession, rewind, send, loadOlder, reload, flushDraft, compact, accountKey: turnState.accountKey,
     renameSession: (target: SessionSummary, title: string) => editSession(target, { type: "rename", title }),
     settleSession: (target: SessionSummary, settled: boolean) => editSession(target, { type: "settle", settled }),
     deleteSession: (target: SessionSummary) => editSession(target, { type: "delete" }),

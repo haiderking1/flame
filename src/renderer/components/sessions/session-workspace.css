@@ -33,3 +33,13 @@
 .workspace__chat:has(.session-history:not([hidden])) .workspace__composer { position: absolute; z-index: 2; inset-inline: var(--chat-gutter); bottom: var(--chat-gutter); width: auto; margin: 0 auto; pointer-events: none; }
 .workspace__chat:has(.session-history:not([hidden])) .workspace__composer > * { pointer-events: auto; }
 .workspace__composer .session-error { padding: 8px 12px; border-radius: 10px; background: #111111ed; }
+/* A user message with its hover action underneath, as in T3 Code. */
+.session-message__user { display: grid; justify-items: end; gap: 2px; }
+.session-message__action { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #737373; cursor: pointer; opacity: 0; transition: opacity .12s; }
+/* Lucide's undo-2, drawn in the current text color. */
+.session-message__action::before { content: ""; display: block; width: 14px; height: 14px; margin: auto; background: currentColor;
+  mask: url("../../assets/icons/undo-2.svg?no-inline") center / contain no-repeat; }
+.session-message__user:hover .session-message__action, .session-message__action:focus-visible { opacity: 1; }
+@media (pointer: coarse) { .session-message__action { opacity: 1; } }
+.session-message__action:hover:not(:disabled), .session-message__action:focus-visible { background: #ffffff0d; color: #dedede; outline: none; }
+.session-message__action:disabled { cursor: default; color: #4a4a4a; }

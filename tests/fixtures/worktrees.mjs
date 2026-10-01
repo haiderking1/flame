@@ -128,6 +128,19 @@ void app.whenReady().then(async () => {
     await click('.worktree-setup__actions button'); await wait("document.querySelector('.worktree-setup__output')?.textContent.includes('preparing')");
     await captureUI(driver, 'worktree-setup-card');
 
+    // Edit from here in a worktree thread can put its files back as they were before the message.
+    const second = (await git(projectPath, ['worktree', 'list', '--porcelain'])).split('\n').filter(line => line.startsWith('worktree ')).map(line => line.slice(9)).find(path => path !== projectPath && path !== worktree);
+    await writeFile(join(second, 'made-by-agent.txt'), 'later\n');
+    await wait("!document.querySelector('.composer [aria-label=\"Stop response\"]') && document.querySelector('[aria-label=\"Edit from here\"]')?.disabled === false");
+    // The button is briefly disabled while the thread reloads after its response; click until the dialog opens.
+    await wait("(() => { if (!document.querySelector('.edit-from-here')) document.querySelector('[aria-label=\"Edit from here\"]')?.click(); return !!document.querySelector('.edit-from-here'); })()");
+    await wait("[...document.querySelectorAll('.edit-from-here button')].some(button => button.textContent === 'Revert files too')");
+    assert.equal(await evaluate("document.querySelector('.edit-from-here .git-dialog__description').textContent"), 'Rewind chat to before this message. Your prompt and attachments return to the composer.');
+    await evaluate("[...document.querySelectorAll('.edit-from-here button')].find(button => button.textContent === 'Revert files too').click()");
+    await wait("!document.querySelector('.edit-from-here') && document.querySelector('.composer__input').value === 'Add a settings page'");
+    assert.equal(existsSync(join(second, 'made-by-agent.txt')), false, 'files made after the message are gone');
+    assert.ok(existsSync(join(second, 'README.md')));
+
     // A session sharing the worktree is deleted without touching it.
     await wait("document.querySelector('[aria-label=\"Options for New session\"]')?.disabled === false");
     await click('[aria-label="Options for New session"]'); await wait("!!document.querySelector('.session-menu')");

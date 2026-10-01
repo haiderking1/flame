@@ -146,7 +146,7 @@ test('turns commit once, preserve full context and hide opaque provider output f
   assert.ok(!JSON.stringify(h.sessions.turns(h.location, (store) => store.context({ ...settings, modelId: 'other-model' }, account.key))).includes('opaque-reasoning'));
 });
 
-test('one active turn per session, checkpointed paragraphs, explicit stop and no replay after cancellation', async (t) => {
+test('one active turn per session, follow-ups wait, checkpointed paragraphs, explicit stop and no replay after cancellation', async (t) => {
   let calls = 0;
   const h = setup(t, { run: async (input, onText, signal) => {
     calls++; onText('Ready paragraph.\n\nIncomplete');
@@ -154,12 +154,14 @@ test('one active turn per session, checkpointed paragraphs, explicit stop and no
   } });
   const input = h.input(); await h.turns.start(input); await delay(450);
   assert.equal(h.turns.snapshot(h.location).text, 'Ready paragraph.\n\n');
-  await assert.rejects(h.turns.start(h.input('Concurrent')), /Stop the active/);
+  const concurrent = h.input('Concurrent'); await h.turns.start(concurrent);
+  assert.deepEqual(h.turns.snapshot(h.location).queued, [concurrent.requestId], 'a message sent meanwhile waits as a follow-up');
   const doc = h.sessions.read(h.location);
   assert.throws(() => h.sessions.configure(h.location, doc.revision, account.key, settings), /Stop the active/);
   assert.throws(() => h.sessions.remove(h.location, doc.revision), /Stop the active/);
   h.turns.stop(h.location, input.requestId);
   const done = await finished(h); assert.equal(done.status, 'cancelled');
+  assert.deepEqual(done.returned, [concurrent.requestId], 'Stop gives the follow-up back');
   assert.equal(done.text, 'Ready paragraph.\n\nIncomplete');
   await h.turns.start(input); assert.equal(calls, 1);
 });

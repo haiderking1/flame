@@ -24,6 +24,8 @@ import { migrateWorkspace } from "./workspace-migration.js";
 import { WorkspaceRecord } from "./workspace-record.js";
 import { CompactionStore } from "./compaction-store.js";
 import { mentionNames } from "../../contracts/file-mentions.js";
+import { CHAIN } from "./chain.js";
+import { Rewind } from "./rewind.js";
 
 const conflict = () => new SessionError({ code: "CONFLICT", message: "This session changed elsewhere. Reopen it before saving again. Your unsaved text has been kept." });
 const invalid = (message: string) => new SessionError({ code: "INVALID", message });
@@ -35,6 +37,7 @@ export class SessionDatabase {
   readonly images: ImageStore;
   readonly compactions: CompactionStore;
   readonly workspace: WorkspaceRecord;
+  readonly rewind: Rewind;
   constructor(filename: string, private readonly location: SessionLocation, settings?: ModelSelection | null) {
     checkDatabase(filename);
     this.db = new DatabaseSync(filename);
@@ -64,6 +67,8 @@ export class SessionDatabase {
         (id, output) => this.files.restoreResults(id, output), this.images, this.compactions);
       this.workspace = new WorkspaceRecord(this.db, () => this.read(), revision => this.expect(revision), work => this.transaction(work), () => this.turns.assertIdle(),
         () => this.jobs.list().some(job => job.status === "running" || job.status === "claimed"), () => this.hasMessages());
+      this.rewind = new Rewind(this.db, () => this.read(), revision => this.expect(revision), work => this.transaction(work), () => this.turns.assertIdle(),
+        () => this.jobs.list().some(job => job.status === "running" || job.status === "claimed"), entryId => this.images.list(entryId));
     } catch (error) { this.db.close(); throw error; }
   }
   read(includeDeleted = false, legacy = false): SessionDocument {
@@ -73,7 +78,7 @@ export class SessionDatabase {
     if (!row || row.sessionId !== this.location.sessionId || row.projectId !== this.location.projectId) throw storageError();
     if (!includeDeleted && row.deleted === 1) throw missing();
     const hasCompaction = this.version() >= 8;
-    const meter = hasCompaction ? this.db.prepare("SELECT context,settings FROM turns WHERE context IS NOT NULL ORDER BY created_at DESC,rowid DESC LIMIT 1").get() : null;
+    const meter = hasCompaction ? this.db.prepare(`${CHAIN} SELECT context,settings FROM turns WHERE context IS NOT NULL AND user_id IN (SELECT id FROM chain) ORDER BY created_at DESC,rowid DESC LIMIT 1`).get() : null;
     const settings = JSON.parse(String(row.settings));
     const storedContext = meter && JSON.parse(String(meter.settings)).modelId === settings?.modelId ? meter.context : null;
     const workspace = row.workspace === null ? LOCAL_WORKSPACE : JSON.parse(String(row.workspace));

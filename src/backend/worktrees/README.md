@@ -28,6 +28,10 @@ Stopping the response during setup removes what was made (`git worktree remove -
 - A session in the checkout records the branch it last ran on, so the composer can offer to switch back when the checkout moved.
 - `refs.ts` and `switch-ref.ts` list and switch branches for the branch picker; remote branches get tracking branches.
 
+## File checkpoints
+
+Before each response in a worktree session, `checkpoints.ts` saves the worktree's files (tracked and untracked, not ignored) as a commit under `refs/flame/checkpoints/<session>/<response>`, using a private index so the user's staging area and branch are untouched. "Edit from here" with "Revert files too" restores them: changed and deleted files come back, files added since are removed, and the branch and its commits stay. Only a worktree no other session shares can restore files. Checkpoints of responses a rewind left behind, and all of a deleted session's, are removed.
+
 ## Pull requests
 
 `pull-requests.ts` resolves a pull or merge request from its number, URL or `gh pr checkout` / `glab mr checkout` command through the hosting CLI. "Local" force-checks it out in the project. "Worktree" reuses a worktree already on its branch (moving it to the head only when clean with no local commits), or adds one on the head branch (`flame/pr-<n>/<head>` for forks) and lets the CLI check it out there; with a session it records the workspace and runs the setup script, shown on the setup card.

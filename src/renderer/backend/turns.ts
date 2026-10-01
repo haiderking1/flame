@@ -7,6 +7,8 @@ export const turnAtom = Atom.family((id: string) => backendRuntime.atom(id ? Str
   const [projectId, sessionId] = id.split(":") as [string, string];
   return client["turns.watch"]({ projectId, sessionId }).pipe(Stream.retry(Schedule.spaced("2 seconds")));
 })) : Stream.succeed(null)));
+// The latest run of every session, for notifications and the sidebar.
+export const turnStatesAtom = backendRuntime.atom(Stream.unwrap(Effect.map(Backend, (client) => client["turns.states"]().pipe(Stream.retry(Schedule.spaced("2 seconds")))))).pipe(Atom.keepAlive);
 export const startTurn = backendRuntime.fn((input: SessionLocation & { revision: number; requestId: string; text: string; accountKey: string; images?: readonly string[] }) =>
   Effect.flatMap(Backend, (client) => client["turns.start"](input)).pipe(Effect.timeout("20 seconds")));
 export const stopTurn = backendRuntime.fn((input: SessionLocation & { turnId: string }) =>

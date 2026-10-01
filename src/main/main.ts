@@ -3,6 +3,7 @@ import { launchBackend } from "./backend.js";
 import { createWindow } from "./window.js";
 import { installApplicationMenu } from "./applicationMenu.js";
 import { installImageUploadOrigin } from "./imageUploadOrigin.js";
+import { installNotifications } from "./notifications.js";
 
 function handleStartupError(error: unknown): void {
   console.error("Failed to open Flame:", error);
@@ -53,5 +54,6 @@ if (primary) void app.whenReady().then(async () => {
   });
 
   installApplicationMenu();
+  installNotifications();
   await createWindow();
 }).catch(handleStartupError);

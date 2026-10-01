@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useAtomSet } from "@effect/atom-react";
 import type { GitRef } from "@contracts/worktrees";
 import { changeRequestTerminology } from "@contracts/source-control";
@@ -10,7 +10,6 @@ import { workspaceKey, worktreeKey } from "../../../backend/workspaceKey";
 import { useSessions } from "../../sessions/SessionContext";
 import { useGitStatus } from "../../workspace/git/useGitStatus";
 import { BranchPicker, type BranchPickerHandle } from "./BranchPicker";
-import { PullRequestDialog } from "./PullRequestDialog";
 import { useComposerWorkspace } from "./useComposerWorkspace";
 import { useWorktreeSettings } from "./worktreeDefaults";
 import { useGitRefs } from "./useGitRefs";
@@ -18,6 +17,8 @@ import { WorkspaceSelect, type WorkspaceSelectHandle } from "./WorkspaceSelect";
 import { branchSelection, movedWorkspace } from "./workspaceLogic";
 import "./branch-toolbar.css";
 
+// Loaded when first opened, so the dialog stays out of the startup bundle.
+const PullRequestDialog = lazy(() => import("./PullRequestDialog").then(module => ({ default: module.PullRequestDialog })));
 /** The context strip under the composer, for projects that are Git repositories. */
 export function BranchToolbar() {
   const state = useComposerWorkspace();
@@ -98,6 +99,6 @@ function Toolbar({ state }: { state: ToolbarState }) {
       onQuery={refs.search} onPick={pick} onCreate={createBranch} onPullRequest={reference => setPullRequest(reference)}
       onStartFromOrigin={value => { void run(() => state.change({ ...workspace, startFromOrigin: value })); }} />
     {error && <p className="branch-toolbar__error" role="alert">{error}</p>}
-    {pullRequest !== null && <PullRequestDialog projectId={projectId} provider={provider} initial={pullRequest} onClose={() => setPullRequest(null)} onCheckout={checkoutPullRequest} />}
+    {pullRequest !== null && <Suspense fallback={null}><PullRequestDialog projectId={projectId} provider={provider} initial={pullRequest} onClose={() => setPullRequest(null)} onCheckout={checkoutPullRequest} /></Suspense>}
   </div>;
 }

@@ -70,6 +70,15 @@ export class Sessions extends EventEmitter {
     const document = this.repository.use(location, db => db.workspace.update(change));
     return document && this.publish(document);
   }
+  /** Throws unless the conversation could rewind to before this message now. */
+  rewindable(location: SessionLocation, revision: number, entryId: string) { this.repository.use(location, db => db.rewind.check(revision, entryId)); }
+  checkpointTurn(location: SessionLocation, entryId: string) { return this.repository.use(location, db => db.rewind.turnFor(entryId)); }
+  abandonedTurns(location: SessionLocation) { return this.repository.use(location, db => db.rewind.abandonedTurns()); }
+  rewind(location: SessionLocation, revision: number, entryId: string) {
+    const result = this.repository.use(location, db => db.rewind.to(revision, entryId));
+    this.publish(result.document);
+    return result;
+  }
   /** Deletes a session; emits "removed" with its last summary, so its worktree can be kept track of. */
   remove(location: SessionLocation, revision: number) {
     const removed = this.find(location);

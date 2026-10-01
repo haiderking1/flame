@@ -23,6 +23,7 @@ import type { CodexModelsClient } from "./models/client.js";
 import { SessionRepository } from "./sessions/repository.js";
 import { Sessions } from "./sessions/service.js";
 import { sessionHandlers } from "./sessions/handlers.js";
+import { SessionRewinds } from "./sessions/rewinds.js";
 import { Turns } from "./turns/service.js";
 import { turnHandlers } from "./turns/handlers.js";
 import { BashRuntime } from "./bash/service.js";
@@ -88,7 +89,7 @@ export const startServer = (options: { filename: string; token: string; origin: 
     directory: options.worktreesDirectory ?? defaultWorktreesDirectory(), namer: writer, changed: root => changes.touch(root), busy })), worktrees => Effect.promise(() => worktrees.close()));
   turns = yield* Effect.acquireRelease(Effect.sync(() => new Turns(sessions, auth, models, options.inferenceClient, bash, files, worktrees)), (turns) => Effect.promise(() => turns.close()));
   const rpc = yield* RpcServer.toHttpEffectWebsocket(BackendRpc).pipe(
-    Effect.provide(gitHandlers(git, changes, target)), Effect.provide(worktreeHandlers(worktrees)), Effect.provide(workspaceSearchHandlers(workspaceSearch)), Effect.provide(imageHandlers(images)), Effect.provide(bashHandlers(bash)), Effect.provide(turnHandlers(turns!)), Effect.provide(sessionHandlers(sessions)), Effect.provide(modelsHandlers(models)), Effect.provide(usageHandlers(usage)), Effect.provide(authHandlers(auth)), Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
+    Effect.provide(gitHandlers(git, changes, target)), Effect.provide(worktreeHandlers(worktrees)), Effect.provide(workspaceSearchHandlers(workspaceSearch)), Effect.provide(imageHandlers(images)), Effect.provide(bashHandlers(bash)), Effect.provide(turnHandlers(turns!)), Effect.provide(sessionHandlers(sessions, new SessionRewinds(sessions, worktrees))), Effect.provide(modelsHandlers(models)), Effect.provide(usageHandlers(usage)), Effect.provide(authHandlers(auth)), Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
   );
   const server = yield* NodeHttpServer.make(createServer, {
     host: "127.0.0.1", port: 0, gracefulShutdownTimeout: "2 seconds", websocket: { maxPayload: 64 * 1024 },

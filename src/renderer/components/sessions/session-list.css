@@ -38,3 +38,9 @@
 .session-list__branch { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session-list__mismatch { display: inline-flex; color: #e5b567; }
 .session-list__mismatch svg { width: 12px; height: 12px; }
+.session-list__status { flex-shrink: 0; margin-right: auto; padding: 0 6px; border-radius: 999px; font-size: 11px; line-height: 16px; }
+.session-list__status[data-status="working"] { background: #0ea5e91f; color: #7dd3fc; animation: session-status-pulse 1.6s ease-in-out infinite; }
+.session-list__status[data-status="completed"] { background: #10b9811f; color: #6ee7b7; }
+.session-list__status + .session-list__worktree { margin-right: 0; }
+@keyframes session-status-pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .session-list__status[data-status="working"] { animation: none; } }

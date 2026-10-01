@@ -4,7 +4,14 @@ import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import { Socket } from "effect/unstable/socket";
 import { BackendRpc } from "@contracts/backend";
 
-declare global { interface Window { flame: { connection(): Promise<string> } } }
+declare global { interface Window { flame: {
+  connection(): Promise<string>;
+  notificationsSupported?(): Promise<boolean>;
+  notify?(notification: { tag: string; title: string; body: string }): Promise<boolean>;
+  setBadge?(badge: { count: number; image: string | null }): Promise<void>;
+  onNotificationOpen?(callback: (tag: string) => void): () => void;
+  onNotificationsCleared?(callback: () => void): () => void;
+} } }
 const makeClient = RpcClient.make(BackendRpc);
 export class Backend extends Context.Service<Backend, Effect.Success<typeof makeClient>>()("flame/Backend") {}
 const socket = Socket.layerWebSocket(Effect.promise(() => window.flame.connection()), { openTimeout: "5 seconds" }).pipe(

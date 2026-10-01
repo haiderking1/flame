@@ -3,13 +3,15 @@ import "./composer-actions.css";
 
 type ComposerActionsProps = {
   canSend: boolean;
+  // While the agent works, a written message can be queued or steered next to Stop.
+  canQueue?: boolean; queueLabel?: string;
   sending: boolean;
   onStop?: () => void; onAttach?: () => void;
   stopLabel?: string;
   connected: boolean; saveOnly?: boolean;
 };
 
-export function ComposerActions({ canSend, sending, connected, saveOnly = false, onStop, stopLabel = "Stop response", onAttach }: ComposerActionsProps) {
+export function ComposerActions({ canSend, canQueue = false, queueLabel = "Queue", sending, connected, saveOnly = false, onStop, stopLabel = "Stop response", onAttach }: ComposerActionsProps) {
   const showStop = Boolean(onStop) || (sending && !saveOnly);
   return (
     <div className="composer-actions">
@@ -27,6 +29,10 @@ export function ComposerActions({ canSend, sending, connected, saveOnly = false,
         </svg>
       </button>
       <ContextStatus />
+      {onStop && canQueue && <button className="composer-actions__send composer-actions__queue" type="submit" aria-label="Queue message"
+        title={`${queueLabel === "Steer" ? "Steer the agent with this message" : "Queue this message for the agent's next tool step"} (Enter). Ctrl+Enter does the opposite.`}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </button>}
       <button
         className="composer-actions__send"
         data-active={sending || Boolean(onStop)}
