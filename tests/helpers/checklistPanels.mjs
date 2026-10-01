@@ -20,6 +20,8 @@ export async function checkPanels(driver, project, measurements) {
   assert.equal(await evaluate("document.querySelector('.diff-file-tree')"),null,'review initially shows file headers, not a permanent picker');
   await wait("document.querySelector('[data-file-stats=\"base.ts\"]')?.getAttribute('aria-label')==='0 deletions, 1 additions'");
   assert.equal(await evaluate("document.querySelector('[data-review-file=\"base.ts\"]').getAttribute('aria-expanded')"),'false','real counts appear without loading the file');
+  assert.deepEqual(await evaluate(`(() => { const icon = document.querySelector('[data-review-file="base.ts"]').parentElement.querySelector('.file-icon'), symbol = document.getElementById(icon.querySelector('use').getAttribute('href').slice(1)), box = icon.getBoundingClientRect();
+    return { token: icon.dataset.fileIcon, symbol: !!symbol, visible: box.width > 0 && box.height > 0 }; })()`), { token: 'typescript', symbol: true, visible: true }, 'diff headers show a resolvable file-type icon');
   assert.equal(await evaluate("document.querySelector('[data-file-stats=\"a.json\"]').getAttribute('aria-label')"),'0 deletions, 1 additions','untracked headers report actual line counts');
   const singleStats=async()=>{
     assert.ok(await evaluate("[...document.querySelectorAll('diffs-container')].every(node=>[...node.shadowRoot.querySelectorAll('[data-additions-count],[data-deletions-count]')].every(count=>getComputedStyle(count).display==='none'))"),'native counts must not appear beside authoritative repository stats');
@@ -59,6 +61,7 @@ export async function checkPanels(driver, project, measurements) {
   await wait("[...document.querySelectorAll('.diff-view__notice')].some(node=>node.textContent.includes('Large source'))");await click('[aria-label="Copy file"]');await wait("window.__copied.includes('line 39999')");assert.equal(await evaluate('window.__copied'),huge);
   await click('[aria-label="File view"]');await settle();await evaluate("document.querySelector('.diff-view__code').scrollTop=document.querySelector('.diff-view__code').scrollHeight;true");await wait("[...document.querySelectorAll('diffs-container')].some(node=>node.shadowRoot?.textContent.includes('line 39999'))");
   assert.ok(await evaluate("[...document.querySelectorAll('diffs-container')].reduce((sum,node)=>sum+(node.shadowRoot?.querySelectorAll('*').length??0),0)<15_000"));
+  assert.equal(await evaluate("[...document.querySelectorAll('.diff-view__files button')].find(button=>button.title==='a.json').querySelector('.file-icon').dataset.fileIcon"),'json','the file tree shows file-type icons');
   await evaluate("[...document.querySelectorAll('.diff-view__files button')].find(button=>button.title==='a.json').click(); [...document.querySelectorAll('.diff-view__files button')].find(button=>button.title==='minified.ts').click()");
   await wait("!document.querySelector('[aria-label=\"Copy file\"]').disabled");await click('[aria-label="Copy file"]');await wait(`window.__copied===${JSON.stringify(minified)}`);
   measurements.panelInputLatenciesMs=[await set('[aria-label="Filter changed files"]','zzz')];await wait("!document.querySelector('.diff-view__files button')");measurements.panelInputLatenciesMs.push(await set('[aria-label="Filter changed files"]',''));await wait("document.querySelectorAll('.diff-view__files button').length>=3");

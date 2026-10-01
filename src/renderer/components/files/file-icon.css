@@ -1,0 +1,2 @@
+.file-icon { display: block; flex-shrink: 0; width: 14px; height: 14px; }
+.file-icon[data-file-icon="folder"] { color: #8b8b8b; }

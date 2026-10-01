@@ -5,6 +5,8 @@ import { ImageInfo } from "./image-types.js";
 export const FileWorkDetail = Schema.Struct({
   status: Schema.Literals(["pending", "completed", "failed", "uncertain", "deferred"]),
   summary: Schema.String, output: Schema.String, truncated: Schema.Boolean, image: Schema.optionalKey(ImageInfo),
+  /** The path the tool was asked about, for its file-type icon; absent when the arguments held no valid path. */
+  path: Schema.optionalKey(Schema.String),
 });
 export type FileWorkDetail = typeof FileWorkDetail.Type;
 

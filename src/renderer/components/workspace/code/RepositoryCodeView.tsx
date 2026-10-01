@@ -9,6 +9,7 @@ import { parseFile } from "./parse";
 import { splitDisplayDiff } from "./splitDiff";
 import { WorkspaceIcon } from "../WorkspaceIcon";
 import { DiffFileStats } from "../DiffFileStats";
+import { FileIcon } from "../../files/FileIcon";
 
 type File = typeof GitFile.Type;
 type Props = {
@@ -94,13 +95,17 @@ function ReviewContents({ files, path, view, diff, mode, layout, wrap, scope, pl
     enableLineSelection: true,
     tokenizeMaxLength: color ? CODE_TOKENIZE_LINES : 0,
     tokenizeMaxLineLength: CODE_TOKENIZE_LINE, maxLineDiffLength: CODE_TOKENIZE_LINE,
-    unsafeCSS: ":host { --diffs-font-family: 'JetBrains Mono Nerd', monospace; --diffs-font-size: 12px; --diffs-line-height: 20px; --diffs-bg: #0a0a0a; background-color: #0a0a0a; } [data-diffs-header] { border-bottom: 1px solid #ffffff0d; } [data-diffs-header] [data-additions-count], [data-diffs-header] [data-deletions-count] { display: none; }",
+    unsafeCSS: ":host { --diffs-font-family: 'JetBrains Mono Nerd', monospace; --diffs-font-size: 12px; --diffs-line-height: 20px; --diffs-bg: #0a0a0a; background-color: #0a0a0a; } [data-diffs-header] { border-bottom: 1px solid #ffffff0d; } [data-diffs-header] [data-additions-count], [data-diffs-header] [data-deletions-count] { display: none; } [data-diffs-header] [data-change-icon] { display: none; }",
   }), [layout, wrap, color]);
   useEffect(() => {
     if (path) viewer.current?.scrollTo({ type: "item", id: path, align: "start", behavior: "instant" });
   }, [path, view, diff]);
   return <CodeView ref={viewer} className="diff-view__code flame-scrollbar" items={items} options={options}
-    renderHeaderPrefix={item => <button type="button" className="diff-file-chevron" data-review-file={item.id} title={item.id} aria-label={`${path === item.id ? "Collapse" : "Expand"} ${item.id}`} aria-expanded={path === item.id} onClick={() => onSelect(path === item.id ? null : item.id)}><WorkspaceIcon name="chevron" style={{ transform: path === item.id ? undefined : "rotate(-90deg)" }} /></button>}
+    // The file-type icon stands in for the library's change-type icon, hidden in unsafeCSS above; the status letter follows the name.
+    renderHeaderPrefix={item => <span className="diff-file-prefix">
+      <button type="button" className="diff-file-chevron" data-review-file={item.id} title={item.id} aria-label={`${path === item.id ? "Collapse" : "Expand"} ${item.id}`} aria-expanded={path === item.id} onClick={() => onSelect(path === item.id ? null : item.id)}><WorkspaceIcon name="chevron" style={{ transform: path === item.id ? undefined : "rotate(-90deg)" }} /></button>
+      <FileIcon path={item.id} />
+    </span>}
     // This slot appends metadata; native counts are hidden in unsafeCSS above.
     renderHeaderMetadata={item => <DiffFileStats path={item.id} stats={scope === "staged" ? byPath.get(item.id)?.stagedStats : byPath.get(item.id)?.workingStats} />}
     renderHeaderFilenameSuffix={item => {

@@ -5,6 +5,7 @@ import { gitOpen, gitErrorMessage } from "../../../backend/git";
 import { toastStore } from "../../toasts/toastStore";
 import { GitDialogFrame } from "./GitDialogFrame";
 import { StartTruncatedPath } from "./StartTruncatedPath";
+import { FileIcon } from "../../files/FileIcon";
 
 type File = GitStatus["files"][number];
 const lines = (file: File) => {
@@ -49,6 +50,7 @@ export default function CommitDialog({ projectId, status, onClose, onCommit }: {
               return <div key={file.path} role="listitem" className="git-commit__file">
                 {editing && <Checkbox label={`Include ${file.path}`} checked={!out} onChange={() => toggle(file.path)} />}
                 <button type="button" className="git-commit__open" title={`Open ${file.path}`} onClick={() => openFile(file.path)}>
+                  <FileIcon path={file.path} className={out ? "git-muted" : undefined} />
                   <StartTruncatedPath path={file.path} className={out ? "git-muted" : undefined} />
                   <span className="git-commit__stat">{out ? <span className="git-muted">Excluded</span> : <><span className="git-addition">+{counts.additions}</span><span className="git-muted"> / </span><span className="git-deletion">-{counts.deletions}</span></>}</span>
                 </button>

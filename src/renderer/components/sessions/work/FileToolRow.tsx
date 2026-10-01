@@ -4,6 +4,7 @@ import type { WorkStep, FileWorkDetail } from "@contracts/work";
 import type { SessionLocation } from "@contracts/sessions";
 import { ImageGallery } from "../../images/ImageGallery";
 import { ThinkingLabel } from "./ThinkingLabel";
+import { FileIcon } from "../../files/FileIcon";
 
 const labels: Record<FileWorkDetail["status"], string> = { pending: "Pending", completed: "Done", failed: "Failed", uncertain: "Uncertain", deferred: "Not run" };
 export function FileToolRow({ step, detail, location }: { step: Extract<WorkStep, { kind: "tool" }>; detail: FileWorkDetail; location: SessionLocation }) {
@@ -13,6 +14,7 @@ export function FileToolRow({ step, detail, location }: { step: Extract<WorkStep
     <div className="work-tool__row">
       <button className="work-tool__toggle" aria-expanded={open} aria-controls={detailId} onClick={() => setOpen(!open)}>
         <span className="work-chevron" data-open={open} aria-hidden="true">›</span>
+        {detail.path !== undefined && <FileIcon path={detail.path} directory={step.name === "ls"} className="work-tool__icon" />}
         <span className="work-tool__command" title={step.command}>{step.command}</span>
         <span className="work-tool__status">{detail.status === "pending" ? <ThinkingLabel>{labels[detail.status]}</ThinkingLabel> : labels[detail.status]}</span>
       </button>

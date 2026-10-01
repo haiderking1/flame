@@ -39,6 +39,7 @@
 .git-commit__open { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .git-commit__stat { flex-shrink: 0; }
 .git-commit__totals { display: flex; justify-content: flex-end; font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; white-space: pre; }
+.git-commit__open > .file-icon { margin-right: -4px; }.git-commit__open > .file-icon.git-muted { opacity: .5; }
 .start-truncated-path { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; }
 
 .git-checkbox { appearance: none; display: inline-grid; place-content: center; width: 16px; height: 16px; flex-shrink: 0; margin: 0; border: 1px solid #ffffff14; border-radius: 4px; background: #ffffff07; cursor: pointer; }

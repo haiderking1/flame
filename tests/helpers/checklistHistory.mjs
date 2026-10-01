@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { captureUI } from './captureUI.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 export async function checkHistory(driver, sessionId, measurements) {
   const { evaluate, wait, click, set, settle } = driver;
@@ -47,6 +48,12 @@ export async function checkHistory(driver, sessionId, measurements) {
   assert.ok(await evaluate("!!document.querySelector('.session-history [data-virtual-list=true]')"), 'turn completion keeps previously loaded history');
   await evaluate("document.querySelector('.session-history').scrollTop=document.querySelector('.session-history').scrollHeight; true");
   await wait("!!document.querySelector('.markdown-code__line') && document.querySelector('.markdown-code code')?.textContent.includes('sample127')");
+  assert.equal(await evaluate("document.querySelector('.markdown-code__language[aria-label=\"Language: rust\"] .file-icon')?.dataset.fileIcon"), 'rust', 'code blocks show the language icon, named for assistive tech');
+  if (process.env.FLAME_SCREENSHOT_DIR) {
+    await evaluate("document.querySelector('.markdown-code__header').scrollIntoView({ block: 'center' }); true");
+    await captureUI(driver, 'chat-code-language');
+    await evaluate("document.querySelector('.session-history').scrollTop=document.querySelector('.session-history').scrollHeight; true");
+  }
   assert.ok(await evaluate("window.__workerTimings.some(task=>task.type==='chat')"), 'completed chat code is genuinely highlighted in a worker under production CSP');
   measurements.chatCodeNodes = await evaluate("document.querySelector('.session-history').querySelectorAll('*').length");
   assert.ok(measurements.chatCodeNodes < 1500);

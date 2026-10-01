@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { captureUI } from './captureUI.mjs';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 export function seedActivity(repository, projectId) {
@@ -23,6 +24,8 @@ export async function checkActivity(driver, location) {
   await click(`.session-list__item[id$="-${location.sessionId}"]`); await wait("!!document.querySelector('.work-group [data-virtual-list=true]')");
   await evaluate("document.querySelector('.session-history').scrollTop = document.querySelector('.session-history').scrollHeight; true"); await delay(150); await settle();
   await wait("[...document.querySelectorAll('.work-tool__command')].some(node => node.textContent === 'Read tool-179.txt')");
+  assert.equal(await evaluate("[...document.querySelectorAll('.work-tool__command')].find(node => node.textContent === 'Read tool-179.txt').parentElement.querySelector('.file-icon')?.dataset.fileIcon"), 'text', 'file tool rows show the file-type icon');
+  await captureUI(driver, 'tool-row-icons');
   await evaluate("[...document.querySelectorAll('.work-tool__toggle')].find(node => node.textContent.includes('Read tool-179.txt')).click()");
   await wait("[...document.querySelectorAll('.work-tool__output')].some(node => node.textContent.includes('Complete source for file 179'))");
   assert.ok(await evaluate("document.querySelector('.session-history').querySelectorAll('*').length < 3000"), 'nested activity and tool lists are independently bounded');

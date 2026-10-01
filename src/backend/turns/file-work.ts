@@ -18,5 +18,6 @@ export function fileWork(name: string, args: Record<string, unknown>, result: Re
   if (status === "completed" && result?.image) {
     try { image = Schema.decodeUnknownSync(ImageInfo)(result.image); } catch { /* Invalid historical metadata must not become an asset request. */ }
   }
-  return { command: `${label} ${path}`, file: { status, summary, output: preview, truncated: preview.length < content.length, ...(image ? { image } : {}) } };
+  const validPath = name === "ls" || typeof args.path === "string";
+  return { command: `${label} ${path}`, file: { status, summary, output: preview, truncated: preview.length < content.length, ...(image ? { image } : {}), ...(validPath ? { path } : {}) } };
 }

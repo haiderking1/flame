@@ -46,3 +46,5 @@
 @media (prefers-reduced-motion: no-preference) {
   .markdown[data-streaming] > * { transition: opacity 250ms ease-out; @starting-style { opacity: 0; } }
 }
+.markdown-code__language { display: inline-flex; align-items: center; }
+.markdown-file > .file-icon { display: inline-block; width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; }

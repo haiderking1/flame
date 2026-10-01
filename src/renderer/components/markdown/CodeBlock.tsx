@@ -1,5 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { highlight, type Highlight } from "./highlight";
+import { FileIcon } from "../files/FileIcon";
+import { hasLanguageIcon, languageFileName } from "../files/fileIcons";
 
 export const CodeBlock = memo(function CodeBlock({ code, language }: { code: string; language: string }) {
   const root = useRef<HTMLDivElement>(null);
@@ -27,7 +29,9 @@ export const CodeBlock = memo(function CodeBlock({ code, language }: { code: str
   }
   return <div className="markdown-code" ref={root} data-wrap={wrap}>
     <div className="markdown-code__header">
-      <span>{language || "text"}</span>
+      {/* A language with its own icon shows just the icon, named on hover; others keep the language name. */}
+      {hasLanguageIcon(language) ? <span className="markdown-code__language" role="img" aria-label={`Language: ${language}`} title={language}><FileIcon path={languageFileName(language)} /></span>
+        : <span>{language || "text"}</span>}
       <div className="markdown-code__actions">
         <button type="button" aria-label="Wrap code" aria-pressed={wrap} onClick={() => setWrap(!wrap)} title="Wrap code">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h9a2 2 0 0 1 0 4H8m2-2-2 2 2 2M2 12h3" /></svg>
