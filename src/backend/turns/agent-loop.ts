@@ -6,19 +6,32 @@ import { calls, executeCall, jobResult } from "../bash/tools.js";
 import { InferenceFailure, type CodexInferenceClient, type InferenceRequest } from "./client.js";
 import type { CompactionRuntime } from "../compaction/runtime.js";
 import { agentContext } from "./agent-context.js";
+import type { Collaboration } from "../agents/team.js";
+import { isCollaborationTool } from "../agents/tools.js";
 export function notificationInput(jobs: Parameters<typeof jobResult>[0][]) {
   return { role: "user", content: [{ type: "input_text", text: `[Automatic Bash completion notification, not a new human request]\n${JSON.stringify(jobs.map(jobResult))}\nContinue the existing task if needed. Do not rerun completed commands.` }] };
 }
 export async function agentLoop(client: Pick<CodexInferenceClient, "run">, request: InferenceRequest,
   runtime: BashRuntime | undefined, location: SessionLocation, turnId: string, account: string, signal: AbortSignal,
   onText: (text: string) => void, checkpoint: (text: string, output: unknown[]) => void, initialOutput: unknown[] = [], files?: FileTools, context?: CompactionRuntime,
-  yieldTo?: () => boolean) {
+  yieldTo?: () => boolean, collaboration?: Collaboration) {
   let text = "";
   const output = [...initialOutput];
   const input = [...request.input];
   const seen = new Set<string>();
-  const prepared = await agentContext(location, runtime, files, signal);
+  const prepared = await agentContext(location, runtime, files, signal, collaboration);
   context?.setOverhead(prepared.overhead);
+  const team = collaboration ? { extraTools: collaboration.tools, extraInstructions: collaboration.instructions } : {};
+  // Messages from the team, delivered between steps like Bash notifications; never a new human request.
+  const deliverMail = () => {
+    const mail = collaboration?.mail() ?? [];
+    if (!mail.length) return false;
+    output.push(...mail); input.push(...mail);
+    context?.append(mail);
+    checkpoint(text, output);
+    return true;
+  };
+  deliverMail();
   // No step limit: the agent works until it answers, or until the user stops it.
   for (;;) {
     signal.throwIfAborted();
@@ -26,7 +39,7 @@ export async function agentLoop(client: Pick<CodexInferenceClient, "run">, reque
     let streamed = prefix;
     const cwd = files?.workingDirectory(location) ?? runtime?.workingDirectory(location);
     if (cwd !== prepared.cwd) throw new InferenceFailure("This session's working directory changed during this turn. No further tools were executed.");
-    const current = { ...request, ...prepared, input: [...input] };
+    const current = { ...request, ...prepared, ...team, input: [...input] };
     const stream = (delta: string) => {
       streamed += delta;
       if (Buffer.byteLength(streamed) > 1024 * 1024) throw new InferenceFailure("The agent response exceeded 1 MiB.");
@@ -40,12 +53,14 @@ export async function agentLoop(client: Pick<CodexInferenceClient, "run">, reque
     context?.completed(response);
     checkpoint(text, output);
     const tools = calls(response.output);
-    if (tools.length && !runtime && !files) throw new InferenceFailure("Tools are not available in this session.");
+    if (tools.length && !runtime && !files && !collaboration) throw new InferenceFailure("Tools are not available in this session.");
     for (const tool of tools) {
       signal.throwIfAborted();
       if (seen.has(tool.call_id)) throw new InferenceFailure("The provider repeated a tool call identifier. Nothing was replayed.");
       seen.add(tool.call_id);
-      const result = isFileTool(tool.name)
+      const result = isCollaborationTool(tool.name)
+        ? collaboration ? await collaboration.execute(tool, signal, yieldTo) : { error: "Collaboration tools are not available in this session." }
+        : isFileTool(tool.name)
         ? files ? await files.execute(location, turnId, tool, signal, request.supportsImages !== false) : { error: "File tools are not available in this session." }
         : runtime ? await executeCall(runtime, location, turnId, account, tool, signal) : { error: "Bash is not available in this session." };
       const item = { type: "function_call_output", call_id: tool.call_id, output: JSON.stringify(result) };
@@ -61,7 +76,8 @@ export async function agentLoop(client: Pick<CodexInferenceClient, "run">, reque
       checkpoint(text, output);
       runtime!.acknowledge(location, pending.map(job => job.id));
     }
-    if (!tools.length && !pending.length) return { text, output };
+    const mailed = deliverMail();
+    if (!tools.length && !pending.length && !mailed) return { text, output };
     // A follow-up the user sent while the agent worked takes over at this tool step, as the next message.
     if (yieldTo?.()) return { text, output };
   }

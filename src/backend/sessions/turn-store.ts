@@ -63,6 +63,8 @@ export class TurnStore {
     return { turnId: String(row.turnId), status: String(row.status) as TurnStatus, operation: String(row.operation) as "response" | "compaction", startedAt: Number(row.startedAt),
       finishedAt: row.status === "running" ? null : row.finishedAt === null ? Number(row.startedAt) : Number(row.finishedAt) };
   }
+  /** How many responses this session has run. */
+  runs() { return Number(this.db.prepare("SELECT count(*) AS count FROM turns WHERE COALESCE(operation,'response')='response'").get()?.count ?? 0); }
   assertIdle() {
     if (this.db.prepare("SELECT 1 FROM turns WHERE status='running'").get()) throw turnInvalid("Stop the active response before changing this session.");
   }

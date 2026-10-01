@@ -8,7 +8,9 @@ import { responsesRoute, type ApiCredentials } from "../openai/routes.js";
 import type { ModelSelection } from "../../contracts/models.js";
 import { events, InferenceFailure } from "./sse.js";
 export { InferenceFailure } from "./sse.js";
-export type InferenceRequest = ApiCredentials & { sessionId: string; settings: ModelSelection; input: unknown[]; supportsImages?: boolean; cwd?: string; projectInstructions?: string; tools?: boolean; fileTools?: boolean; bashTools?: boolean; instructionsOverride?: string; promptCacheKey?: string };
+export type InferenceRequest = ApiCredentials & { sessionId: string; settings: ModelSelection; input: unknown[]; supportsImages?: boolean; cwd?: string; projectInstructions?: string; tools?: boolean; fileTools?: boolean; bashTools?: boolean; instructionsOverride?: string; promptCacheKey?: string;
+  // A thread's agent team: the collaboration tools and what the agent is told about its team.
+  extraTools?: unknown[]; extraInstructions?: string };
 import { object, ResponseOutput, type InferenceResult } from "./output.js";
 export type { InferenceResult } from "./output.js";
 const failure = (message: string): never => { throw new InferenceFailure(message); };
@@ -22,8 +24,9 @@ export class CodexInferenceClient {
       if (!fitsInputBudget(request.input)) return failure("This conversation exceeds the input limit. Start a new session.");
       const reasoning = reasoningSettings(request.settings);
       const body = { model: request.settings.modelId, store: false, stream: true,
-        instructions: request.instructionsOverride ?? agentInstructions(request.tools === true, request.fileTools === true, request.cwd, request.projectInstructions),
-        ...(request.tools ? { tools: [...(request.bashTools !== false ? bashTools : []), ...(request.fileTools ? fileTools : [])], parallel_tool_calls: false } : {}),
+        instructions: request.instructionsOverride ?? agentInstructions(request.tools === true, request.fileTools === true, request.cwd, request.projectInstructions)
+          + (request.extraInstructions && !request.instructionsOverride ? `\n\n${request.extraInstructions}` : ""),
+        ...(request.tools ? { tools: [...(request.bashTools !== false ? bashTools : []), ...(request.fileTools ? fileTools : []), ...(request.extraTools ?? [])], parallel_tool_calls: false } : {}),
         input: request.input, include: ["reasoning.encrypted_content"], prompt_cache_key: request.promptCacheKey ?? request.sessionId,
         ...(reasoning ? { reasoning } : {}),
         ...(request.settings.serviceTier === "priority" ? { service_tier: "priority" } : {}),

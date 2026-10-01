@@ -223,10 +223,10 @@ test('compaction and Read-image migrations preserve IDs and require valid compac
   raw.exec(`DROP INDEX file_operations_image; ALTER TABLE file_operations DROP COLUMN image_id;
     DROP TABLE compactions; ALTER TABLE turns DROP COLUMN operation;
     ALTER TABLE turns DROP COLUMN phase; ALTER TABLE turns DROP COLUMN context;
-    ALTER TABLE turns DROP COLUMN context_projection; ALTER TABLE session DROP COLUMN workspace; ALTER TABLE session DROP COLUMN workspace_setup; ALTER TABLE session DROP COLUMN title_state; PRAGMA user_version=7;`);
+    ALTER TABLE turns DROP COLUMN context_projection; ALTER TABLE session DROP COLUMN workspace; ALTER TABLE session DROP COLUMN workspace_setup; ALTER TABLE session DROP COLUMN title_state; DROP TABLE agent; DROP TABLE mailbox; PRAGMA user_version=7;`);
   raw.close();
   h.restart(); assert.equal(h.db.read().leafId, before.leafId); assert.equal(h.db.read().revision, before.revision);
   const migrated = new DatabaseSync(h.file);
-  assert.equal(migrated.prepare('PRAGMA user_version').get().user_version, 11);
+  assert.equal(migrated.prepare('PRAGMA user_version').get().user_version, 12);
   assert.deepEqual(migrated.prepare('PRAGMA foreign_key_check').all(), []); migrated.close();
 });

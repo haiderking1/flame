@@ -28,6 +28,9 @@ import { TitleRecord } from "./title-record.js";
 import { CompactionStore } from "./compaction-store.js";
 import { CHAIN } from "./chain.js";
 import { Rewind } from "./rewind.js";
+import { migrateAgents } from "./agent-migration.js";
+import { AgentStore } from "./agent-store.js";
+import { MailboxStore } from "./mailbox-store.js";
 
 const LEGACY_TITLE_STATE = initialTitleState("legacy");
 const conflict = () => new SessionError({ code: "CONFLICT", message: "This session changed elsewhere. Reopen it before saving again. Your unsaved text has been kept." });
@@ -42,6 +45,8 @@ export class SessionDatabase {
   readonly workspace: WorkspaceRecord;
   readonly rewind: Rewind;
   readonly titles: TitleRecord;
+  readonly agent: AgentStore;
+  readonly mailbox: MailboxStore;
   constructor(filename: string, private readonly location: SessionLocation, settings?: ModelSelection | null) {
     checkDatabase(filename);
     this.db = new DatabaseSync(filename);
@@ -51,7 +56,7 @@ export class SessionDatabase {
       if (version === 0 && settings !== undefined) {
         this.db.exec("PRAGMA journal_mode=WAL;");
         initializeSession(this.db, location, settings);
-      } else if (typeof version !== "number" || version < 1 || version > 11) throw storageError();
+      } else if (typeof version !== "number" || version < 1 || version > 12) throw storageError();
       const legacySettlement = typeof version !== "number" || version < 4;
       this.read(true, legacySettlement);
       if (version === 0 || version === 1) migrateSession(this.db);
@@ -63,11 +68,14 @@ export class SessionDatabase {
       if (typeof version !== "number" || version < 8) migrateCompaction(this.db);
       if (typeof version !== "number" || version < 9) migrateReadImages(this.db);
       if (typeof version !== "number" || version < 10) migrateWorkspace(this.db);
-      if (version !== 11) migrateTitles(this.db);
+      if (typeof version !== "number" || version < 11) migrateTitles(this.db);
+      if (version !== 12) migrateAgents(this.db);
       this.images = new ImageStore(this.db, join(dirname(filename), "images"), () => this.read(), work => this.transaction(work));
       this.files = new FileOperationStore(this.db, () => this.read(), work => this.transaction(work), this.images);
       this.jobs = new BashStore(this.db, () => this.read());
-      this.compactions = new CompactionStore(this.db, () => this.read(), work => this.transaction(work), this.images, (id, output) => this.files.restoreResults(id, output));
+      this.agent = new AgentStore(this.db, () => this.read(), work => this.transaction(work));
+      this.mailbox = new MailboxStore(this.db, () => this.read(), work => this.transaction(work));
+      this.compactions = new CompactionStore(this.db, () => this.read(), work => this.transaction(work), this.images, (id, output) => this.files.restoreResults(id, output), () => this.agent.fork());
       this.turns = new TurnStore(this.db, () => this.read(), (work) => this.transaction(work), (revision, id, text, images) => this.append(revision, id, text, images),
         (id, output) => this.files.restoreResults(id, output), this.images, this.compactions);
       this.workspace = new WorkspaceRecord(this.db, () => this.read(), revision => this.expect(revision), work => this.transaction(work), () => this.turns.assertIdle(),

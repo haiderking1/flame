@@ -1,6 +1,7 @@
 import { InferenceFailure } from "./sse.js";
 import { isFileTool } from "../file-tools/definitions.js";
 import { MAX_ARGUMENT_BYTES } from "../file-tools/types.js";
+import { isCollaborationTool } from "../agents/tools.js";
 import { inferenceUsage, type InferenceUsage } from "./usage.js";
 
 export type InferenceResult = { text: string; output: unknown[]; usage?: InferenceUsage };
@@ -13,8 +14,8 @@ function messageText(raw: unknown, tools = false): string {
   const item = object(raw);
   if (item.type === "reasoning") return "";
   if (tools && item.type === "function_call") {
-    const file = isFileTool(String(item.name));
-    if ((!file && !["bash", "bash_job"].includes(String(item.name))) || typeof item.call_id !== "string" || !item.call_id || item.call_id.length > 256 || typeof item.arguments !== "string" || Buffer.byteLength(item.arguments) > (file ? MAX_ARGUMENT_BYTES : 64 * 1024)) return fail("OpenAI returned an invalid tool call.");
+    const file = isFileTool(String(item.name)), team = isCollaborationTool(String(item.name));
+    if ((!file && !team && !["bash", "bash_job"].includes(String(item.name))) || typeof item.call_id !== "string" || !item.call_id || item.call_id.length > 256 || typeof item.arguments !== "string" || Buffer.byteLength(item.arguments) > (file || team ? MAX_ARGUMENT_BYTES : 64 * 1024)) return fail("OpenAI returned an invalid tool call.");
     return "";
   }
   if (item.type !== "message" || item.role !== "assistant" || !Array.isArray(item.content)) return fail("OpenAI returned an unsupported response item.");

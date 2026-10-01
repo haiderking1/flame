@@ -1,5 +1,6 @@
 import type { WorkActivity, WorkStep } from "../../contracts/work.js";
 import { fileWork } from "./file-work.js";
+import { agentWork } from "./agent-work.js";
 
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const parse = (value: unknown): Record<string, unknown> => { try { return object(JSON.parse(String(value))); } catch { return {}; } };
@@ -24,10 +25,10 @@ export function workActivity(id: string, text: string, output: unknown[], status
     }
     if (item.type === "function_call" && typeof item.call_id === "string") {
       const args = parse(item.arguments), result = results.get(item.call_id);
-      const file = fileWork(String(item.name), args, result, status);
+      const file = fileWork(String(item.name), args, result, status), team = agentWork(String(item.name), args, result);
       steps.push({ kind: "tool", id: `tool-${item.call_id}`, callId: item.call_id, name: String(item.name),
-        command: file?.command ?? (typeof args.command === "string" ? args.command : args.action === "stop" ? "Stop background job" : "Check background job"),
-        ...(file ? { file: file.file } : {}),
+        command: file?.command ?? team?.command ?? (typeof args.command === "string" ? args.command : args.action === "stop" ? "Stop background job" : "Check background job"),
+        ...(file ? { file: file.file } : {}), ...(team ? { agent: team.agent } : {}),
         ...(result?.status === "deferred" && typeof result.summary === "string" ? { deferred: result.summary } : {}),
         jobId: typeof result?.job_id === "string" ? result.job_id : null,
         error: typeof result?.error === "string" ? result.error : typeof result?.message === "string" ? result.message

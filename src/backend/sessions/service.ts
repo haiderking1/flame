@@ -1,24 +1,62 @@
 import type { ImageStore } from "../images/store.js";
 import { EventEmitter } from "node:events";
 import type { ModelSelection } from "../../contracts/models.js";
-import type { SessionDocument, SessionLocation } from "../../contracts/sessions.js";
+import type { SessionDocument, SessionLocation, SessionSummary } from "../../contracts/sessions.js";
+import type { AgentRecord } from "../../contracts/agents.js";
 import type { CodexModels } from "../models/service.js";
 import type { BashStore } from "../bash/store.js";
 import type { FileOperationStore } from "../file-tools/store.js";
 import type { TurnStore } from "./turn-store.js";
 import type { CompactionStore } from "./compaction-store.js";
+import type { MailboxStore } from "./mailbox-store.js";
 import { SessionRepository, summary } from "./repository.js";
 import type { WorkspaceRecord } from "./workspace-record.js";
 import type { TitleRecord } from "./title-record.js";
 import type { SessionWorkspace } from "../../contracts/session-workspace.js";
 
+export type AgentEntry = { record: AgentRecord; summary: SessionSummary };
+const key = (location: SessionLocation) => `${location.projectId}:${location.sessionId}`;
+/**
+ * The threads of every project, and the subagents their agents started. Subagents are sessions too, but never listed as
+ * threads: they emit "agents" with their thread's location when they change.
+ */
 export class Sessions extends EventEmitter {
-  private index: ReturnType<SessionRepository["list"]>;
+  private index: { sessions: SessionSummary[]; warnings: string[] };
+  private readonly agentIndex = new Map<string, AgentEntry>();
   constructor(private readonly repository: SessionRepository, private readonly models: Pick<CodexModels, "state" | "validateSelection">) {
     super();
-    this.index = repository.list();
+    const { agents, ...index } = repository.list();
+    this.index = index;
+    for (const agent of agents) this.agentIndex.set(key(agent.summary), agent);
   }
   snapshot() { return this.index; }
+  /** The subagent record of a session, or null for a thread. */
+  agent(location: SessionLocation) { return this.agentIndex.get(key(location)) ?? null; }
+  /** Every subagent of a thread, however deep. */
+  agentsOf(root: SessionLocation) {
+    return [...this.agentIndex.values()].filter(agent => agent.summary.projectId === root.projectId && agent.record.rootSessionId === root.sessionId);
+  }
+  allAgents() { return [...this.agentIndex.values()]; }
+  /** The thread a session belongs to: itself, or the thread whose agent started this subagent. */
+  rootOf(location: SessionLocation): SessionLocation {
+    const agent = this.agent(location);
+    return agent ? { projectId: location.projectId, sessionId: agent.record.rootSessionId } : location;
+  }
+  createAgent(location: SessionLocation, settings: ModelSelection, record: AgentRecord, fork: unknown[]) {
+    const document = this.repository.createAgent(location, settings, record, fork);
+    this.agentIndex.set(key(location), { record, summary: summary(document) });
+    this.emit("agents", this.rootOf(location));
+    return document;
+  }
+  mailbox<T>(location: SessionLocation, work: (store: MailboxStore) => T) { return this.repository.use(location, db => work(db.mailbox)); }
+  /** Deletes a thread's subagent; its thread was deleted, or is being. */
+  removeAgent(location: SessionLocation) {
+    const agent = this.agent(location);
+    if (!agent) return;
+    this.repository.remove(location, this.read(location).revision);
+    this.agentIndex.delete(key(location));
+    this.emit("agents", this.rootOf({ projectId: location.projectId, sessionId: agent.record.rootSessionId }));
+  }
   turns<T>(location: SessionLocation, work: (store: TurnStore) => T) { return this.repository.use(location, (db) => work(db.turns)); }
   compactions<T>(location: SessionLocation, work: (store: CompactionStore) => T) { return this.repository.use(location, db => work(db.compactions)); }
   jobs<T>(location: SessionLocation, work: (store: BashStore) => T) { return this.repository.use(location, (db) => work(db.jobs)); }
@@ -26,6 +64,12 @@ export class Sessions extends EventEmitter {
   images<T>(location: SessionLocation, work: (store: ImageStore) => T) { return this.repository.use(location, db => work(db.images)); }
   warn(message: string) { this.index = { ...this.index, warnings: [...this.index.warnings, message] }; this.emit("change"); }
   publish(document: SessionDocument) {
+    const agent = this.agent(document);
+    if (agent) {
+      this.agentIndex.set(key(document), { ...agent, summary: summary(document) });
+      this.emit("agents", this.rootOf(document));
+      return document;
+    }
     this.index = { ...this.index, sessions: [...this.index.sessions.filter((item) => item.sessionId !== document.sessionId || item.projectId !== document.projectId), summary(document)]
       .sort((a, b) => b.updatedAt - a.updatedAt || a.sessionId.localeCompare(b.sessionId)) };
     this.emit("change");

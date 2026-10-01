@@ -12,4 +12,5 @@ import { ImageRpc } from "./images.js";
 import { GitRpc } from "./git.js";
 import { WorkspaceSearchRpc } from "./workspace-search.js";
 import { WorktreeRpc } from "./worktrees.js";
-export const BackendRpc = ProjectRpc.merge(AuthRpc, UsageRpc, ModelsRpc, SessionRpc, TurnRpc, BashRpc, ImageRpc, GitRpc, WorkspaceSearchRpc, WorktreeRpc);
+import { AgentRpc } from "./agents.js";
+export const BackendRpc = ProjectRpc.merge(AuthRpc, UsageRpc, ModelsRpc, SessionRpc, TurnRpc, BashRpc, ImageRpc, GitRpc, WorkspaceSearchRpc, WorktreeRpc, AgentRpc);

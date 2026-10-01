@@ -212,13 +212,13 @@ test('version 11 records who wrote each existing title', opts, async t => {
   for (const [location, custom] of [[named, 1], [untouched, 0]]) {
     const file = join(h.root, 'projects', location.projectId, 'sessions', location.sessionId, 'session.sqlite');
     const db = new DatabaseSync(file);
-    db.exec(`ALTER TABLE session DROP COLUMN title_state; UPDATE session SET custom_title=${custom}; PRAGMA user_version=10;`);
+    db.exec(`ALTER TABLE session DROP COLUMN title_state; DROP TABLE agent; DROP TABLE mailbox; UPDATE session SET custom_title=${custom}; PRAGMA user_version=10;`);
     db.close();
   }
   assert.equal(h.sessions.read(named).titleState.source, 'manual', 'a title taken from a message or renamed is the user\'s');
   assert.equal(h.sessions.read(named).title, 'Existing conversation');
   assert.equal(h.sessions.read(untouched).titleState.source, 'auto');
   const db = new DatabaseSync(join(h.root, 'projects', named.projectId, 'sessions', named.sessionId, 'session.sqlite'));
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 11);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 12);
   db.close();
 });

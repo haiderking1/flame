@@ -3,6 +3,7 @@ import { existsSync, readdirSync, renameSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { type SessionDocument, type SessionLocation, type SessionSummary } from "../../contracts/sessions.js";
 import type { ModelSelection } from "../../contracts/models.js";
+import type { AgentRecord } from "../../contracts/agents.js";
 import type { ProjectStore } from "../projects/store.js";
 import { SessionDatabase } from "./database.js";
 import { checkId, directory, isMissing, missing, projectDirectory, sessionDirectory, storageError, syncDirectory, validId } from "./files.js";
@@ -79,8 +80,14 @@ export class SessionRepository {
     renameSync(join(parent, location.sessionId), destination);
     syncDirectory(parent); syncDirectory(trash);
   }
+  /** Creates a subagent's session: hidden from the thread list, and starting from the conversation it forked. */
+  createAgent(location: SessionLocation, settings: ModelSelection, record: AgentRecord, fork: unknown[]) {
+    this.create(location, settings);
+    return this.use(location, db => { db.agent.initialize(record, fork, record.nickname); return db.read(); });
+  }
   list() {
     const sessions: SessionSummary[] = [];
+    const agents: { summary: SessionSummary; record: AgentRecord }[] = [];
     const warnings: string[] = [];
     for (const project of this.projects.list()) {
       let names;
@@ -92,8 +99,9 @@ export class SessionRepository {
       for (const sessionId of names.filter(validId)) {
         try {
           const location = { projectId: project.id, sessionId };
-          const document = this.use(location, (db) => db.isDeleted() ? null : db.read());
-          if (document) sessions.push(summary(document));
+          const found = this.use(location, (db) => db.isDeleted() ? null : { document: db.read(), record: db.agent.record() });
+          if (found?.record) agents.push({ summary: summary(found.document), record: found.record });
+          else if (found) sessions.push(summary(found.document));
           else this.remove(location, 0); // Finish a deletion interrupted after its durable tombstone.
         } catch {
           warnings.push(`Session ${sessionId} in ${project.name} could not be opened or recovered. Its files were left untouched.`);
@@ -101,6 +109,6 @@ export class SessionRepository {
       }
     }
     sessions.sort((a, b) => b.updatedAt - a.updatedAt || a.sessionId.localeCompare(b.sessionId));
-    return { sessions, warnings };
+    return { sessions, warnings, agents };
   }
 }

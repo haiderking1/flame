@@ -10,11 +10,17 @@ export const FileWorkDetail = Schema.Struct({
 });
 export type FileWorkDetail = typeof FileWorkDetail.Type;
 
+/** A collaboration tool call: which agent it was about, and the task or message it carried. */
+export const AgentWork = Schema.Struct({
+  action: Schema.Literals(["spawn", "message", "followup", "wait", "interrupt", "list"]),
+  target: Schema.NullOr(Schema.String), text: Schema.NullOr(Schema.String),
+});
+export type AgentWork = typeof AgentWork.Type;
 export const WorkStep = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("message"), id: Schema.String, text: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("tool"), id: Schema.String, callId: Schema.String, name: Schema.String,
     command: Schema.String, jobId: Schema.NullOr(Schema.String), error: Schema.NullOr(Schema.String),
-    file: Schema.optional(FileWorkDetail), deferred: Schema.optional(Schema.String) }),
+    file: Schema.optional(FileWorkDetail), deferred: Schema.optional(Schema.String), agent: Schema.optional(AgentWork) }),
 ]);
 export type WorkStep = typeof WorkStep.Type;
 export const WorkActivity = Schema.Struct({

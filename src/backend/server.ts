@@ -47,6 +47,8 @@ import { WorktreeStore } from "./worktrees/store.js";
 import { Worktrees } from "./worktrees/service.js";
 import { worktreeHandlers } from "./worktrees/handlers.js";
 import { defaultWorktreesDirectory } from "./worktrees/paths.js";
+import { AgentTeam } from "./agents/team.js";
+import { agentHandlers } from "./agents/handlers.js";
 import type { WorkspaceTarget } from "../contracts/workspace-target.js";
 import type { SessionLocation } from "../contracts/sessions.js";
 import { CodexGitWriter } from "./git/writer/writer.js";
@@ -86,15 +88,18 @@ export const startServer = (options: { filename: string; token: string; origin: 
     new ImageStaging(join(dirname(options.filename), "image-uploads"), location => repository.assertUploadTarget(location)))), images => Effect.promise(() => images.close()));
   // Late-bound: worktree cleanup must not remove a folder a response or Bash job is using, and turns are created after worktrees.
   let turns: Turns | undefined;
+  // A thread's subagents work in its folder, so their runs and jobs keep it busy too.
+  const working = (location: SessionLocation) => turns?.isRunning(location) || bash.list(location).some(job => job.status === "running" || job.status === "claimed");
   const busy = (path: string) => sessions.snapshot().sessions.some(session => (session.workspace.worktreePath ?? roots.project(session.projectId)) === path
-    && (turns?.isRunning(session) || bash.list(session).some(job => job.status === "running" || job.status === "claimed")));
+    && (working(session) || sessions.agentsOf(session).some(agent => working(agent.summary))));
   const worktreeStore = yield* Effect.acquireRelease(Effect.sync(() => new WorktreeStore(options.filename)), store => Effect.sync(() => store.close()));
   const worktrees = yield* Effect.acquireRelease(Effect.sync(() => new Worktrees({ sessions, projects: store, roots, store: worktreeStore,
     directory: options.worktreesDirectory ?? defaultWorktreesDirectory(), namer: writer, changed: root => changes.touch(root), busy })), worktrees => Effect.promise(() => worktrees.close()));
   turns = yield* Effect.acquireRelease(Effect.sync(() => new Turns(sessions, auth, models, options.inferenceClient, bash, files, worktrees)), (turns) => Effect.promise(() => turns.close()));
+  const team = yield* Effect.acquireRelease(Effect.sync(() => { const team = new AgentTeam(sessions, turns!, models); turns!.attachTeam(team); return team; }), team => Effect.sync(() => team.close()));
   const titles = yield* Effect.acquireRelease(Effect.sync(() => new ThreadTitles({ sessions, writer, turns: turns!, root: sessionRoot })), titles => Effect.promise(() => titles.close()));
   const rpc = yield* RpcServer.toHttpEffectWebsocket(BackendRpc).pipe(
-    Effect.provide(gitHandlers(git, changes, target)), Effect.provide(worktreeHandlers(worktrees)), Effect.provide(workspaceSearchHandlers(workspaceSearch)), Effect.provide(imageHandlers(images)), Effect.provide(bashHandlers(bash)), Effect.provide(turnHandlers(turns!)), Effect.provide(sessionHandlers(sessions, new SessionRewinds(sessions, worktrees), titles)), Effect.provide(modelsHandlers(models)), Effect.provide(usageHandlers(usage)), Effect.provide(authHandlers(auth)), Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
+    Effect.provide(gitHandlers(git, changes, target)), Effect.provide(worktreeHandlers(worktrees)), Effect.provide(agentHandlers(team)), Effect.provide(workspaceSearchHandlers(workspaceSearch)), Effect.provide(imageHandlers(images)), Effect.provide(bashHandlers(bash)), Effect.provide(turnHandlers(turns!)), Effect.provide(sessionHandlers(sessions, new SessionRewinds(sessions, worktrees), titles)), Effect.provide(modelsHandlers(models)), Effect.provide(usageHandlers(usage)), Effect.provide(authHandlers(auth)), Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
   );
   const server = yield* NodeHttpServer.make(createServer, {
     host: "127.0.0.1", port: 0, gracefulShutdownTimeout: "2 seconds", websocket: { maxPayload: 64 * 1024 },

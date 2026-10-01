@@ -20,13 +20,16 @@ import { hasImageInput } from "./image-input.js";
 import { WorktreeSetupFailure } from "../worktrees/errors.js";
 import { FollowUps } from "./follow-ups.js";
 import { fitsSessionText } from "../../contracts/sessions.js";
+import type { AgentTeam } from "../agents/team.js";
+import { finalAnswer } from "../agents/answer.js";
 
 /** Readies a session's folder before a response to a new message, and follows it up afterwards (session worktrees). */
 export type TurnWorkspace = {
   prepare(location: SessionLocation, turn: { id: string; text: string; images: readonly string[] }, signal: AbortSignal): Promise<void>;
   finished(location: SessionLocation): void;
 };
-type Running = { controller: AbortController; task: Promise<void>; account: string; epoch: number; status: "cancelled" | "interrupted" };
+// A subagent's run does not count toward the four responses threads may run at once; its team limits it instead.
+type Running = { controller: AbortController; task: Promise<void>; account: string; epoch: number; status: "cancelled" | "interrupted"; agent?: boolean };
 const key = (location: SessionLocation) => `${location.projectId}:${location.sessionId}`;
 /**
  * Runs responses. Emits "change" and "states" as runs progress, "message" when a user message starts a response, and
@@ -41,6 +44,7 @@ export class Turns extends EventEmitter {
   // Sessions whose next follow-up is being started, so a background notification does not take the slot first.
   private readonly delivering = new Set<string>();
   private closed = false;
+  private team?: AgentTeam;
   constructor(private sessions: Sessions, private auth: CodexAuth, private models: Pick<CodexModels, "validateSelection"> & Partial<Pick<CodexModels, "supportsImages" | "contextWindow">>,
     private client: Pick<CodexInferenceClient, "run"> = new CodexInferenceClient(), private bash?: BashRuntime, private files?: FileTools, private workspace?: TurnWorkspace) {
     super();
@@ -58,6 +62,8 @@ export class Turns extends EventEmitter {
   }
   private trackState = (changed: string) => {
     const [projectId, sessionId] = changed.split(":") as [string, string];
+    // Subagents are not threads: they never show in the sidebar or raise notifications.
+    if (this.sessions.agent({ projectId, sessionId })) return;
     let state: SessionRunState | null = null;
     try { const brief = this.sessions.turns({ projectId, sessionId }, store => store.state()); state = brief && { projectId, sessionId, ...brief }; }
     catch { /* A session that cannot be read keeps its last known state. */ return; }
@@ -74,7 +80,7 @@ export class Turns extends EventEmitter {
   private bashStorageFailure = (location: SessionLocation) => { this.active.get(key(location))?.controller.abort(); };
   private backgroundCompleted = (location: SessionLocation) => {
     queueMicrotask(() => {
-      if (this.closed || !this.bash || this.active.has(key(location)) || this.delivering.has(key(location)) || this.followUps.has(location) || this.failedWrites.has(key(location)) || this.active.size >= 4) return;
+      if (this.closed || !this.bash || this.active.has(key(location)) || this.delivering.has(key(location)) || this.followUps.has(location) || this.failedWrites.has(key(location)) || (!this.sessions.agent(location) && this.threadRuns() >= 4)) return;
       const account = this.auth.usageSession();
       if (!account) return;
       try {
@@ -87,7 +93,7 @@ export class Turns extends EventEmitter {
         const requestId = randomUUID();
         const saved = this.sessions.turns(location, store => store.backgroundStart(requestId, settings, account.key, initial));
         this.bash.acknowledge(location, pending.map(job => job.id));
-        const running: Running = { controller: new AbortController(), task: Promise.resolve(), account: account.key, epoch: account.epoch, status: "cancelled" };
+        const running: Running = { controller: new AbortController(), task: Promise.resolve(), account: account.key, epoch: account.epoch, status: "cancelled", agent: !!this.sessions.agent(location) };
         this.active.set(key(location), running);
         this.sessions.publish(saved); this.emit("change", key(location));
         running.task = Promise.resolve().then(() => this.execute({ ...location, requestId }, settings, account, running, initial));
@@ -101,6 +107,30 @@ export class Turns extends EventEmitter {
   };
   /** Whether a response or compaction is running in the session. */
   isRunning(location: SessionLocation) { return this.active.has(key(location)); }
+  /** Responses and compactions running in threads, as opposed to subagents. */
+  private threadRuns() { return [...this.active.values()].filter(running => !running.agent).length; }
+  /** Gives subagents their collaboration tools, and their results somewhere to go. Late-bound: the team starts runs here. */
+  attachTeam(team: AgentTeam) { this.team = team; }
+  /** Starts a subagent's run on a task its team gave it. Unlike a thread's, it prepares no worktree and raises no notifications. */
+  startAgent(location: SessionLocation, run: { requestId: string; text: string; settings: ModelSelection; account: NonNullable<ReturnType<CodexAuth["usageSession"]>> }) {
+    if (this.closed) throw turnInvalid("Flame is shutting down.");
+    if (this.active.has(key(location))) throw turnInvalid("This agent is already running.");
+    const saved = this.sessions.turns(location, store => store.start(this.sessions.read(location).revision, run.requestId, run.text, run.settings, run.account.key));
+    this.bash?.resumeSession(location);
+    const running: Running = { controller: new AbortController(), task: Promise.resolve(), account: run.account.key, epoch: run.account.epoch, status: "cancelled", agent: true };
+    this.active.set(key(location), running);
+    this.sessions.publish(saved); this.emit("change", key(location));
+    running.task = Promise.resolve().then(() => this.execute({ ...location, requestId: run.requestId }, run.settings, run.account, running));
+  }
+  /** Stops a subagent's current run, as its team asked; the agent stays available for more work. */
+  interruptAgent(location: SessionLocation) {
+    const running = this.active.get(key(location));
+    if (!running) return;
+    running.controller.abort();
+    this.bash?.stopSession(location);
+  }
+  /** Resolves once the session has no run in progress. */
+  async settled(location: SessionLocation) { await this.active.get(key(location))?.task; }
   snapshot(location: SessionLocation) {
     const snapshot = this.failedWrites.get(key(location)) ?? this.sessions.turns(location, (store) => store.snapshot());
     if (!snapshot) return snapshot;
@@ -120,7 +150,7 @@ export class Turns extends EventEmitter {
       return this.sessions.turns(input, (store) => store.start(input.revision, input.requestId, input.text, settings!, "", input.images));
     }
     if (this.active.has(key(input))) return this.follow(input);
-    if (this.active.size >= 4) throw turnInvalid("Four responses are already running. Stop one before starting another.");
+    if (this.threadRuns() >= 4) throw turnInvalid("Four responses are already running. Stop one before starting another.");
     if (!this.auth.usageSession()) await this.auth.refresh();
     if (this.closed) throw turnInvalid("Flame is shutting down.");
     const account = this.auth.usageSession();
@@ -128,7 +158,7 @@ export class Turns extends EventEmitter {
     // The agent may have started working while credentials refreshed.
     if (this.active.has(key(input))) return this.follow(input);
     const retried = this.sessions.turns(input, (store) => store.snapshot(input.requestId));
-    if (!retried && this.active.size >= 4) throw turnInvalid("Four responses are already running. Stop one before starting another.");
+    if (!retried && this.threadRuns() >= 4) throw turnInvalid("Four responses are already running. Stop one before starting another.");
     const document = this.sessions.read(input);
     if (!document.settings) throw turnInvalid("Choose a model before sending to OpenAI.");
     const settings: ModelSelection = this.models.validateSelection(input.accountKey, document.settings);
@@ -180,11 +210,11 @@ export class Turns extends EventEmitter {
       if (existing.operation !== "compaction") throw turnInvalid("This request identifier belongs to a response.");
       return this.sessions.read(input);
     }
-    if (this.active.size >= 4) throw turnInvalid("Four responses are already running. Stop one before compacting.");
+    if (this.threadRuns() >= 4) throw turnInvalid("Four responses are already running. Stop one before compacting.");
     if (!this.auth.usageSession()) await this.auth.refresh();
     const account = this.auth.usageSession();
     if (this.closed || !account || account.key !== input.accountKey) throw turnInvalid("Account changed or disconnected. Check Providers before compacting.");
-    if (this.active.size >= 4) throw turnInvalid("Four responses are already running. Stop one before compacting.");
+    if (this.threadRuns() >= 4) throw turnInvalid("Four responses are already running. Stop one before compacting.");
     const document = this.sessions.read(input);
     if (!document.settings) throw turnInvalid("Choose a model before compacting.");
     const settings = this.models.validateSelection(account.key, document.settings);
@@ -220,7 +250,7 @@ export class Turns extends EventEmitter {
     let message: string | null = null, output: unknown[] = [...initialOutput];
     try {
       running.controller.signal.throwIfAborted();
-      if (userMessage && this.workspace) await this.workspace.prepare(location, { id: location.requestId, ...userMessage }, running.controller.signal);
+      if (userMessage && this.workspace && !running.agent) await this.workspace.prepare(location, { id: location.requestId, ...userMessage }, running.controller.signal);
       const supportsImages = this.models.supportsImages?.(account.key, settings.modelId) !== false;
       const request = { ...account, settings, input: [], sessionId: location.sessionId, supportsImages };
       const client: Pick<CodexInferenceClient, "run"> = { run: (next, stream, signal) => {
@@ -238,7 +268,7 @@ export class Turns extends EventEmitter {
           location, location.requestId, account.key, running.controller.signal, next => { text = next; }, (next, items) => {
             try { this.sessions.turns(location, store => store.progress(location.requestId, next, items)); output = [...items]; delivered = next; this.emit("change", key(location)); }
             catch (error) { storageFailed = true; running.controller.abort(); throw error; }
-          }, initialOutput, this.files, context, () => this.followUps.has(location));
+          }, initialOutput, this.files, context, () => this.followUps.has(location), this.team?.forTurn(location, settings, account));
         running.controller.signal.throwIfAborted();
         text = result.text; output = result.output;
         context.publish();
@@ -267,8 +297,10 @@ export class Turns extends EventEmitter {
         else this.followUps.release(location, location.requestId);
       }
       this.emit("change", key(location));
-      if (!manual) { this.workspace?.finished(location); this.emit("finished", { projectId: location.projectId, sessionId: location.sessionId }, status); }
-      for (const session of this.sessions.snapshot().sessions) this.backgroundCompleted(session);
+      if (manual) { /* Compaction ends nothing a thread or team waits on. */ }
+      else if (running.agent) this.team?.finished(location, status, finalAnswer(output, text), message);
+      else { this.workspace?.finished(location); this.emit("finished", { projectId: location.projectId, sessionId: location.sessionId }, status); }
+      for (const session of [...this.sessions.snapshot().sessions, ...this.sessions.allAgents().map(agent => agent.summary)]) this.backgroundCompleted(session);
     }
   }
   stop(location: SessionLocation, id: string) {
@@ -279,6 +311,8 @@ export class Turns extends EventEmitter {
       running.controller.abort();
       if (snapshot.operation !== "compaction") this.bash?.stopSession(location);
     }
+    // Stopping a thread's agent stops the agents it started too.
+    if (snapshot.operation !== "compaction" && !this.sessions.agent(location)) this.team?.stop(location);
   }
   async close() {
     this.closed = true; this.auth.off("change", this.accountChanged); this.sessions.off("removed", this.forgetState);

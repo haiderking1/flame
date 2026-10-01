@@ -27,7 +27,9 @@ const array = (encoded: unknown): unknown[] => {
 export class CompactionStore {
   constructor(private db: DatabaseSync, private read: () => SessionDocument,
     private transaction: <T>(work: () => T) => T, private images?: ImageStore,
-    private restoreToolResults: (id: string, output: unknown[]) => unknown[] = (_id, output) => output) {}
+    private restoreToolResults: (id: string, output: unknown[]) => unknown[] = (_id, output) => output,
+    // An agent's inherited conversation, until a compaction summarizes it with the rest.
+    private fork: () => unknown[] = () => []) {}
 
   // Only ancestry IDs are loaded up front. Transcript payloads are loaded after
   // locating the latest valid checkpoint, avoiding deserializing covered history.
@@ -79,7 +81,7 @@ export class CompactionStore {
       const kept = expandImageResults(array(checkpoint.kept), this.images);
       input.push(...(checkpoint.account_key === accountKey && (!settings || checkpoint.model_id === settings.modelId) ? kept : portableInput(kept)));
       start = checkpoint.leaf_id === null ? 0 : chain.indexOf(String(checkpoint.leaf_id)) + 1;
-    }
+    } else input.push(...this.fork());
     const get = this.db.prepare(`SELECT e.*,t.id AS turn_id,t.output,t.status,t.account_key FROM entries e
       LEFT JOIN turns t ON t.entry_id=e.id WHERE e.id=?`);
     for (let index = start; index < chain.length; index++) {
