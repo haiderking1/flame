@@ -3,6 +3,7 @@ import { app, ipcMain, shell } from 'electron';
 import { checkEmptyChat } from '../helpers/emptyChat.mjs';
 import { checkContextIndicator } from '../helpers/contextIndicator.mjs';
 import { checkSettlement } from '../helpers/settlement.mjs';
+import { checkRestingComposer } from '../helpers/restingComposer.mjs';
 import { checkSessionSidebar } from '../helpers/sessionSidebar.mjs';
 import { checkSentMentions } from '../helpers/sentMentions.mjs';
 import { markdownSample, checkMarkdown } from '../helpers/markdown.mjs';
@@ -229,6 +230,8 @@ void app.whenReady().then(async () => {
       assert.equal(opened.length, 1, 'only web links can leave the app');
     } finally { shell.openExternal = openExternal; }
     await checkFloatingComposer({ evaluate, type, wait, resize: (width) => window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width, height: 1400, deviceScaleFactor: 1, mobile: false }) });
+    await checkRestingComposer({ evaluate, type, wait, input: (method, params) => window.webContents.debugger.sendCommand(method, params),
+      capture: async name => { if (process.env.FLAME_UI_CAPTURE_DIR) writeFileSync(join(process.env.FLAME_UI_CAPTURE_DIR, `${name}.png`), (await window.webContents.capturePage()).toPNG()); } });
     assert.ok(await evaluate("!document.querySelector('.session-heading') && !document.querySelector('.workspace__chat h1')"), 'the session header is removed');
     assert.ok(await evaluate("!document.querySelector('.session-history').textContent.includes('Model settings:')"), 'settings events never appear as messages');
     assert.ok(repository.use(sessionB, (db) => db.history(null)).entries.some((entry) => entry.kind === 'settings'), 'settings remain durable internally');

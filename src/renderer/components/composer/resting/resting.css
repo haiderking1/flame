@@ -1,0 +1,25 @@
+/* T3 Code's resting composer: one 32px line with the draft unwrapped and clipped, its first images beside it, and its
+   buttons on the right. The model and effort controls move into the context strip under it. */
+.composer[data-resting] { display: flex; align-items: center; gap: 4px; padding: 8px 80px 8px 16px; }
+.composer[data-resting]:has(.context-indicator) { padding-right: 112px; }
+.composer[data-resting] .composer__editor { order: 1; flex: 1; min-width: 0; }
+.composer[data-resting] .composer__input { min-height: 32px; max-height: 32px; overflow: hidden; white-space: pre; line-height: 32px; }
+.composer[data-resting] .composer__input p.is-editor-empty:first-child::before { white-space: nowrap; }
+.composer[data-resting] .composer__footer { position: absolute; top: 0; right: 12px; bottom: 0; margin: 0; }
+.composer[data-resting] .composer__footer > .composer-settings { display: none; }
+.composer[data-resting] .image-gallery--draft { order: 2; flex-wrap: nowrap; gap: 4px; margin: 0; padding: 0 0 0 4px; }
+.composer[data-resting] .image-gallery--draft .image-thumbnail { width: 28px; height: 28px; border-color: rgb(255 255 255 / 9%); border-radius: 6px; }
+.composer[data-resting] .image-gallery--draft .image-thumbnail:nth-child(n + 4), .composer[data-resting] .image-thumbnail__remove { display: none; }
+.composer-resting__more { order: 3; flex-shrink: 0; width: 28px; height: 28px; padding: 0; border: 1px solid rgb(255 255 255 / 9%); border-radius: 6px;
+  background: rgb(255 255 255 / 4%); color: #a3a3a3; font: inherit; font-size: 11px; font-variant-numeric: tabular-nums; cursor: pointer; }
+.composer-resting__more:hover, .composer-resting__more:focus-visible { outline: none; background: rgb(255 255 255 / 8%); color: #ededed; }
+
+/* The relocated controls take what the workspace and branch controls leave, in the strip's small dim style. */
+.branch-toolbar__resting-host { display: flex; flex: 1; justify-content: flex-start; min-width: 0; overflow-x: clip; }
+.composer-resting-controls { display: flex; width: max-content; max-width: 100%; }
+.composer-resting-controls .composer-settings { gap: 4px; margin-left: 0; min-width: 0; }
+.composer-resting-controls .composer-settings__divider { height: 14px; }
+.composer-resting-controls .composer-settings__model { min-width: 52px; }
+.composer-resting-controls .composer-settings__control svg, .composer-resting-controls .model-picker__trigger-logo { width: 14px; height: 14px; }
+.composer-resting-controls .model-picker__trigger-logo img { width: 21px; height: 21px; left: -3.5px; top: -3.5px; }
+.composer-resting-controls .composer-settings__control svg:last-child:not(:first-child) { width: 12px; height: 12px; opacity: 0.5; }

@@ -15,15 +15,26 @@ import { useWorktreeSettings } from "./worktreeDefaults";
 import { useGitRefs } from "./useGitRefs";
 import { WorkspaceSelect, type WorkspaceSelectHandle } from "./WorkspaceSelect";
 import { branchSelection, movedWorkspace } from "./workspaceLogic";
+import { useComposerRestingState } from "../resting/useComposerResting";
 import "./branch-toolbar.css";
 
 // Loaded when first opened, so the dialog stays out of the startup bundle.
 const PullRequestDialog = lazy(() => import("./PullRequestDialog").then(module => ({ default: module.PullRequestDialog })));
-/** The context strip under the composer, for projects that are Git repositories. */
+/** The context strip under the composer, for projects that are Git repositories, and for any thread while its composer rests. */
 export function BranchToolbar() {
   const state = useComposerWorkspace();
-  if (!state.projectId || !state.key) return null;
+  if (!state.projectId || !state.key) return <RestingStrip />;
   return <Toolbar state={state as ToolbarState} />;
+}
+/** Where a resting composer's model and effort controls go. */
+function RestingHost() {
+  const resting = useComposerRestingState();
+  return resting?.resting ? <div ref={resting.setHost} className="branch-toolbar__resting-host" /> : null;
+}
+/** Without Git controls, the strip shows only to hold a resting composer's controls. */
+function RestingStrip() {
+  const resting = useComposerRestingState();
+  return resting?.resting ? <div className="branch-toolbar" role="group" aria-label="Composer controls"><RestingHost /></div> : null;
 }
 type ToolbarState = ReturnType<typeof useComposerWorkspace> & { projectId: string; key: string };
 const isMac = navigator.platform.toLowerCase().includes("mac");
@@ -91,10 +102,11 @@ function Toolbar({ state }: { state: ToolbarState }) {
     window.addEventListener("keydown", keys);
     return () => window.removeEventListener("keydown", keys);
   });
-  if (refs.list && !refs.list.repository) return null;
+  if (refs.list && !refs.list.repository) return <RestingStrip />;
   const busy = working || state.busy;
   return <div className="branch-toolbar" role="group" aria-label="Session workspace">
     <WorkspaceSelect ref={workspaceMenu} workspace={workspace} locked={state.locked} busy={busy} previous={state.previous} onChoose={chooseWorkspace} />
+    <RestingHost />
     <BranchPicker ref={branchMenu} workspace={workspace} refs={refs} busy={busy} pullRequestLabel={hosted ? changeRequestTerminology(provider.kind).singular : null}
       onQuery={refs.search} onPick={pick} onCreate={createBranch} onPullRequest={reference => setPullRequest(reference)}
       onStartFromOrigin={value => { void run(() => state.change({ ...workspace, startFromOrigin: value })); }} />

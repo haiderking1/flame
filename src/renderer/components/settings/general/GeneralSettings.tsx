@@ -30,6 +30,10 @@ export function GeneralSettings() {
         <Choice<ClientSettings["followUpBehavior"]> label="Follow-up behavior" value={settings.followUpBehavior} options={[["queue", "Queue"], ["steer", "Steer"]]}
           onChange={followUpBehavior => clientSettings.update({ followUpBehavior })} />
       </SettingsRow>
+      <SettingsRow id="composer-collapse" title="Collapse composer on scroll"
+        description="Rest the composer of an existing thread into a single line when you scroll the conversation. Focus the composer or start typing to expand it again.">
+        <Toggle label="Collapse composer on scroll" checked={settings.composerCollapseOnScroll} onChange={composerCollapseOnScroll => clientSettings.update({ composerCollapseOnScroll })} />
+      </SettingsRow>
       <SettingsRow id="thread-notifications" title="Thread notifications" description={problem ?? NOTIFICATIONS_DESCRIPTION}>
         <Choice<NotificationMode> label="Thread notifications" value={settings.notificationMode} disabled={checking}
           options={Object.entries(NOTIFICATION_MODE_LABELS) as [NotificationMode, string][]} onChange={mode => { void chooseNotifications(mode); }} />

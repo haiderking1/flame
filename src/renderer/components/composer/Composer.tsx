@@ -3,7 +3,8 @@ import { SessionError, type SessionLocation } from "@contracts/sessions";
 import { useImageDraft } from "../images/useImageDraft";
 import { ImageGallery } from "../images/ImageGallery";
 import type { DraftImage } from "../images/draft-storage";
-import { useId, useRef, useState, type FormEvent } from "react";
+import { useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { ComposerSettings } from "./ComposerSettings";
 import { ComposerActions } from "./ComposerActions";
 import { useSlashCommands } from "./slash/useSlashCommands";
@@ -13,7 +14,10 @@ import { useFileMentions } from "./mentions/useFileMentions";
 import { MentionMenu } from "./mentions/MentionMenu";
 import { useComposerFollowUps } from "./followUps/useComposerFollowUps";
 import type { FollowUpMode } from "./followUps/followUpLogic";
+import { useComposerRestingState } from "./resting/useComposerResting";
+import { RestingImageCount } from "./resting/RestingImageCount";
 import "./composer.css";
+import "./resting/resting.css";
 
 type ComposerProps = {
   onSend?: (message: string, images: readonly DraftImage[], signal?: AbortSignal) => Promise<readonly string[] | void> | void;
@@ -49,6 +53,18 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
   const [dragging, setDragging] = useState(false);
   const canAttach = Boolean(imageLocation && attachments.ready && !sending && !pendingSend && !readOnly && !attachments.saving);
   const canSend = Boolean(onSend && (draft.trim() || attachments.images.length) && attachments.ready && !attachments.saving && !sending && !pendingSend && !readOnly && !onStop);
+  const restingState = useComposerRestingState(), resting = !!restingState?.resting;
+  // A menu, a drag or an error needs the full composer; so does a draft longer than one line, measured at full width.
+  const held = commands.open || mentions.open || dragging || !!error || !!attachments.error;
+  const multiline = useRef(false);
+  useLayoutEffect(() => {
+    if (!resting) {
+      const input = form.current?.querySelector<HTMLElement>(".composer__input"), line = input?.firstElementChild;
+      const height = line ? line.getBoundingClientRect().height : 0, lineHeight = line ? parseFloat(getComputedStyle(line).lineHeight) : 0;
+      multiline.current = draft.includes("\n") || (input?.childElementCount ?? 0) > 1 || (lineHeight > 0 && height > lineHeight + 1);
+    }
+    restingState?.report({ held, multiline: multiline.current });
+  });
   async function attach(files: File[]) {
     if (!canAttach || !files.length) return;
     try { await prepareAttachments?.(); await attachments.add(files); editor.current?.focus(); }
@@ -102,7 +118,18 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
   const menu = commands.open ? { id: commands.listId, active: commands.activeId } : mentions.open ? { id: mentions.listId, active: mentions.activeId } : null;
 
   return (
-    <form ref={form} className="composer" data-image-drag={dragging || undefined} aria-label="Message composer" aria-busy={sending || commands.launching || Boolean(onStop)} onSubmit={submit}
+    <form ref={form} className="composer" data-image-drag={dragging || undefined} data-resting={resting || undefined} aria-label="Message composer" aria-busy={sending || commands.launching || Boolean(onStop)} onSubmit={submit}
+      // Using the composer brings it back from resting; the model controls moved under it, and its buttons, do not.
+      onFocusCapture={event => { if (form.current?.contains(event.target as Node)) restingState?.focused(); }}
+      onPointerDown={event => {
+        const target = event.target as Element;
+        if (!resting || !form.current?.contains(target)) return;
+        // Its buttons keep focus where it is, so the composer stays resting.
+        if (target.closest(".composer-actions")) { event.preventDefault(); return; }
+        if (target.closest("button, a, input, select, [role=button], [role=menuitem]")) return;
+        restingState?.expand();
+        if (!target.closest(".composer__input")) { event.preventDefault(); requestAnimationFrame(() => editor.current?.focus()); }
+      }}
       onDragEnter={event => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); dragDepth.current++; if (canAttach) setDragging(true); } }}
       onDragOver={event => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); event.dataTransfer.dropEffect = canAttach ? "copy" : "none"; } }}
       onDragLeave={event => { if (event.dataTransfer.types.includes("Files")) { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); } }}
@@ -114,6 +141,7 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
       <input ref={picker} className="image-sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple tabIndex={-1} aria-label="Choose images" disabled={!canAttach}
         onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void attach(files); }} />
       <ImageGallery images={pendingSend ? [] : attachments.images} draft disabled={!canAttach} onRemove={id => { void attachments.remove(id); }} />
+      {resting && !pendingSend && <RestingImageCount count={attachments.images.length} onExpand={() => { restingState?.expand(); editor.current?.focus(); }} />}
       {attachments.error && <p className="composer__images-error" role="alert">{attachments.error}<button type="button" onClick={attachments.retry} disabled={attachments.saving}>Retry</button></p>}
       <PromptEditor ref={editor} value={pendingSend ? "" : draft} ariaLabel="Message"
         placeholder="Ask for changes, @ to mention files, or attach images"
@@ -134,7 +162,7 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
         {error ?? (sending ? attachments.images.length ? "Preparing and sending images…" : "Sending…" : onSend ? "Shift + Enter for a new line" : "Agent not connected. Shift + Enter for a new line.")}
       </span>
       <div className="composer__footer">
-        <ComposerSettings />
+        {resting && restingState?.host ? createPortal(<div className="composer-resting-controls"><ComposerSettings /></div>, restingState.host) : <ComposerSettings />}
         <ComposerActions canQueue={followUps.canFollowUp} queueLabel={followUps.label} canSend={commands.isCommand ? !readOnly && !sending && !commands.launching : canSend} sending={sending} connected={Boolean(onSend)} saveOnly={saveOnly} onStop={sending ? () => { sendController.current?.abort(); onStop?.(); } : onStop} stopLabel={sending ? "Stop sending" : stopLabel} onAttach={canAttach ? () => picker.current?.click() : undefined} />
       </div>
     </form>

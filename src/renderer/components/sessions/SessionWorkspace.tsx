@@ -18,6 +18,7 @@ import { useHistoryScroll } from "./useHistoryScroll";
 import { usePendingImageMessage } from "./usePendingImageMessage";
 import { UserMessage } from "./work/UserMessage";
 import { HistoryScrollContext } from "../virtual/HistoryScrollContext";
+import { ComposerRestingContext, useComposerResting } from "../composer/resting/useComposerResting";
 
 // Loaded when first opened, so the dialog stays out of the startup bundle.
 const EditFromHereDialog = lazy(() => import("./EditFromHereDialog"));
@@ -35,7 +36,8 @@ export function SessionWorkspace() {
   const close = () => setDiscarding(false);
   const history = useRef<HTMLDivElement>(null);
   const composer = useRef<HTMLDivElement>(null);
-  useComposerOverlay(composer, history);
+  const resting = useComposerResting({ history, thread: !!active && !empty, sessionKey: active ? `${active.projectId}:${active.sessionId}` : "", draft: sessions.draft });
+  useComposerOverlay(composer, history, resting.resting);
   const saveState = sessions.busy ? "saving" : sessions.dirty ? "unsaved" : "saved";
   const captureHistoryAnchor = useHistoryScroll(history, `${active?.projectId ?? ""}:${active?.sessionId ?? ""}`, sessions.page.entries, `${sessions.turn?.text ?? ""}:${pending?.id ?? ""}`);
   return <>
@@ -46,7 +48,8 @@ export function SessionWorkspace() {
         : pending && <UserMessage text={pending.text} images={pending.images} pending />}
       </div>
     </div>
-    <div ref={composer} className="workspace__composer" data-empty={empty || undefined} data-save-state={saveState}>
+    <ComposerRestingContext value={resting}>
+    <div ref={composer} className="workspace__composer" data-empty={empty || undefined} data-save-state={saveState} data-resting={resting.resting || undefined}>
       {empty && <h1 className="session-empty__heading">What are we cooking?</h1>}
       {sessions.error && <div className="session-error" role="alert">{sessions.error}
         {active && <button disabled={sessions.busy} onClick={() => { void sessions.reload().catch(() => {}); }}>Reload saved state</button>}
@@ -62,6 +65,7 @@ export function SessionWorkspace() {
         followUpScope={scope} onFollowUp={scope && sessions.running ? (text, images, mode) => { followUpStore.enqueue(scope, { text, images, mode, anchor: anchorOf(sessions.turn) }); } : undefined} stopLabel={sessions.turn?.phase === "compacting" ? "Stop compaction" : "Stop response"} saveOnly={!sessions.projectDraftId && !active?.settings} />
       <BranchToolbar />
     </div>
+    </ComposerRestingContext>
     {editing && active && <Suspense fallback={null}><EditFromHereDialog entry={editing} worktree={!!(summary?.workspace ?? active.workspace).worktreePath} onClose={() => setEditing(null)} /></Suspense>}
     {discarding && <SessionDialog title="Discard unsaved draft?" busy={sessions.busy} error={sessions.error}
       onClose={close} action="Discard draft" destructive onSubmit={() => { sessions.discardDraft(); close(); }}>

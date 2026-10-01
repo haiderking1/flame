@@ -8,10 +8,12 @@ export type ClientSettings = {
   notificationMode: NotificationMode;
   // A toast when another thread finishes or fails while Flame has focus.
   inAppNotifications: boolean;
+  // T3 Code's resting composer: an existing thread's composer shrinks to one line while the conversation is scrolled.
+  composerCollapseOnScroll: boolean;
 };
 export type NotificationMode = "off" | "notifications" | "sound" | "notifications-and-sound";
 const MODES: readonly NotificationMode[] = ["off", "notifications", "sound", "notifications-and-sound"];
-export const DEFAULT_CLIENT_SETTINGS: ClientSettings = { followUpBehavior: "queue", notificationMode: "off", inAppNotifications: false };
+export const DEFAULT_CLIENT_SETTINGS: ClientSettings = { followUpBehavior: "queue", notificationMode: "off", inAppNotifications: false, composerCollapseOnScroll: true };
 const KEY = "flame.settings.client";
 const listeners = new Set<() => void>();
 let cached: ClientSettings | null = null;
@@ -21,7 +23,7 @@ function read(): ClientSettings {
   try { const raw = localStorage.getItem(KEY); if (raw) saved = JSON.parse(raw) as Partial<ClientSettings>; } catch { /* Defaults. */ }
   cached = { followUpBehavior: saved.followUpBehavior === "steer" ? "steer" : "queue",
     notificationMode: MODES.includes(saved.notificationMode as NotificationMode) ? saved.notificationMode as NotificationMode : "off",
-    inAppNotifications: saved.inAppNotifications === true };
+    inAppNotifications: saved.inAppNotifications === true, composerCollapseOnScroll: saved.composerCollapseOnScroll !== false };
   return cached;
 }
 export const clientSettings = {

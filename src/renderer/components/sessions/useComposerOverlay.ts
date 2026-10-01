@@ -1,8 +1,10 @@
-import { useLayoutEffect, type RefObject } from "react";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 
 // The history scrolls behind the floating composer. Reserve its actual height
 // at the end so the final message stays reachable as drafts/errors resize it.
-export function useComposerOverlay(composer: RefObject<HTMLDivElement | null>, history: RefObject<HTMLDivElement | null>) {
+// A resting composer keeps the full composer's reserve, so expanding it again never covers what was in view.
+export function useComposerOverlay(composer: RefObject<HTMLDivElement | null>, history: RefObject<HTMLDivElement | null>, resting = false) {
+  const restingNow = useRef(resting); restingNow.current = resting;
   useLayoutEffect(() => {
     const element = composer.current;
     const host = element?.closest<HTMLElement>(".workspace__chat");
@@ -10,7 +12,7 @@ export function useComposerOverlay(composer: RefObject<HTMLDivElement | null>, h
     let previous = -1;
     const measure = () => {
       const height = Math.ceil(element.getBoundingClientRect().height);
-      if (!height || height === previous) return;
+      if (!height || height === previous || (restingNow.current && height < previous)) return;
       previous = height;
       const timeline = history.current;
       const following = timeline && timeline.scrollHeight - timeline.clientHeight - timeline.scrollTop < 64;
