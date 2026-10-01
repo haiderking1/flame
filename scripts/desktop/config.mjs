@@ -18,8 +18,8 @@ export function buildConfig({ release, resources, output }) {
     copyright: "Copyright © Flame contributors",
     electronLanguages: ["en-US"],
     directories: { buildResources: resources, output },
-    // desktopName is the Linux launcher entry, and so the window's app ID on Wayland.
-    extraMetadata: { version: release.version, desktopName: `${release.executable}.desktop` },
+    // productName is the app's name at runtime; desktopName is the Linux launcher entry, and so the window's app ID on Wayland.
+    extraMetadata: { version: release.version, productName: release.productName, desktopName: `${release.executable}.desktop` },
     // The compiled app and the icon it shows at runtime; electron-builder adds the production dependencies.
     files: ["package.json", "dist/main/**", "dist/backend/**", "dist/contracts/**", "dist/renderer/**", "resources/icons/flame-512.png", "!**/*.map", "!**/*.d.ts",
       // Sources, docs and type packages that dependencies publish but never load.

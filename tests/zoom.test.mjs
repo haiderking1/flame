@@ -14,7 +14,7 @@ test('zoom shortcuts, half-level steps, reset, header size, and restart persiste
       await new Promise((resolve, reject) => {
         const env = { ...process.env };
         delete env.FLAME_RENDERER_URL;
-        const child = spawn(electron, [fileURLToPath(new URL('./fixtures/zoom.mjs', import.meta.url)), `--user-data-dir=${profile}`, ...extra], { env, stdio: ['ignore', 'ignore', 'pipe'] });
+        const child = spawn(electron, [fileURLToPath(new URL('./fixtures/zoom.mjs', import.meta.url)), `--user-data-dir=${profile}`, '--ozone-platform=headless', ...extra], { env, stdio: ['ignore', 'ignore', 'pipe'] });
         let output = '';
         child.stderr.on('data', (chunk) => { output += chunk; });
         const timer = setTimeout(() => { child.kill('SIGKILL'); }, 8_000);

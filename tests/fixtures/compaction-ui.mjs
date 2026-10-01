@@ -179,6 +179,8 @@ void app.whenReady().then(async () => {
     await press('Escape');
     await press('Enter');
     await wait("!!document.querySelector('[aria-label=\"Stop compaction\"]') && document.querySelector('.session-history').textContent.includes('Compacting conversation')");
+    // The summary request reaches the model just after the UI shows compaction started; wait for it, then expect exactly one.
+    for (let i = 0; i < 250 && summaryCalls === 0; i++) await new Promise(resolve => setTimeout(resolve, 20));
     assert.equal(summaryCalls, 1, 'one Enter executes partially typed command even with dismissed list');
     await wait("document.querySelector('.composer__input').value === ''");
     assert.equal(await evaluate("document.querySelector('.composer-settings__model').getAttribute('aria-busy')"), 'true');

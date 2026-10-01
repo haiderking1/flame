@@ -9,11 +9,11 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const app = process.argv[2] ?? join(root, "release", "linux-unpacked");
+const app = resolve(process.argv[2] ?? join(root, "release", "linux-unpacked"));
 const layout = directory => {
   const name = readdirSync(directory).find(file => /^flame(-nightly)?(\.exe)?$/i.test(file) || file.endsWith(".app"));
   if (process.platform === "darwin") return { executable: join(directory, "Contents", "MacOS", basename(directory, ".app")), asar: join(directory, "Contents", "Resources", "app.asar") };
@@ -70,7 +70,7 @@ try {
     try {
       const entry = await waitFor(() => readdirSync(join(data, "applications")).find(name => name.endsWith(".desktop")), "the launcher entry");
       const text = readFileSync(join(data, "applications", entry), "utf8"), id = entry.slice(0, -".desktop".length);
-      assert.ok(text.includes(`Exec="${path}" %U`) && text.includes(`Icon=${id}`) && text.includes(`StartupWMClass=${id}`), `Unexpected launcher entry:\n${text}`);
+      assert.ok(/^Name=Flame( \(Nightly\))?$/m.test(text) && text.includes(`Exec="${path}" %U`) && text.includes(`Icon=${id}`) && text.includes(`StartupWMClass=${id}`), `Unexpected launcher entry:\n${text}`);
       assert.ok(statSync(join(data, "icons", "hicolor", "512x512", "apps", `${id}.png`)).size > 1000, "the icon is installed");
     } finally { await stop(launched); }
   }

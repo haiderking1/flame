@@ -35,6 +35,19 @@ jobs:
         with: { bun-version: 1.4.2 }
       - uses: actions/setup-node@v5
         with: { node-version: 26 }
+      # Bun's packages, Electron and electron-builder's tools, kept between runs.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: flame-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          restore-keys: flame-${{ runner.os }}-${{ runner.arch }}-
       - run: bun install --frozen-lockfile
       # electron-builder's bundled .deb packager is x86 only; arm64 uses the system's.
       - if: matrix.platform == 'linux' && matrix.arch == 'arm64'
