@@ -1,0 +1,77 @@
+name: Build desktop
+
+# Builds Flame's installers on every platform and architecture, and smoke-tests the Linux ones. Called by CI and Release.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The version to build, e.g. 0.2.0 or 0.2.0-nightly.20261001.1
+        type: string
+        required: true
+      sign:
+        description: Sign and notarize when the repository has the secrets
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, platform: linux, arch: x64, unpacked: linux-unpacked }
+          - { os: ubuntu-24.04-arm, platform: linux, arch: arm64, unpacked: linux-arm64-unpacked }
+          - { os: macos-15, platform: mac, arch: arm64 }
+          - { os: macos-15-intel, platform: mac, arch: x64 }
+          - { os: windows-2025, platform: win, arch: x64 }
+          - { os: windows-11-arm, platform: win, arch: arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      SIGNED: ${{ inputs.sign && (matrix.platform == 'mac' || matrix.platform == 'win') && secrets.CSC_LINK != '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.4.2 }
+      - uses: actions/setup-node@v5
+        with: { node-version: 26 }
+      - run: bun install --frozen-lockfile
+      # electron-builder's bundled .deb packager is x86 only; arm64 uses the system's.
+      - if: matrix.platform == 'linux' && matrix.arch == 'arm64'
+        run: sudo apt-get update && sudo apt-get install -y ruby ruby-dev && sudo gem install fpm --no-document && echo "USE_SYSTEM_FPM=true" >> "$GITHUB_ENV"
+      - if: matrix.platform == 'mac' && env.SIGNED == 'true'
+        run: echo "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/apple-api-key.p8" && echo "APPLE_API_KEY=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
+        env: { APPLE_API_KEY_P8: "${{ secrets.APPLE_API_KEY_P8 }}" }
+      - name: Package
+        shell: bash
+        run: node scripts/desktop/package.mjs --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --version "${{ inputs.version }}" $([ "$SIGNED" = "true" ] && echo --signed)
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      - if: matrix.platform == 'linux'
+        run: node scripts/desktop/smoke.mjs release/${{ matrix.unpacked }}
+      # Per-architecture manifests are merged when releasing; give each a name of its own.
+      - name: Name update manifests by architecture
+        shell: bash
+        run: |
+          cd release
+          for channel in latest nightly; do
+            if [ "${{ matrix.platform }}" = mac ] && [ "${{ matrix.arch }}" = x64 ] && [ -f "$channel-mac.yml" ]; then mv "$channel-mac.yml" "$channel-mac-x64.yml"; fi
+            if [ "${{ matrix.platform }}" = win ] && [ -f "$channel.yml" ]; then mv "$channel.yml" "$channel-win-${{ matrix.arch }}.yml"; fi
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flame-${{ matrix.platform }}-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.blockmap
+            release/*.yml
+            !release/builder-*.yml

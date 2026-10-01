@@ -1,9 +1,19 @@
 {
   "name": "flame",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Desktop app for coding agents",
   "private": true,
   "type": "module",
   "main": "dist/main/main.js",
+  "author": {
+    "name": "Flame contributors",
+    "email": "haiderking1@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/haiderking1/flame",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/haiderking1/flame.git"
+  },
   "packageManager": "bun@1.4.2",
   "scripts": {
     "typecheck": "tsc --noEmit && tsc -p tsconfig.renderer.json",
@@ -13,28 +23,14 @@
     "build:renderer": "tsc -p tsconfig.renderer.json && vite build",
     "build": "bun run build:main && bun run build:renderer",
     "start": "bun run build && electron .",
-    "dev": "bun run build:main && node scripts/dev.mjs"
+    "dev": "bun run build:main && node scripts/dev.mjs",
+    "dist:desktop": "node scripts/desktop/package.mjs",
+    "smoke:desktop": "node scripts/desktop/smoke.mjs"
   },
   "devDependencies": {
-    "@types/node": "26.6.3",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "@vitejs/plugin-react": "6.1.1",
-    "electron": "44.5.0",
-    "typescript": "7.0.2",
-    "vite": "8.3.1"
-  },
-  "trustedDependencies": ["electron"],
-  "overrides": {
-    "@effect/platform-node-shared": "4.0.0-rc.115"
-  },
-  "dependencies": {
     "@effect/atom-react": "4.0.0-rc.115",
-    "@effect/platform-node": "4.0.0-rc.115",
-    "@ff-labs/fff-node": "0.9.4",
     "@pierre/diffs": "1.5.1",
     "@pierre/trees": "1.0.0-beta.6",
-    "@silvia-odwyer/photon-node": "^0.3.4",
     "@tanstack/react-virtual": "3.14.13",
     "@tiptap/core": "3.31.3",
     "@tiptap/extension-document": "3.31.3",
@@ -43,16 +39,40 @@
     "@tiptap/extensions": "3.31.3",
     "@tiptap/pm": "3.31.3",
     "@tiptap/react": "3.31.3",
-    "effect": "4.0.0-rc.115",
+    "@types/js-yaml": "4.0.9",
+    "@types/node": "26.6.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/semver": "7.7.1",
+    "@vitejs/plugin-react": "6.1.1",
+    "electron": "44.5.0",
+    "electron-builder": "26.15.6",
+    "js-yaml": "4.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "scheduler": "0.27.0",
-    "shiki": "^4.4.3"
+    "shiki": "^4.4.3",
+    "typescript": "7.0.2",
+    "vite": "8.3.1"
+  },
+  "trustedDependencies": [
+    "electron"
+  ],
+  "overrides": {
+    "@effect/platform-node-shared": "4.0.0-rc.115"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0-rc.115",
+    "@ff-labs/fff-node": "0.9.4",
+    "@silvia-odwyer/photon-node": "^0.3.4",
+    "effect": "4.0.0-rc.115",
+    "electron-updater": "6.8.9"
   },
   "patchedDependencies": {
     "@pierre/diffs@1.5.1": "patches/@pierre%2Fdiffs@1.5.1.patch",
-    "@shikijs/engine-oniguruma@4.4.3": "patches/@shikijs%2Fengine-oniguruma@4.4.3.patch"
+    "@shikijs/engine-oniguruma@4.4.3": "patches/@shikijs%2Fengine-oniguruma@4.4.3.patch",
+    "@ff-labs/fff-node@0.9.4": "patches/@ff-labs%2Ffff-node@0.9.4.patch"
   }
 }

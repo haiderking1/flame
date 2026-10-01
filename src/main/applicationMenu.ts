@@ -1,14 +1,18 @@
-import { BrowserWindow, Menu, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from "electron";
 import { zoomWindow, type ZoomDirection } from "./windowZoom.js";
 
-export function installApplicationMenu(): void {
+export function installApplicationMenu({ checkForUpdates }: { checkForUpdates(): Promise<void> }): void {
+  const updates: MenuItemConstructorOptions = { label: "Check for Updates…", click: () => { void checkForUpdates().catch((error: unknown) => { console.error("Could not check for updates:", error); }); } };
   const zoom = (direction: ZoomDirection) => () => {
     void zoomWindow(BrowserWindow.getFocusedWindow(), direction).catch((error: unknown) => {
       console.error("Could not change window zoom:", error);
     });
   };
   const template: MenuItemConstructorOptions[] = [
-    ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
+    ...(process.platform === "darwin" ? [{ label: app.name, submenu: [
+      { role: "about" as const }, updates, { type: "separator" as const }, { role: "services" as const }, { type: "separator" as const },
+      { role: "hide" as const }, { role: "hideOthers" as const }, { role: "unhide" as const }, { type: "separator" as const }, { role: "quit" as const },
+    ] }] : []),
     { role: "fileMenu" },
     { role: "editMenu" },
     { label: "View", submenu: [
@@ -24,6 +28,7 @@ export function installApplicationMenu(): void {
       { role: "togglefullscreen" },
     ] },
     { role: "windowMenu" },
+    ...(process.platform === "darwin" ? [] : [{ role: "help" as const, submenu: [updates] }]),
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

@@ -1,0 +1,8 @@
+.update-button__anchor { display: flex; flex-shrink: 0; }
+.sidebar-footer .update-button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border-radius: 6px; color: #8fb0ff; }
+.sidebar-footer .update-button[data-status="downloaded"] { background: #3268ed26; color: #b4c9ff; }
+.sidebar-footer .update-button[data-status="error"] { color: #ef9696; }
+.sidebar-footer .update-button:disabled { cursor: default; }
+.sidebar-footer .update-button:not(:disabled):hover, .sidebar-footer .update-button:focus-visible { background: #3268ed33; color: #dbe6ff; }
+.update-button circle + circle { transition: stroke-dashoffset .3s ease; }
+@media (prefers-reduced-motion: reduce) { .update-button circle + circle { transition: none; } }

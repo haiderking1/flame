@@ -28,7 +28,29 @@ bun run typecheck
 bun run test
 ```
 
+CI runs both on every push to main and every pull request, and builds the installers for every platform (see Packaging and releases).
+
 The tests use real Electron renderers, check isolation, and exercise composer typing, resizing, keyboard behavior, IME handling, Git lifecycle, diff workers, virtual history and nested tool lists, search, and draft durability. Failure tests cover interrupted Git claims, storage failures, worker recovery, and actual failed WASM initialization. Development tests verify CSS updates, React Fast Refresh with draft preservation, HTML reloads, and submission success/failure with a test-only callback. The debugging pipe is enabled only by the tests.
+
+## Packaging and releases
+
+```sh
+bun run dist:desktop                      # installers for this OS into release/
+bun run dist:desktop -- --target AppImage # only some formats
+bun run smoke:desktop                     # check the packaged app
+```
+
+electron-builder packages Flame per OS: Linux gets an AppImage and a .deb, macOS a .dmg and a .zip, Windows an NSIS installer. Each OS builds its own installers, because Flame's native dependencies (the file search library and its FFI binding) are installed per platform; they ship unpacked beside `app.asar`. On Arch, the .deb needs `libxcrypt-compat` for electron-builder's bundled packager. Local builds are unsigned; `--signed` uses the `CSC_*` and `APPLE_API_*` variables that electron-builder reads. `smoke:desktop` runs a copy of the unpacked app outside the repository and checks file search, the image worker and SQLite from inside the archive, that the window reaches its backend, and on Linux that the AppImage adds Flame to the app launcher with its icon.
+
+package.json's version is the next stable release. The Release workflow publishes to GitHub Releases:
+
+- **Stable**: push a tag `vX.Y.Z` matching package.json; bump package.json afterwards.
+- **Nightly**: every day when `main` changed, or on demand, as `X.Y.Z-nightly.YYYYMMDD.N`. A nightly installs beside the stable app as Flame (Nightly).
+- **Preview**: on demand, as `X.Y.Z-preview.<run>`; it never offers itself as an update.
+
+Each release builds Linux, macOS and Windows for x64 and arm64, runs the tests and the Linux smoke check, and merges the per-architecture update manifests. Signing and notarization run when the repository has the `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER` secrets; without them the installers are unsigned, and macOS cannot install updates.
+
+Installed builds check for updates 15 seconds after starting and every 4 minutes. Downloading and installing wait for you: the sidebar shows an update button while an update is available, downloading, ready or failed, and **Settings → About** shows the version, the update button and the update track (Stable or Nightly). **Help → Check for Updates…** (the Flame menu on macOS) checks at once. Installing asks first, stops the backend and restarts Flame on the new version. On Linux, updates work for the AppImage and the .deb; the AppImage adds itself to the app launcher with its icon so Wayland bars show it. Set `FLAME_DISABLE_AUTO_UPDATE=1` to turn updates off.
 
 ## OpenAI sign-in
 

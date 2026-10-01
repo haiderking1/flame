@@ -2,8 +2,8 @@ import { SettingsIcon } from "./SettingsIcon";
 import { WorkspaceIcon } from "../workspace/WorkspaceIcon";
 import "./settings-navigation.css";
 
-export type SettingsSection = "general" | "providers" | "usage" | "git" | "worktrees";
-export const settingsSectionNames: Record<SettingsSection, string> = { general: "General", providers: "Providers", usage: "Usage", git: "Git", worktrees: "Worktrees" };
+export type SettingsSection = "general" | "providers" | "usage" | "git" | "worktrees" | "about";
+export const settingsSectionNames: Record<SettingsSection, string> = { general: "General", providers: "Providers", usage: "Usage", git: "Git", worktrees: "Worktrees", about: "About" };
 export function SettingsNavigation({ section, onSelect }: { section: SettingsSection; onSelect(section: SettingsSection): void }) {
   return <nav className="settings-navigation" aria-label="Settings sections">
     <button type="button" aria-current={section === "general" ? "page" : undefined} onClick={() => onSelect("general")}>
@@ -18,6 +18,9 @@ export function SettingsNavigation({ section, onSelect }: { section: SettingsSec
     </button>
     <button type="button" aria-current={section === "worktrees" ? "page" : undefined} onClick={() => onSelect("worktrees")}>
       <WorkspaceIcon name="folder-git-2" />Worktrees
+    </button>
+    <button type="button" aria-current={section === "about" ? "page" : undefined} onClick={() => onSelect("about")}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 7.5v.01" /></svg>About
     </button>
   </nav>;
 }

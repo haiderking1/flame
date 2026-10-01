@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, nativeImage, Notification, type IpcMainInvokeEvent } from "electron";
+import { appIcon } from "./appIcon.js";
 
 type Shown = { notification: Notification; owner: BrowserWindow };
 const shown = new Map<string, Shown>();
@@ -29,7 +30,7 @@ export function installNotifications() {
     if (!tag || !title || !body) throw new Error("Invalid notification");
     if (!Notification.isSupported() || window.isFocused()) return false;
     shown.get(tag)?.notification.close();
-    const notification = new Notification({ title, body, silent: true });
+    const notification = new Notification({ title, body, silent: true, icon: appIcon() });
     notification.on("click", () => {
       shown.delete(tag);
       if (window.isDestroyed()) return;

@@ -5,7 +5,7 @@ import { installApplicationMenu } from '../../dist/main/applicationMenu.js';
 import { zoomWindow } from '../../dist/main/windowZoom.js';
 
 void app.whenReady().then(async () => {
-  installApplicationMenu();
+  installApplicationMenu({ checkForUpdates: async () => {} });
   const window = await createWindow();
   assert.deepEqual(window.getMinimumSize(), [840, 620]);
   const contents = window.webContents;

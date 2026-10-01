@@ -1,0 +1,12 @@
+.about-settings__version { display: block; color: #cfcfcf; }
+.about-settings__status { display: block; }
+.about-settings__status[data-status="error"] { color: #ef9696; }
+.about-settings__status[data-status="downloaded"], .about-settings__status[data-status="available"] { color: #8fb0ff; }
+.about-settings__link { color: #8fb0ff; text-decoration: none; }
+.about-settings__link:hover, .about-settings__link:focus-visible { text-decoration: underline; outline: none; }
+.about-settings__button { padding: 5px 10px; border: 1px solid #ffffff14; border-radius: 7px; background: transparent; color: #cfcfcf; font: inherit; font-size: 12px; line-height: 18px; white-space: nowrap; cursor: pointer; }
+.about-settings__button:not(:disabled):hover, .about-settings__button:focus-visible { outline: none; background: #ffffff0d; color: #ededed; }
+.about-settings__button[data-primary] { border-color: transparent; background: #3268ed; color: #fff; }
+.about-settings__button[data-primary]:not(:disabled):hover { background: #3d73f5; }
+.about-settings__button:disabled { opacity: .55; cursor: default; }
+.about-settings__note { margin: 12px 0 0; color: #858585; font-size: 12px; line-height: 18px; }

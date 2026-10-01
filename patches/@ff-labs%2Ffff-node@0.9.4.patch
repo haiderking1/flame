@@ -1,0 +1,14 @@
+diff --git a/dist/src/binary.js b/dist/src/binary.js
+index ee181aef5007e4bf34a49479c089ca30f73a320b..e17e277f040469fa183eeb1c3204659065beeb00 100644
+--- a/dist/src/binary.js
++++ b/dist/src/binary.js
+@@ -69,7 +69,8 @@ function resolveFromNpmPackage() {
+         const packageDir = dirname(packageJsonPath);
+         const binaryPath = join(packageDir, getLibFilename());
+         if (existsSync(binaryPath)) {
+-            return binaryPath;
++            // A packaged Electron app keeps native libraries beside its archive: the loader cannot read inside app.asar.
++            return binaryPath.replace(/([\\/])app\.asar([\\/])/, "$1app.asar.unpacked$2");
+         }
+     }
+     catch {

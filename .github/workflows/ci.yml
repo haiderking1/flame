@@ -1,0 +1,42 @@
+name: CI
+
+# Every push to main and every pull request: typecheck, the full test suite, and installers built on every platform.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.4.2 }
+      - uses: actions/setup-node@v5
+        with: { node-version: 26 }
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: git config --global user.name "Flame CI" && git config --global user.email "ci@users.noreply.github.com"
+      - run: bun run test
+
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      # A CI build is a preview: it is never offered as an update.
+      - id: version
+        run: echo "version=$(node -p "require('./package.json').version")-ci.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    needs: version
+    uses: ./.github/workflows/build-desktop.yml
+    with:
+      version: ${{ needs.version.outputs.version }}

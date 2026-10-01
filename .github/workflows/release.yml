@@ -1,0 +1,94 @@
+name: Release
+
+# Stable: push a tag vX.Y.Z matching package.json. Nightly: daily when main changed, or run manually.
+# Preview: run manually; builds installers without publishing updates.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: What to release
+        type: choice
+        options: [preview, nightly, stable]
+        default: preview
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      channel: ${{ steps.plan.outputs.channel }}
+      prerelease: ${{ steps.plan.outputs.prerelease }}
+      makeLatest: ${{ steps.plan.outputs.makeLatest }}
+      updates: ${{ steps.plan.outputs.updates }}
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v5
+        with: { node-version: 26 }
+      - id: plan
+        run: node scripts/desktop/plan-release.mjs --event "${{ github.event_name }}" --ref "${{ github.ref }}" --channel "${{ inputs.channel }}" --run "${{ github.run_number }}"
+
+  test:
+    needs: plan
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.4.2 }
+      - uses: actions/setup-node@v5
+        with: { node-version: 26 }
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: git config --global user.name "Flame CI" && git config --global user.email "ci@users.noreply.github.com"
+      - run: bun run test
+
+  build:
+    needs: [plan, test]
+    uses: ./.github/workflows/build-desktop.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.plan.outputs.version }}
+      sign: true
+
+  release:
+    needs: [plan, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.4.2 }
+      - uses: actions/setup-node@v5
+        with: { node-version: 26 }
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v5
+        with: { path: assets, merge-multiple: true }
+      - run: node scripts/desktop/merge-update-manifests.mjs assets
+      # A preview never offers itself as an update.
+      - if: needs.plan.outputs.updates != 'true'
+        run: rm -f assets/*.yml assets/*.blockmap
+      - run: cd assets && sha256sum * > SHA256SUMS && ls -la
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.plan.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Flame ${{ needs.plan.outputs.version }}
+          prerelease: ${{ needs.plan.outputs.prerelease }}
+          make_latest: ${{ needs.plan.outputs.makeLatest }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: assets/*

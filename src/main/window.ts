@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { INITIAL_ZOOM_LEVEL, windowTitlebarOptions } from "./windowAppearance.js";
 import { installExternalLinks } from "./externalLinks.js";
 import { trackWindowZoom, refreshZoomLayout } from "./windowZoom.js";
+import { appIcon } from "./appIcon.js";
 
 const rendererPath = fileURLToPath(new URL("../renderer/index.html", import.meta.url));
 
@@ -14,6 +15,7 @@ export async function createWindow(): Promise<BrowserWindow> {
     minWidth: 840,
     minHeight: 620,
     title: "Flame",
+    icon: appIcon(),
     ...windowTitlebarOptions(),
     backgroundColor: "#0b0b0b",
     show: false,

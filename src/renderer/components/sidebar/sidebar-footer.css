@@ -1,4 +1,5 @@
-.sidebar-footer { flex-shrink: 0; margin-top: auto; padding: 8px; }
-.sidebar-footer button { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; padding: 8px 12px; border: 0; border-radius: 6px; background: transparent; color: #858585; font: inherit; font-size: 14px; line-height: 20px; text-align: left; cursor: pointer; }
+.sidebar-footer { display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-top: auto; padding: 8px; }
+.sidebar-footer button { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 12px; border: 0; border-radius: 6px; background: transparent; color: #858585; font: inherit; font-size: 14px; line-height: 20px; text-align: left; cursor: pointer; }
 .sidebar-footer button svg { flex-shrink: 0; }
 .sidebar-footer button:hover, .sidebar-footer button:focus-visible { outline: none; background: #ffffff0a; color: #ededed; }
+.sidebar-footer .sidebar-footer__settings { flex: 1; }
