@@ -1,4 +1,5 @@
 import type { GitPullRequest } from "../../../contracts/git.js";
+import type { ResolvedPullRequest } from "../../../contracts/worktrees.js";
 
 /** The branch a change request is opened from, as the hosting provider sees it. */
 export type HeadContext = { branch: string; headBranch: string; owner: string | null; crossRepository: boolean; selector: string };
@@ -16,6 +17,10 @@ export interface Hosting {
   account(cwd: string, signal?: AbortSignal): Promise<string>;
   /** The Git protocol the CLI is configured for; HTTPS when unset. */
   protocol(cwd: string, signal?: AbortSignal): Promise<"ssh" | "https">;
+  /** One change request by number, with where its head branch lives. */
+  changeRequest(cwd: string, number: number, signal?: AbortSignal): Promise<ResolvedPullRequest>;
+  /** Checks a change request out in `cwd` (the project or a worktree), force-updating its local branch, named `branch` when given. */
+  checkoutChangeRequest(cwd: string, number: number, branch: string | null, signal?: AbortSignal): Promise<void>;
   /** Name and the host's private commit email for the signed-in account. */
   identity(cwd: string, signal?: AbortSignal): Promise<{ name: string; email: string }>;
 }

@@ -1,3 +1,4 @@
+import { useActiveWorkspace } from "../workspace/useActiveWorkspace";
 import { SessionError, type SessionLocation } from "@contracts/sessions";
 import { useImageDraft } from "../images/useImageDraft";
 import { ImageGallery } from "../images/ImageGallery";
@@ -10,7 +11,6 @@ import { SlashCommandList } from "./slash/SlashCommandList";
 import { PromptEditor, type PromptEditorHandle } from "./editor/PromptEditor";
 import { useFileMentions } from "./mentions/useFileMentions";
 import { MentionMenu } from "./mentions/MentionMenu";
-import { useSessions } from "../sessions/SessionContext";
 import "./composer.css";
 
 type ComposerProps = {
@@ -35,9 +35,8 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
   const [focused, setFocused] = useState(false), [cursor, setCursor] = useState<number | null>(null);
   const hintId = useId();
   const commands = useSlashCommands({ draft, setDraft, readOnly: sending || readOnly, input: editor, onError: setError });
-  const sessions = useSessions();
-  const projectId = sessions?.document?.projectId ?? sessions?.projectDraftId ?? sessions?.projectScope ?? null;
-  const mentions = useFileMentions({ projectId, text: pendingSend ? "" : draft, cursor, focused, blocked: sending || pendingSend || readOnly || commands.isCommand, editor });
+  const { key: workspace } = useActiveWorkspace();
+  const mentions = useFileMentions({ workspace, text: pendingSend ? "" : draft, cursor, focused, blocked: sending || pendingSend || readOnly || commands.isCommand, editor });
   const attachments = useImageDraft(imageLocation);
   const picker = useRef<HTMLInputElement>(null), dragDepth = useRef(0);
   const [dragging, setDragging] = useState(false);

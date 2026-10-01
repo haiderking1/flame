@@ -1,0 +1,25 @@
+.worktree-setup { display: grid; gap: 8px; margin: 12px 0; padding: 12px 14px; border-radius: 14px; background: #ffffff07; box-shadow: 0 0 0 1px #ffffff0f; font-size: 13px; }
+.worktree-setup__header { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.worktree-setup__header h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.worktree-setup__header svg { width: 15px; height: 15px; flex-shrink: 0; color: #a3a3a3; }
+.worktree-setup[data-phase="failed"] .worktree-setup__header svg, .worktree-setup[data-phase="cancelled"] .worktree-setup__header svg { color: #fe9a00; }
+.worktree-setup__branch { margin-left: auto; overflow: hidden; color: #818181; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.worktree-setup__stages { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.worktree-setup__stages li { display: flex; align-items: center; gap: 8px; min-width: 0; color: #a3a3a3; }
+.worktree-setup__stages li[data-status="pending"], .worktree-setup__stages li[data-status="skipped"] { color: #666; }
+.worktree-setup__stages li[data-status="done"] svg { color: #00bc7d; }
+.worktree-setup__stages li[data-status="warning"] svg { color: #fe9a00; }
+.worktree-setup__stages li[data-status="failed"] svg { color: #fb414a; }
+.worktree-setup__stages svg { width: 14px; height: 14px; flex-shrink: 0; }
+.worktree-setup__label { flex-shrink: 0; }
+.worktree-setup__percent { color: #dedede; font-variant-numeric: tabular-nums; }
+.worktree-setup__detail { min-width: 0; overflow: hidden; color: #737373; text-overflow: ellipsis; white-space: nowrap; }
+.worktree-setup__time { margin-left: auto; flex-shrink: 0; color: #666; font-size: 12px; font-variant-numeric: tabular-nums; }
+.worktree-setup__error { margin: 0; color: #fb414a; font-size: 12px; overflow-wrap: anywhere; }
+.worktree-setup__output { max-height: 220px; margin: 0; padding: 8px 10px; overflow: auto; border-radius: 8px; background: #00000059; color: #bdbdbd; font: 12px/1.45 var(--font-mono, ui-monospace, monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
+.worktree-setup__output--tail { max-height: none; color: #8a8a8a; }
+.worktree-setup__actions { display: flex; justify-content: flex-end; gap: 6px; }
+.worktree-setup__actions:empty { display: none; }
+.worktree-setup__spin { animation: worktree-setup-spin 1s linear infinite; }
+@keyframes worktree-setup-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .worktree-setup__spin { animation: none; } }

@@ -15,7 +15,7 @@ export class BashRuntime extends EventEmitter {
   private readonly timer: NodeJS.Timeout;
   private closed = false;
   private readonly suppressed = new Set<string>();
-  constructor(private sessions: Sessions, private projectPath: (id: string) => string) {
+  constructor(private sessions: Sessions, private root: (location: SessionLocation) => string) {
     super();
     for (const location of sessions.snapshot().sessions) {
       try {
@@ -35,7 +35,8 @@ export class BashRuntime extends EventEmitter {
     this.timer = setInterval(() => { for (const id of this.active.keys()) this.checkpoint(id); }, 400);
     this.timer.unref();
   }
-  workingDirectory(projectId: string) { return this.projectPath(projectId); }
+  /** The folder this session works in: its worktree, or its project checkout. */
+  workingDirectory(location: SessionLocation) { return this.root(location); }
   list(location: SessionLocation) {
     return this.sessions.jobs(location, store => {
       const jobs = store.list();
@@ -84,7 +85,7 @@ export class BashRuntime extends EventEmitter {
       return previous; // A retry observes the claim, never launches again.
     }
     if (this.sessions.jobs(location, store => store.list().length) >= 256) throw invalid("This session has reached its Bash job limit. Start a new session.");
-    const cwd = this.workingDirectory(location.projectId);
+    const cwd = this.workingDirectory(location);
     const job: StoredJob = { id: randomUUID(), turnId, callId, command, background, accountKey, pid: null, identity: null,
       notified: !background, status: "claimed", exitCode: null, signal: null, text: "", truncated: false,
       outputClosed: false, message: null, createdAt: Date.now() };

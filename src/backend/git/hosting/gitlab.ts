@@ -19,6 +19,16 @@ export const gitlab: Hosting = {
     });
     return newestFirst(matches, updated);
   },
+  async changeRequest(cwd, number, signal) {
+    const item = parseJson<Listed & { source_project_id?: number; target_project_id?: number; author?: { username?: string } }>(
+      (await hostingCommand(GLAB, cwd, ["api", `projects/:fullpath/merge_requests/${number}`], { signal })).stdout, GLAB.label);
+    const crossRepository = item.source_project_id !== undefined && item.source_project_id !== item.target_project_id;
+    return { number: item.iid, title: item.title, url: item.web_url, baseBranch: item.target_branch, headBranch: item.source_branch, state: state(item.state),
+      crossRepository, headOwner: crossRepository ? item.author?.username ?? null : null };
+  },
+  async checkoutChangeRequest(cwd, number, branch, signal) {
+    await hostingCommand(GLAB, cwd, ["mr", "checkout", String(number), ...(branch ? ["--branch", branch] : [])], { signal, timeout: 300_000 });
+  },
   async createChangeRequest(cwd, input, signal) {
     await hostingCommand(GLAB, cwd, ["api", "--method", "POST", "projects/:fullpath/merge_requests", "--raw-field", `source_branch=${input.head.headBranch}`,
       "--raw-field", `target_branch=${input.base}`, "--raw-field", `title=${input.title}`, "--field", `description=@${input.bodyFile}`], { signal, timeout: 120_000 });

@@ -17,7 +17,13 @@ import { paragraphBoundary } from "./paragraphs.js";
 import { turnContext } from "./compaction-context.js";
 import { agentContext } from "./agent-context.js";
 import { hasImageInput } from "./image-input.js";
+import { WorktreeSetupFailure } from "../worktrees/errors.js";
 
+/** Readies a session's folder before a response to a new message, and follows it up afterwards (session worktrees). */
+export type TurnWorkspace = {
+  prepare(location: SessionLocation, turn: { id: string; text: string; images: readonly string[] }, signal: AbortSignal): Promise<void>;
+  finished(location: SessionLocation): void;
+};
 type Running = { controller: AbortController; task: Promise<void>; account: string; epoch: number; status: "cancelled" | "interrupted" };
 const key = (location: SessionLocation) => `${location.projectId}:${location.sessionId}`;
 export class Turns extends EventEmitter {
@@ -25,7 +31,7 @@ export class Turns extends EventEmitter {
   private failedWrites = new Map<string, TurnSnapshot>();
   private closed = false;
   constructor(private sessions: Sessions, private auth: CodexAuth, private models: Pick<CodexModels, "validateSelection"> & Partial<Pick<CodexModels, "supportsImages" | "contextWindow">>,
-    private client: Pick<CodexInferenceClient, "run"> = new CodexInferenceClient(), private bash?: BashRuntime, private files?: FileTools) {
+    private client: Pick<CodexInferenceClient, "run"> = new CodexInferenceClient(), private bash?: BashRuntime, private files?: FileTools, private workspace?: TurnWorkspace) {
     super();
     for (const location of sessions.snapshot().sessions) {
       try { sessions.publish(sessions.turns(location, (store) => store.recover())); }
@@ -64,6 +70,8 @@ export class Turns extends EventEmitter {
     for (const running of this.active.values()) if (!account || account.key !== running.account || account.epoch !== running.epoch) running.controller.abort();
     if (account) for (const location of this.sessions.snapshot().sessions) this.backgroundCompleted(location);
   };
+  /** Whether a response or compaction is running in the session. */
+  isRunning(location: SessionLocation) { return this.active.has(key(location)); }
   snapshot(location: SessionLocation) { return this.failedWrites.get(key(location)) ?? this.sessions.turns(location, (store) => store.snapshot()); }
   private assertImageModel(account: string, settings: ModelSelection, input: unknown[]) {
     if (hasImageInput(input) && this.models.supportsImages?.(account, settings.modelId) === false) throw turnInvalid("This model does not accept images. Choose an image-capable model; your attachments have been kept.");
@@ -96,7 +104,7 @@ export class Turns extends EventEmitter {
     const running: Running = { controller, task: Promise.resolve(), account: account.key, epoch: account.epoch, status: "cancelled" };
     this.active.set(key(input), running);
     this.sessions.publish(saved); this.emit("change", key(input));
-    running.task = Promise.resolve().then(() => this.execute(input, settings, account, running));
+    running.task = Promise.resolve().then(() => this.execute(input, settings, account, running, [], false, { text: input.text, images: input.images ?? [] }));
     return saved;
   }
   async compact(input: SessionLocation & { revision: number; requestId: string; accountKey: string }) {
@@ -127,7 +135,8 @@ export class Turns extends EventEmitter {
     return saved;
   }
   private async execute(location: SessionLocation & { requestId: string }, settings: ModelSelection,
-    account: NonNullable<ReturnType<CodexAuth["usageSession"]>>, running: Running, initialOutput: unknown[] = [], manual = false) {
+    account: NonNullable<ReturnType<CodexAuth["usageSession"]>>, running: Running, initialOutput: unknown[] = [], manual = false,
+    userMessage?: { text: string; images: readonly string[] }) {
     const startedAt = Date.now();
     let text = "", delivered = "", storageFailed = false;
     const checkpoint = () => {
@@ -145,6 +154,7 @@ export class Turns extends EventEmitter {
     let message: string | null = null, output: unknown[] = [...initialOutput];
     try {
       running.controller.signal.throwIfAborted();
+      if (userMessage && this.workspace) await this.workspace.prepare(location, { id: location.requestId, ...userMessage }, running.controller.signal);
       const supportsImages = this.models.supportsImages?.(account.key, settings.modelId) !== false;
       const request = { ...account, settings, input: [], sessionId: location.sessionId, supportsImages };
       const client: Pick<CodexInferenceClient, "run"> = { run: (next, stream, signal) => {
@@ -170,7 +180,7 @@ export class Turns extends EventEmitter {
     } catch (error) {
       status = running.controller.signal.aborted ? running.status : "failed";
       message = storageFailed ? "Could not save the response. Check disk space and permissions."
-        : error instanceof FilePersistenceFailure ? error.message
+        : error instanceof FilePersistenceFailure || error instanceof WorktreeSetupFailure ? error.message
         : status === "cancelled" ? manual ? "Compaction stopped. Your full history was preserved." : "Response stopped. It was not replayed."
         : status === "interrupted" ? manual ? "Flame stopped before compaction finished. Your full history was preserved." : "Flame stopped before this response finished. It was not replayed."
         : error instanceof InferenceFailure ? error.message : manual ? "Could not compact this conversation. Your history was preserved." : "Could not complete this response. It was not replayed.";
@@ -185,6 +195,7 @@ export class Turns extends EventEmitter {
         message: "The response could not be saved. Check disk space, then restart Flame to recover. It will not be replayed.", revision: -1, entryId: null });
     } finally {
       this.active.delete(key(location)); this.emit("change", key(location));
+      if (!manual) this.workspace?.finished(location);
       for (const session of this.sessions.snapshot().sessions) this.backgroundCompleted(session);
     }
   }

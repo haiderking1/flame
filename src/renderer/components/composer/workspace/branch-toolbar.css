@@ -1,0 +1,34 @@
+/* T3 Code's context strip under the composer: where the session works and on which branch. */
+.branch-toolbar { display: flex; align-items: center; gap: 4px; min-width: 0; margin: 6px 4px 0; container: branch-toolbar / inline-size; }
+.branch-toolbar .composer-settings__control { height: 26px; padding: 0 8px; font-size: 13px; }
+.branch-toolbar__branch { min-width: 0; margin-left: auto; }
+.branch-toolbar__trigger { min-width: 0; }
+.branch-toolbar__trigger svg:first-child { width: 14px; height: 14px; }
+.branch-toolbar__static { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; color: #858585; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.branch-toolbar__static svg { width: 14px; height: 14px; flex-shrink: 0; }
+.branch-toolbar__error { flex-basis: 100%; margin: 4px 8px 0; color: #fb414a; font-size: 12px; overflow-wrap: anywhere; }
+.branch-toolbar { flex-wrap: wrap; }
+@container branch-toolbar (max-width: 360px) { .branch-toolbar__trigger:not(.branch-toolbar__branch) .composer-settings__label { display: none; } }
+
+.branch-menu { position: fixed; inset: auto; margin: 0; padding: 0; width: min(300px, calc(100vw - 16px)); box-sizing: border-box; border: 1px solid var(--dropdown-border); border-radius: 12px;
+  background: var(--dropdown-surface); color: var(--dropdown-text); box-shadow: var(--dropdown-shadow); backdrop-filter: var(--dropdown-blur); visibility: hidden; overflow: hidden; font-size: 12px; }
+.branch-menu:popover-open { display: flex; flex-direction: column; }
+.branch-picker { width: min(340px, calc(100vw - 16px)); }
+.branch-menu__list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px; outline: none; }
+.branch-menu__group { margin: 4px 8px 6px; color: var(--dropdown-muted); font-size: 11px; font-weight: 500; }
+.branch-menu__item { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
+.branch-menu__item > svg { width: 14px; height: 14px; flex-shrink: 0; color: #a3a3a3; }
+.branch-menu__item[data-active] { background: var(--dropdown-row-active); }
+.branch-menu__name { display: flex; flex-direction: column; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.branch-menu__name small { overflow: hidden; color: var(--dropdown-muted); font-size: 11px; text-overflow: ellipsis; direction: rtl; text-align: left; }
+.branch-menu__check { margin-left: auto; color: var(--dropdown-text) !important; }
+.branch-menu__badge { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; background: #ffffff0d; color: var(--dropdown-muted); font-size: 10px; line-height: 16px; }
+.branch-menu__status { margin: 0; padding: 8px 12px; color: var(--dropdown-muted); text-align: center; }
+.branch-picker__search { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border-bottom: 1px solid var(--dropdown-divider); color: #737373; flex-shrink: 0; }
+.branch-picker__search:focus-within { border-bottom-color: var(--accent); color: #a3a3a3; }
+.branch-picker__search svg { width: 15px; height: 15px; flex-shrink: 0; }
+.branch-picker__search input { width: 100%; min-width: 0; padding: 0; border: 0; outline: none; background: transparent; color: var(--dropdown-text); font: inherit; font-size: 12px; }
+.branch-picker__list { max-height: 260px; }
+.branch-picker__footer { display: flex; padding: 8px 12px; border-top: 1px solid var(--dropdown-divider); flex-shrink: 0; }
+.branch-picker__footer label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.branch-picker__footer input { accent-color: var(--accent); }

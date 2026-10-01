@@ -1,6 +1,8 @@
 import { Profiler, useRef, useState } from "react";
 import { recordCommit } from "../../lib/performance";
 import { Composer } from "../composer/Composer";
+import { BranchToolbar } from "../composer/workspace/BranchToolbar";
+import { BranchMismatchBanner } from "../composer/workspace/BranchMismatchBanner";
 import { useSessions } from "./SessionContext";
 import { SessionDialog } from "./SessionDialog";
 import "./session-workspace.css";
@@ -40,11 +42,13 @@ export function SessionWorkspace() {
         {sessions.dirty && <><button disabled={sessions.busy} onClick={() => { void sessions.flushDraft().catch(() => {}); }}>Retry save</button>
           <button disabled={sessions.busy} onClick={() => setDiscarding(true)}>Discard local draft</button></>}
       </div>}
+      <BranchMismatchBanner />
       <Composer key={active ? `${active.projectId}:${active.sessionId}` : sessions.projectDraftId ?? "empty"} draft={sessions.draft} onDraftChange={sessions.editDraft}
         readOnly={!sessions.canCompose || sessions.transitioning} onSend={sessions.canCompose ? sessions.send : undefined}
         imageLocation={sessions.imageLocation} prepareAttachments={sessions.prepareAttachments}
         onSendStart={preview.begin} pendingSend={!!pending}
         onStop={sessions.running ? () => { void sessions.stop(); } : undefined} stopLabel={sessions.turn?.phase === "compacting" ? "Stop compaction" : "Stop response"} saveOnly={!sessions.projectDraftId && !active?.settings} />
+      <BranchToolbar />
     </div>
     {discarding && <SessionDialog title="Discard unsaved draft?" busy={sessions.busy} error={sessions.error}
       onClose={close} action="Discard draft" destructive onSubmit={() => { sessions.discardDraft(); close(); }}>

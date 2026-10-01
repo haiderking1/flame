@@ -19,7 +19,7 @@ test('Git status parsing preserves whitespace, newline paths, and rename records
   assert.equal(safeGitMessage(`token ghp_${'a'.repeat(36)} leaked`), 'token [redacted] leaked');
 });
 test('initialization, selected-file commits, all-change commits and duplicate submissions are durable and idempotent', async t => {
-  const f = await gitFixture(t); assert.equal((await f.service.status(f.projectId)).repository, false);
+  const f = await gitFixture(t); assert.equal((await f.service.status({ projectId: f.projectId })).repository, false);
   const initialize = f.input('init', { message: '' }); const accepted = await Promise.all([f.service.start(initialize), f.service.start(initialize)]);
   assert.equal(accepted[0].requestId, accepted[1].requestId);
   const initialized = await f.terminal(initialize.requestId); assert.equal(initialized.state, 'completed'); assert.equal(initialized.result.toast.title, 'Initialized repository');
@@ -30,23 +30,23 @@ test('initialization, selected-file commits, all-change commits and duplicate su
   const request = f.input('commit', { filePaths: ['a.ts'] }); await f.service.start(request); const operation = await f.terminal(request.requestId);
   assert.equal(operation.state, 'completed'); assert.ok(operation.commit); assert.equal(operation.result.commit.subject, 'Add initial source');
   assert.match(operation.result.toast.title, /^Committed [0-9a-f]{7}$/); assert.deepEqual(operation.result.toast.cta, { kind: 'none' }, 'no remote, so nothing to push to');
-  const left = (await f.service.status(f.projectId)).files; assert.deepEqual(left.map(file => [file.path, file.index]), [['b.ts', '?']], 'unselected files stay uncommitted, even ones staged before');
+  const left = (await f.service.status({ projectId: f.projectId })).files; assert.deepEqual(left.map(file => [file.path, file.index]), [['b.ts', '?']], 'unselected files stay uncommitted, even ones staged before');
   assert.equal((await f.service.start(request)).commit, operation.commit); await delay(30);
   assert.equal(await f.count(), 1);
   await assert.rejects(f.service.start({ ...request, message: 'Different' }), { code: 'INVALID' });
   await assert.rejects(f.service.start({ ...request, filePaths: ['b.ts'] }), { code: 'INVALID' }, 'file selections are part of the request identity');
-  assert.equal((await f.run('commit', { message: 'Add remaining source\n\nWith a body line.' })).state, 'completed'); assert.equal((await f.service.status(f.projectId)).files.length, 0);
+  assert.equal((await f.run('commit', { message: 'Add remaining source\n\nWith a body line.' })).state, 'completed'); assert.equal((await f.service.status({ projectId: f.projectId })).files.length, 0);
   assert.equal((await gitCommand(f.cwd, ['log', '-1', '--format=%B'])).stdout.toString().trim(), 'Add remaining source\n\nWith a body line.');
 });
 test('commit and push, plain push, and push failure expose the actual commit outcome', async t => {
   const f = await gitFixture(t); await f.init(); const remote = await f.remote(); await writeFile(join(f.cwd, 'source.txt'), 'one\n');
   const first = await f.run('commit_push', { expectedBranch: 'main' }); assert.equal(first.state, 'completed'); assert.ok(first.commit);
   assert.equal(first.result.push.upstream, 'origin/main'); assert.equal(first.result.push.setUpstream, true); assert.match(first.result.toast.title, /^Pushed [0-9a-f]{7} to origin\/main$/);
-  assert.equal((await f.service.status(f.projectId)).upstream, 'origin/main');
+  assert.equal((await f.service.status({ projectId: f.projectId })).upstream, 'origin/main');
   await gitCommand(f.cwd, ['tag', '-a', 'private-tag', '-m', 'Do not push tags']);
   await gitCommand(f.cwd, ['config', 'push.followTags', 'true']); await gitCommand(f.cwd, ['config', 'remote.origin.mirror', 'true']);
   await gitCommand(f.cwd, ['commit', '--allow-empty', '-m', 'Local only']);
-  const ahead = await f.service.status(f.projectId); assert.equal(ahead.ahead, 1); assert.equal(ahead.behind, 0);
+  const ahead = await f.service.status({ projectId: f.projectId }); assert.equal(ahead.ahead, 1); assert.equal(ahead.behind, 0);
   const pushed = await f.run('push', { message: '', expectedBranch: 'main' }); assert.equal(pushed.state, 'completed'); assert.equal(pushed.result.push.skipped, false);
   assert.equal((await gitCommand(f.cwd, ['ls-remote', '--tags', remote])).stdout.length, 0, 'push ignores configured mirroring and follow-tags');
   const again = await f.run('push', { message: '', expectedBranch: 'main' }); assert.equal(again.result.push.skipped, true); assert.equal(again.result.toast.title, 'Already up to date');
@@ -105,7 +105,7 @@ test('private Git databases reject unsafe files and future versions without bloc
   assert.throws(() => new GitStore(filename), { code: 'STORAGE' });
   const verify = new DatabaseSync(filename); assert.equal(verify.prepare('PRAGMA user_version').get().user_version, 999); verify.close();
   const unavailable = openGitRuntime(filename, () => root);
-  await assert.rejects(unavailable.status(randomUUID()), { code: 'STORAGE' }); await assert.rejects(unavailable.hosting(), { code: 'STORAGE' }); await unavailable.close();
+  await assert.rejects(unavailable.status({ projectId: randomUUID() }), { code: 'STORAGE' }); await assert.rejects(unavailable.hosting(), { code: 'STORAGE' }); await unavailable.close();
   const alias = join(root, 'alias.sqlite'); await symlink(filename, alias); assert.throws(() => new GitStore(alias), { code: 'STORAGE' });
   const hard = join(root, 'hard.sqlite'); await link(filename, hard); assert.throws(() => new GitStore(hard), { code: 'STORAGE' }); await rm(hard);
   await chmod(filename, 0o644); assert.throws(() => new GitStore(filename), { code: 'STORAGE' });
@@ -129,9 +129,9 @@ test('version 1 operation history is converted in place without losing receipts'
 });
 test('view requests have a bounded concurrency lane independent of mutation claims', async t => {
   const f = await gitFixture(t);
-  const reads = Array.from({ length: 4 }, () => f.service.status(f.projectId));
-  await assert.rejects(f.service.status(f.projectId), { code: 'BUSY' }); await Promise.all(reads);
-  assert.equal((await f.service.status(f.projectId)).repository, false);
+  const reads = Array.from({ length: 4 }, () => f.service.status({ projectId: f.projectId }));
+  await assert.rejects(f.service.status({ projectId: f.projectId }), { code: 'BUSY' }); await Promise.all(reads);
+  assert.equal((await f.service.status({ projectId: f.projectId })).repository, false);
 });
 test('progress-write failure exposes the known commit, blocks further mutations and never replays the durable claim', async t => {
   const f = await gitFixture(t); await f.init(); await writeFile(join(f.cwd, 'source'), 'one');
@@ -139,20 +139,20 @@ test('progress-write failure exposes the known commit, blocks further mutations 
   f.store.update = operation => { if (operation.commit) throw new Error('simulated disk full'); update(operation); };
   const input = f.input('commit'); await f.service.start(input);
   let latest;
-  for (let i = 0; i < 300; i++) { latest = f.service.list(f.projectId)[0]; if (latest.state !== 'running') break; await delay(10); }
+  for (let i = 0; i < 300; i++) { latest = f.service.list({ projectId: f.projectId })[0]; if (latest.state !== 'running') break; await delay(10); }
   assert.equal(latest.state, 'interrupted'); assert.ok(latest.commit); assert.match(latest.detail, /could not be saved/);
   assert.equal(f.store.get(input.requestId).state, 'running', 'the original durable claim survives');
   assert.equal((await f.service.start(input)).state, 'interrupted', 'same-ID retry returns the uncertain result without another mutation');
   await assert.rejects(f.service.start(f.input('commit')), { code: 'STORAGE' });
   assert.equal(await f.count(), 1);
-  assert.equal((await f.service.status(f.projectId)).repository, true, 'read-only inspection still works');
+  assert.equal((await f.service.status({ projectId: f.projectId })).repository, true, 'read-only inspection still works');
 });
 test('opening files is confined to the project and reports missing files', async t => {
   const opened = [];
   const f = await gitFixture(t, { openPath: async path => { opened.push(path); } });
   await writeFile(join(f.cwd, 'note.md'), 'hi');
-  await f.service.open(f.projectId, 'note.md'); assert.deepEqual(opened, [join(await (await import('node:fs/promises')).realpath(f.cwd), 'note.md')]);
-  await assert.rejects(f.service.open(f.projectId, '../outside'), { code: 'NOT_FOUND' });
-  await symlink('/etc/passwd', join(f.cwd, 'escape')); await assert.rejects(f.service.open(f.projectId, 'escape'), { code: 'INVALID' });
-  await assert.rejects(f.service.open(f.projectId, 'missing.md'), { code: 'NOT_FOUND' });
+  await f.service.open({ projectId: f.projectId }, 'note.md'); assert.deepEqual(opened, [join(await (await import('node:fs/promises')).realpath(f.cwd), 'note.md')]);
+  await assert.rejects(f.service.open({ projectId: f.projectId }, '../outside'), { code: 'NOT_FOUND' });
+  await symlink('/etc/passwd', join(f.cwd, 'escape')); await assert.rejects(f.service.open({ projectId: f.projectId }, 'escape'), { code: 'INVALID' });
+  await assert.rejects(f.service.open({ projectId: f.projectId }, 'missing.md'), { code: 'NOT_FOUND' });
 });

@@ -20,16 +20,16 @@ async function project() {
 }
 
 test('search finds files and folders by fuzzy name, respects .gitignore and returns project-relative POSIX paths', async () => {
-  const root = await project(), search = new WorkspaceSearch(id => { if (id !== projectId) throw new Error('missing'); return root; });
+  const root = await project(), search = new WorkspaceSearch(target => { if (target.projectId !== projectId) throw new Error('missing'); return root; });
   try {
-    const app = await search.search(projectId, 'app', 20);
+    const app = await search.search({ projectId }, 'app', 20);
     assert.ok(app.entries.some(entry => entry.path === 'src/app.ts' && entry.kind === 'file'), JSON.stringify(app));
     assert.ok(!app.entries.some(entry => entry.path.startsWith('node_modules') || entry.path.startsWith('dist')), 'ignored paths stay out');
-    assert.deepEqual((await search.search(projectId, '@./src/comp', 20)).entries.find(entry => entry.kind === 'directory'), { path: 'src/components', kind: 'directory' }, 'folders come without a trailing slash');
-    assert.equal((await search.search(projectId, 'buton', 20)).entries[0]?.path.startsWith('src/components/'), true, 'typos still match');
-    const limited = await search.search(projectId, 's', 1);
+    assert.deepEqual((await search.search({ projectId }, '@./src/comp', 20)).entries.find(entry => entry.kind === 'directory'), { path: 'src/components', kind: 'directory' }, 'folders come without a trailing slash');
+    assert.equal((await search.search({ projectId }, 'buton', 20)).entries[0]?.path.startsWith('src/components/'), true, 'typos still match');
+    const limited = await search.search({ projectId }, 's', 1);
     assert.equal(limited.entries.length, 1); assert.equal(limited.truncated, true);
-    await assert.rejects(search.search('22222222-2222-4222-8222-222222222222', 'app', 5), { code: 'NOT_FOUND' });
+    await assert.rejects(search.search({ projectId: '22222222-2222-4222-8222-222222222222' }, 'app', 5), { code: 'NOT_FOUND' });
   } finally { search.close(); await rm(root, { recursive: true, force: true }); }
 });
 
@@ -38,19 +38,19 @@ test('refresh picks up files the agent created, and idle indexes are released', 
   const opened = [];
   const search = new WorkspaceSearch(() => root, path => { const index = WorkspaceIndex.open(path); opened.push(index); return index; }, 300);
   try {
-    assert.equal((await search.search(projectId, 'newfile', 5)).entries.length, 0);
+    assert.equal((await search.search({ projectId }, 'newfile', 5)).entries.length, 0);
     await writeFile(join(root, 'src', 'newfile.ts'), 'x\n');
-    search.refresh(projectId); search.refresh(projectId);
+    search.refresh(root); search.refresh(root);
     let found = false;
-    for (let i = 0; i < 50 && !found; i++) { found = (await search.search(projectId, 'newfile', 5)).entries.some(entry => entry.path === 'src/newfile.ts'); if (!found) await delay(100); }
+    for (let i = 0; i < 50 && !found; i++) { found = (await search.search({ projectId }, 'newfile', 5)).entries.some(entry => entry.path === 'src/newfile.ts'); if (!found) await delay(100); }
     assert.ok(found, 'a new file becomes searchable');
     assert.equal(opened.length, 1, 'searches share one index');
     await delay(500);
-    await search.search(projectId, 'app', 5);
+    await search.search({ projectId }, 'app', 5);
     assert.equal(opened.length, 2, 'an idle index is released and rebuilt on demand');
-    search.refresh('unknown');
+    search.refresh('/unknown');
   } finally { search.close(); await rm(root, { recursive: true, force: true }); }
-  await assert.rejects(search.search(projectId, 'app', 5), { code: 'UNAVAILABLE' }, 'closed search refuses work');
+  await assert.rejects(search.search({ projectId }, 'app', 5), { code: 'UNAVAILABLE' }, 'closed search refuses work');
 });
 
 test('queries drop the characters people type before paths', () => {

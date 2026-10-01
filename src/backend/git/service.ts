@@ -12,6 +12,7 @@ import { RemoteStatus } from "./remote-status.js";
 import { hostings } from "./hosting/index.js";
 import { runAction } from "./actions/run.js";
 import type { GitWriter } from "./writer/writer.js";
+import type { WorkspaceTarget } from "../../contracts/workspace-target.js";
 
 const COMMIT_ACTIONS = new Set<GitStart["action"]>(["commit", "commit_push", "commit_push_pr"]);
 const HOOK_OUTPUT_INTERVAL_MS = 250;
@@ -23,8 +24,8 @@ export type GitServiceOptions = {
   writer?: GitWriter;
   // Opens a file in the user's default application; absent where no desktop shell is available.
   openPath?: (path: string) => Promise<void>;
-  // Called when remote-derived status (fetched refs, change requests) changed, so clients recheck.
-  changed?: (projectId: string) => void;
+  // Called with a workspace root when its status may have changed (an action ran, or fetched refs or change requests changed).
+  changed?: (root: string) => void;
 };
 
 export class GitService extends EventEmitter {
@@ -33,23 +34,32 @@ export class GitService extends EventEmitter {
   private readonly remote: RemoteStatus;
   private closed = false;
   private reads = 0;
-  constructor(private readonly store: GitStore, private readonly projectPath: (id: string) => string, private readonly options: GitServiceOptions = {}) {
+  constructor(private readonly store: GitStore, private readonly root: (target: WorkspaceTarget) => string, private readonly options: GitServiceOptions = {}) {
     super();
-    this.remote = new RemoteStatus(projectId => this.options.changed?.(projectId), root => this.active.has(root));
+    this.remote = new RemoteStatus(root => this.options.changed?.(root), root => this.active.has(root));
   }
-  list(projectId: string) {
-    this.projectPath(projectId);
-    try { return this.health.merge(projectId, this.store.list(projectId)); }
-    catch (error) { const uncertain = this.health.project(projectId); if (uncertain.length) return uncertain; throw error; }
+  /** Recent actions in the target's folder: sessions sharing a worktree, or the project checkout, see the same list. */
+  list(target: WorkspaceTarget) {
+    const root = this.root(target), roots = new Map<string, string | null>();
+    const here = (operation: GitOperation) => {
+      const key = `${operation.projectId}\0${operation.sessionId ?? ""}\0${operation.worktreePath ?? ""}`;
+      if (!roots.has(key)) roots.set(key, this.rootOf(operation));
+      return roots.get(key) === root;
+    };
+    try { return this.health.merge(target.projectId, this.store.list(target.projectId)).filter(here); }
+    catch (error) { const uncertain = this.health.project(target.projectId).filter(here); if (uncertain.length) return uncertain; throw error; }
   }
+  private rootOf(operation: WorkspaceTarget) { try { return this.root(operation); } catch { return null; } }
   private async view<T>(work: () => Promise<T>): Promise<T> {
     if (this.closed) throw new GitError({ code: "UNAVAILABLE", message: "Git services are shutting down." });
     if (this.reads >= 4) throw new GitError({ code: "BUSY", message: "Git views are busy. Wait for the current reads, then refresh." });
     this.reads++;
     try { return await work(); } finally { this.reads--; }
   }
-  status(projectId: string, signal?: AbortSignal) { return this.view(async () => this.remote.attach(await repositoryStatus(projectId, this.projectPath(projectId), signal, true))); }
-  file(input: { projectId: string; path: string; mode: "working" | "staged" }, signal?: AbortSignal) { return this.view(() => readGitFile(this.projectPath(input.projectId), input.path, input.mode, signal)); }
+  status(target: WorkspaceTarget, signal?: AbortSignal) {
+    return this.view(async () => { const root = this.root(target); return this.remote.attach(await repositoryStatus(target.projectId, root, signal, true), root); });
+  }
+  file(input: WorkspaceTarget & { path: string; mode: "working" | "staged" }, signal?: AbortSignal) { return this.view(() => readGitFile(this.root(input), input.path, input.mode, signal)); }
   /** Which hosting CLIs are installed and signed in, for publishing repositories. */
   async hosting(signal?: AbortSignal): Promise<GitHosting[]> {
     const cwd = process.cwd();
@@ -60,11 +70,11 @@ export class GitService extends EventEmitter {
       } catch (error) { return { kind: hosting.kind, name: hosting.name, host: hosting.host, ready: false, account: null, hint: error instanceof GitError ? error.message : `${hosting.name} is unavailable.`, protocol: "https" as const }; }
     }));
   }
-  /** Opens a file inside the project with the user's default application. */
-  async open(projectId: string, path: string) {
+  /** Opens a file inside the target's folder with the user's default application. */
+  async open(workspace: WorkspaceTarget, path: string) {
     if (!this.options.openPath) throw new GitError({ code: "UNAVAILABLE", message: "Opening files is unavailable here." });
     if (!path || path.includes("\0")) throw new GitError({ code: "INVALID", message: "This file path cannot be opened." });
-    const root = await realpath(this.projectPath(projectId));
+    const root = await realpath(this.root(workspace));
     let target: string;
     try { target = await realpath(resolve(root, path)); await lstat(target); }
     catch { throw new GitError({ code: "NOT_FOUND", message: "This file no longer exists. Refresh Git status." }); }
@@ -80,7 +90,7 @@ export class GitService extends EventEmitter {
     this.health.assertWritable();
     const old = this.store.get(input.requestId);
     if (old) return this.store.claim(input);
-    const cwd = await realpath(this.projectPath(input.projectId));
+    const cwd = await realpath(this.root(input));
     if (this.closed) throw new GitError({ code: "UNAVAILABLE", message: "Git services are shutting down." });
     const changed = this.health.find(input); if (changed) return changed;
     this.health.assertWritable();
@@ -90,7 +100,7 @@ export class GitService extends EventEmitter {
     if (this.active.size >= 4) throw new GitError({ code: "BUSY", message: "Four Git actions are already running. Wait for one to finish." });
     this.validate(input);
     const operation = this.store.claim(input), controller = new AbortController();
-    const done = Promise.resolve().then(() => this.execute(cwd, operation, controller.signal)).finally(() => { this.active.delete(cwd); this.remote.invalidate(cwd); this.options.changed?.(input.projectId); });
+    const done = Promise.resolve().then(() => this.execute(cwd, operation, controller.signal)).finally(() => { this.active.delete(cwd); this.remote.invalidate(cwd); this.options.changed?.(this.rootOf(input) ?? cwd); });
     this.active.set(cwd, { controller, done }); this.emit("change", input.projectId);
     void done.catch(() => { /* A storage failure leaves the durable claim interrupted on recovery. */ });
     return operation;

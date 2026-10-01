@@ -34,7 +34,7 @@ function setup(t, respond) {
     events.push({ type: 'response.completed', response: { status: 'completed', output: [] } });
     return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''));
   });
-  const bash = new BashRuntime(sessions, id => { assert.equal(id, project.id); return root; });
+  const bash = new BashRuntime(sessions, location => { assert.equal(location.projectId, project.id); return root; });
   const turns = new Turns(sessions, auth, models, client, bash);
   t.after(async () => { await turns.close(); bash.close(); await delay(30); projects.close(); rmSync(root, { recursive: true, force: true }); });
   const input = { ...location, revision: sessions.read(location).revision, requestId: randomUUID(), text: 'Do the task', accountKey: account.key };

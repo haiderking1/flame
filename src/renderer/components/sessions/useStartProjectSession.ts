@@ -2,6 +2,7 @@ import { useAtomSet } from "@effect/atom-react";
 import type { ModelSelection } from "@contracts/models";
 import { SessionError } from "@contracts/sessions";
 import { changeSession, createSession, sessionHistory } from "../../backend/sessions";
+import { configureWorkspace } from "../../backend/worktrees";
 import { startTurn, stopTurn } from "../../backend/turns";
 import { useUploadImages } from "../images/useUploadImages";
 import { saveImageDraft, type DraftImage } from "../images/draft-storage";
@@ -14,6 +15,7 @@ export function useStartProjectSession() {
   const change = useAtomSet(changeSession, { mode: "promise" });
   const history = useAtomSet(sessionHistory, { mode: "promise" });
   const run = useAtomSet(startTurn, { mode: "promise" });
+  const placeWorkspace = useAtomSet(configureWorkspace, { mode: "promise" });
   return async (projectId: string, draft: ProjectDraft, accountKey: string | null, settings: ModelSelection | null,
     persist: (value: ProjectDraft) => void, images: readonly DraftImage[] = [], signal?: AbortSignal) => {
     if (draft.submittedText === null && (!accountKey || !settings)) throw new SessionError({ code: "INVALID", message: "Choose a connected model before sending." });
@@ -40,6 +42,10 @@ export function useStartProjectSession() {
     if (saved.draft !== draft.text) saved = await change({ ...location, revision: saved.revision, type: "draft", draft: draft.text });
     if (JSON.stringify(saved.settings) !== JSON.stringify(settings)) {
       saved = await change({ ...location, revision: saved.revision, type: "configure", accountKey, settings });
+    }
+    // Where the session works is settled before its first message, which creates a chosen new worktree.
+    if (draft.workspace && JSON.stringify(saved.workspace) !== JSON.stringify(draft.workspace)) {
+      saved = await placeWorkspace({ ...location, revision: saved.revision, workspace: draft.workspace });
     }
     await upload(location, images, signal);
     persist({ ...draft, submittedText: draft.text });

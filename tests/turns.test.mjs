@@ -200,5 +200,5 @@ test('migration preserves v1 IDs, metadata, drafts, settings and references', (t
   assert.equal(migrated.read().revision, 7); assert.equal(migrated.read().draft, 'Old draft'); assert.equal(migrated.read().leafId, id);
   assert.equal(migrated.history(null).entries[0].text, 'Old message'); migrated.close();
   const check = new DatabaseSync(file);
-  assert.equal(check.prepare('PRAGMA user_version').get().user_version, 9); assert.deepEqual(check.prepare('PRAGMA foreign_key_check').all(), []); check.close();
+  assert.equal(check.prepare('PRAGMA user_version').get().user_version, 10); assert.deepEqual(check.prepare('PRAGMA foreign_key_check').all(), []); check.close();
 });

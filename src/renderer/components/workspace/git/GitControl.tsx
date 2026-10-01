@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { gitOperations } from "../../../backend/git";
+import type { WorkspaceKey } from "../../../backend/workspaceKey";
 import { WorkspaceIcon, type WorkspaceIconName } from "../WorkspaceIcon";
 import { useGitStatus } from "./useGitStatus";
 import { useGitStatusTriggers } from "./useGitStatusTriggers";
@@ -21,14 +22,14 @@ function quickIcon(quick: QuickAction): WorkspaceIconName {
   if (quick.kind === "run_action") return quick.action === "commit" ? "commit" : quick.action === "create_pr" || quick.action === "commit_push_pr" ? "pull-request" : "cloud-upload";
   return quick.label === "Commit" ? "commit" : quick.label === "Push" ? "cloud-upload" : "info";
 }
-/** t3code's Git control: one context-aware action button, an options menu, and the commit, publish and default-branch dialogs. */
-export function GitControl({ projectId }: { projectId: string }) {
-  const git = useGitStatus(projectId), { status, error, refresh } = git;
-  useGitStatusTriggers(projectId, refresh);
-  const operations = useAtomValue(gitOperations(projectId));
+/** t3code's Git control for a workspace (project checkout or session worktree): one context-aware action button, an options menu, and the commit, publish and default-branch dialogs. */
+export function GitControl({ workspace }: { workspace: WorkspaceKey }) {
+  const git = useGitStatus(workspace), { status, error, refresh } = git;
+  useGitStatusTriggers(workspace, refresh);
+  const operations = useAtomValue(gitOperations(workspace));
   const list = AsyncResult.isSuccess(operations) ? operations.value : null;
   const running = !!list?.some(operation => operation.state === "running");
-  const runner = useGitActionRunner(projectId, status, list, useGitModel());
+  const runner = useGitActionRunner(workspace, status, list, useGitModel());
   const busy = running || runner.starting;
   const [dialog, setDialog] = useState<"commit" | "publish" | null>(null);
   const menuId = useId(), anchor = `--git-menu-${menuId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -47,9 +48,9 @@ export function GitControl({ projectId }: { projectId: string }) {
     else if (quick.kind === "open_publish") setDialog("publish");
   }
   const dialogs = <Suspense fallback={null}>
-    {dialog === "commit" && status && <CommitDialog projectId={projectId} status={status} onClose={() => { setDialog(null); options.current?.focus(); }}
+    {dialog === "commit" && status && <CommitDialog workspace={workspace} status={status} onClose={() => { setDialog(null); options.current?.focus(); }}
       onCommit={input => { setDialog(null); runner.runSafely({ action: "commit", ...input }); }} />}
-    {dialog === "publish" && <PublishDialog projectId={projectId} run={runner.run} onClose={() => { setDialog(null); primary.current?.focus(); void refresh("sync"); }} />}
+    {dialog === "publish" && <PublishDialog workspace={workspace} run={runner.run} onClose={() => { setDialog(null); primary.current?.focus(); void refresh("sync"); }} />}
     {runner.pending && <DefaultBranchDialog copy={runner.pending.copy} onChoose={runner.confirm} />}
   </Suspense>;
   if (status && !status.repository) {

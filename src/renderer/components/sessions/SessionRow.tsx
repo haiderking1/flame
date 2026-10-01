@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState, useSyncExternalStore } from "react";
 import type { Project } from "@contracts/projects";
 import type { SessionSummary } from "@contracts/sessions";
 import { sessionErrorMessage } from "../../backend/sessions";
@@ -7,6 +7,9 @@ import { useSessions } from "./SessionContext";
 import { SessionMenu } from "./SessionMenu";
 import openaiLogo from "../../assets/providers/openai.svg?no-inline";
 import { sessionTime } from "./sessionTime";
+import { WorkspaceIcon } from "../workspace/WorkspaceIcon";
+import { branchMismatch, folderName, movedWorkspace } from "../composer/workspace/workspaceLogic";
+import { gitStatusStore } from "../workspace/git/gitStatusStore";
 
 export function SessionRow({ session, project, now, onOpened, onDelete }: {
   now: number; session: SessionSummary; project?: Project; onOpened(): void; onDelete(session: SessionSummary): void;
@@ -23,6 +26,10 @@ export function SessionRow({ session, project, now, onOpened, onDelete }: {
   const optionsButton = useRef<HTMLButtonElement>(null);
   const menuId = useId();
   const active = workspace.document?.projectId === session.projectId && workspace.document.sessionId === session.sessionId;
+  // Reads the project checkout's cached Git status only; the row never starts a status read of its own.
+  const subscribe = useCallback((listener: () => void) => gitStatusStore.subscribe(session.projectId, listener), [session.projectId]);
+  const checkout = useSyncExternalStore(subscribe, () => gitStatusStore.snapshot(session.projectId));
+  const mismatch = branchMismatch(session.workspace, checkout.status?.branch ?? null);
   function startRename() {
     editValue.current = session.title; setEditing(session.title); setError(null);
   }
@@ -75,7 +82,11 @@ export function SessionRow({ session, project, now, onOpened, onDelete }: {
       }}>
       <span className="session-list__project">{project && <ProjectIcon project={project} />}<span className="session-list__project-name">{project?.name ?? "Project"}</span><time className="session-list__time" dateTime={new Date(session.updatedAt).toISOString()} title={new Date(session.updatedAt).toLocaleString()}>{sessionTime(session.settledAt ?? session.updatedAt, now)}</time></span>
       <span className="session-list__title" title={session.title}>{session.title}</span>
-      <span className="session-list__detail"><img className="session-list__provider" src={openaiLogo} alt="OpenAI" title="OpenAI" width="14" height="14" /></span>
+      <span className="session-list__detail">{session.workspace.worktreePath && <span className="session-list__worktree"
+        title={`Worktree: ${folderName(session.workspace.worktreePath)}${session.workspace.branch ? ` (${session.workspace.branch})` : ""}`}>
+        <WorkspaceIcon name="folder-git-2" /><span className="session-list__branch">{session.workspace.branch ?? folderName(session.workspace.worktreePath)}</span></span>}
+        {mismatch && <span className="session-list__mismatch" title="You're currently checked out on another branch." aria-label={`Last ran on ${mismatch.threadBranch}; the checkout is on ${mismatch.currentBranch}`}><WorkspaceIcon name="circle-alert" /></span>}
+        <img className="session-list__provider" src={openaiLogo} alt="OpenAI" title="OpenAI" width="14" height="14" /></span>
     </button>
     {editing !== null ? <input autoFocus className="session-list__rename" aria-label="Thread title" aria-invalid={!!error} aria-describedby={error ? `${menuId}-error` : undefined}
       value={editing} maxLength={160} readOnly={saving} onFocus={event => event.currentTarget.select()}
@@ -95,6 +106,10 @@ export function SessionRow({ session, project, now, onOpened, onDelete }: {
         setMenu({ x: bounds.right - 128, y: bounds.bottom + 4 });
       }}><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="3" cy="8" r="1" /><circle cx="8" cy="8" r="1" /><circle cx="13" cy="8" r="1" /></svg></button></div>}
     {error && <p id={`${menuId}-error`} className="session-list__warning" role="alert">{error}</p>}
-    {menu && <SessionMenu id={menuId} {...menu} trigger={optionsButton} settled={session.settledAt !== null} onSettle={() => { void toggleSettled(); }} onClose={closeMenu} onRename={startRename} onDelete={() => onDelete(session)} />}
+    {menu && <SessionMenu id={menuId} {...menu} trigger={optionsButton} settled={session.settledAt !== null} onSettle={() => { void toggleSettled(); }} onClose={closeMenu} onRename={startRename} onDelete={() => onDelete(session)}
+      branch={session.workspace.branch} onNewOnBranch={() => {
+        // T3 Code's "New thread on <branch>": the new session shares this one's worktree, or its branch in the checkout.
+        void workspace.newSession(session.projectId, movedWorkspace(session.workspace.worktreePath, session.workspace.branch)).then(onOpened, error => setError(sessionErrorMessage(error)));
+      }} />}
   </div>;
 }

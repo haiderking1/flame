@@ -18,8 +18,11 @@ export function useComposerOverlay(composer: RefObject<HTMLDivElement | null>, h
       if (timeline && following) timeline.scrollTop = timeline.scrollHeight;
     };
     measure();
-    const observer = new ResizeObserver(measure);
+    // Applied on the next frame: changing the reserve inside the observer callback resizes the history's own observed rows in
+    // the same frame, which the browser reports as a ResizeObserver loop.
+    let frame = 0;
+    const observer = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure); });
     observer.observe(element);
-    return () => { observer.disconnect(); host.style.removeProperty("--composer-overlay-height"); };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); host.style.removeProperty("--composer-overlay-height"); };
   }, [composer, history]);
 }

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useAtomSet } from "@effect/atom-react";
 import type { GitStatus } from "@contracts/git";
+import { workspaceProject, type WorkspaceKey } from "../../../backend/workspaceKey";
 import { gitOpen, gitErrorMessage } from "../../../backend/git";
 import { toastStore } from "../../toasts/toastStore";
 import { GitDialogFrame } from "./GitDialogFrame";
@@ -17,7 +18,7 @@ function Checkbox({ checked, indeterminate, label, onChange }: { checked: boolea
   return <input ref={element => { ref.current = element; if (element) element.indeterminate = !!indeterminate; }} type="checkbox" className="git-checkbox" aria-label={label} checked={checked} onChange={onChange} />;
 }
 /** t3code's commit dialog: branch, the files to commit (Edit to exclude some), and an optional message the model fills in when empty. */
-export default function CommitDialog({ projectId, status, onClose, onCommit }: { projectId: string; status: GitStatus; onClose(): void;
+export default function CommitDialog({ workspace, status, onClose, onCommit }: { workspace: WorkspaceKey; status: GitStatus; onClose(): void;
   onCommit(input: { message: string; filePaths: readonly string[] | null; featureBranch: boolean }): void }) {
   const open = useAtomSet(gitOpen, { mode: "promise" });
   const [message, setMessage] = useState(""), [editing, setEditing] = useState(false), [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
@@ -26,7 +27,7 @@ export default function CommitDialog({ projectId, status, onClose, onCommit }: {
   const totals = selected.reduce((sum, file) => { const counts = lines(file); return { additions: sum.additions + counts.additions, deletions: sum.deletions + counts.deletions }; }, { additions: 0, deletions: 0 });
   const toggle = (path: string) => setExcluded(current => { const next = new Set(current); if (next.has(path)) next.delete(path); else next.add(path); return next; });
   const submit = (featureBranch: boolean) => onCommit({ message, filePaths: allSelected ? null : selected.map(file => file.path), featureBranch });
-  const openFile = (path: string) => { void open({ projectId, path }).catch(error => { const text = gitErrorMessage(error); toastStore.show({ id: `git-open:${path}`, scope: projectId, type: "error", title: "Unable to open file", description: text, copy: text }); }); };
+  const openFile = (path: string) => { void open({ workspace, path }).catch(error => { const text = gitErrorMessage(error); toastStore.show({ id: `git-open:${path}`, scope: workspaceProject(workspace), type: "error", title: "Unable to open file", description: text, copy: text }); }); };
   return <GitDialogFrame title="Commit changes" description="Review and confirm your commit. Leave the message blank to auto-generate one." onClose={onClose} footer={<>
     <button type="button" className="git-button git-button--outline" onClick={onClose}>Cancel</button>
     <button type="button" className="git-button git-button--outline" disabled={noneSelected} onClick={() => submit(true)}>Commit on new branch</button>

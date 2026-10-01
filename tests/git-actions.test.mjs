@@ -57,22 +57,22 @@ test('commit on a new branch names it from the model and leaves the default bran
 test('status reports ahead/behind, the default branch, the provider and the open pull request', async t => {
   const gh = await fakeGitHub(t);
   const f = await published(t, { gh });
-  let status = await f.service.status(f.projectId);
+  let status = await f.service.status({ projectId: f.projectId });
   assert.deepEqual([status.branch, status.upstream, status.ahead, status.behind, status.isDefaultBranch, status.defaultBranch, status.hasPrimaryRemote], ['main', 'origin/main', 0, 0, true, 'main', true]);
   assert.deepEqual(status.provider, { kind: 'github', name: 'GitHub', host: 'github.com' });
   await gitCommand(f.cwd, ['switch', '-c', 'feature/x']); await gitCommand(f.cwd, ['commit', '--allow-empty', '-m', 'Work']);
-  status = await f.service.status(f.projectId);
+  status = await f.service.status({ projectId: f.projectId });
   assert.deepEqual([status.upstream, status.ahead, status.aheadOfDefault, status.isDefaultBranch], [null, 1, 1, false], 'without an upstream, ahead counts commits not on main');
   await gitCommand(f.cwd, ['push', '-u', 'origin', 'feature/x']);
   await gh.setPrs([{ number: 7, title: 'Work', url: 'https://github.com/acme/app/pull/7', baseRefName: 'main', headRefName: 'feature/x', state: 'OPEN', updatedAt: '2026-01-01T00:00:00Z', headRepositoryOwner: { login: 'acme' } }]);
   f.changed.length = 0;
-  let pr = (await f.service.status(f.projectId)).pr;
-  for (let i = 0; i < 300 && !pr; i++) { await delay(10); pr = (await f.service.status(f.projectId)).pr; }
-  assert.ok(f.changed.includes(f.projectId), 'clients are told to recheck when the lookup finds something new');
+  let pr = (await f.service.status({ projectId: f.projectId })).pr;
+  for (let i = 0; i < 300 && !pr; i++) { await delay(10); pr = (await f.service.status({ projectId: f.projectId })).pr; }
+  assert.ok(f.changed.includes(f.cwd), 'clients are told to recheck when the lookup finds something new');
   assert.deepEqual(pr, { number: 7, title: 'Work', url: 'https://github.com/acme/app/pull/7', baseBranch: 'main', headBranch: 'feature/x', state: 'open' });
   const other = await gitFixture(t); await other.init(); await other.remote();
   await gitCommand(other.cwd, ['commit', '--allow-empty', '-m', 'one']);
-  const local = await other.service.status(other.projectId);
+  const local = await other.service.status({ projectId: other.projectId });
   assert.deepEqual([local.provider?.kind ?? null, local.ahead, local.hasPrimaryRemote], [null, 1, true], 'a local-path remote has no host; a never-pushed default branch counts every commit as unpushed');
 });
 
@@ -81,9 +81,9 @@ test('a background fetch notices remote commits and Pull fast-forwards them', as
   const peer = join(f.root, 'peer'); await gitCommand(f.root, ['clone', '--quiet', f.bare, peer]);
   for (const [key, value] of [['user.name', 'Peer'], ['user.email', 'peer@example.invalid'], ['commit.gpgSign', 'false']]) await gitCommand(peer, ['config', key, value]);
   await gitCommand(peer, ['commit', '--allow-empty', '-m', 'From a teammate']); await gitCommand(peer, ['push', 'origin', 'main']);
-  await f.service.status(f.projectId);
+  await f.service.status({ projectId: f.projectId });
   for (let i = 0; i < 300 && !f.changed.length; i++) await delay(10);
-  const behind = await f.service.status(f.projectId); assert.equal(behind.behind, 1, 'tracking refs were fetched in the background');
+  const behind = await f.service.status({ projectId: f.projectId }); assert.equal(behind.behind, 1, 'tracking refs were fetched in the background');
   const pulled = await f.run('pull', { message: '', expectedBranch: 'main' });
   assert.equal(pulled.state, 'completed'); assert.deepEqual(pulled.result.pull, { updated: true, branch: 'main', upstream: 'origin/main' }); assert.equal(pulled.result.toast.title, 'Pulled');
   assert.equal((await f.run('pull', { message: '', expectedBranch: 'main' })).result.toast.title, 'Already up to date');
@@ -148,7 +148,7 @@ test('publishing creates the repository, adds the remote and pushes the current 
   assert.deepEqual(done.result.publish, { repository: 'octo/new-app', url: 'https://github.com/octo/new-app', remote: 'origin', pushed: true, branch: 'main' });
   assert.equal(done.result.toast.title, 'Repository published');
   assert.deepEqual((await gh.calls()).find(args => args[0] === 'repo'), ['repo', 'create', 'octo/new-app', '--private']);
-  assert.equal((await f.service.status(f.projectId)).upstream, 'origin/main');
+  assert.equal((await f.service.status({ projectId: f.projectId })).upstream, 'origin/main');
   const unready = await gitFixture(t); await unready.init();
   await fakeGitHub(t, { authenticated: false });
   const failed = await unready.run('publish', { message: '', publish: { provider: 'github', repository: 'octo/other', visibility: 'public', remote: 'origin', protocol: 'ssh' } });
@@ -188,7 +188,7 @@ test('without a Git identity or a signed-in host, the commit stops before stagin
   const failed = await f.run('commit', { message: '', expectedBranch: 'main' });
   assert.equal(failed.state, 'failed'); assert.match(failed.detail, /doesn't know who you are.*gh auth login.*git config --global user\.name/);
   assert.equal(f.writer.prompts.length, 0, 'no message was generated');
-  assert.deepEqual((await f.service.status(f.projectId)).files.map(file => file.index), ['?'], 'nothing was staged');
+  assert.deepEqual((await f.service.status({ projectId: f.projectId })).files.map(file => file.index), ['?'], 'nothing was staged');
 });
 
 test('an SSH remote this computer cannot use explains how to switch to HTTPS', async t => {

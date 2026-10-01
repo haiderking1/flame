@@ -9,3 +9,4 @@
 .session-dialog button[data-destructive] { color: #e2aaa6; }
 .session-dialog button:disabled { opacity: .5; cursor: default; }
 .session-dialog input:focus { border-color: #ffffff38; }
+.session-dialog .session-dialog__path { margin: 4px 0; color: #ddd; font-family: var(--font-mono, ui-monospace, monospace); }

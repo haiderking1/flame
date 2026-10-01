@@ -1,6 +1,6 @@
 # Project instruction discovery
 
-The loader uses the session's project directory, not the backend process's working directory. It selects context files by probing exact filenames along the direct ancestor chain; it does not enumerate child directories or run shell searches.
+The loader uses the session's folder (its worktree, or the project checkout), not the backend process's working directory. It selects context files by probing exact filenames along the direct ancestor chain; it does not enumerate child directories or run shell searches.
 
 ## Selection and ordering
 
@@ -28,7 +28,7 @@ Regular repositories, sibling worktrees, bare-repository layouts, submodules, an
 
 ## Agent integration
 
-Each agent run loads context once before its first provider request, using the same project path as the tools. The resulting prompt is reused for all tool follow-ups in that run. New user runs and background continuations load context at their own start. No instruction refresh is performed between tool calls.
+Each agent run loads context once before its first provider request, using the same folder as the tools. The resulting prompt is reused for all tool follow-ups in that run. New user runs and background continuations load context at their own start. No instruction refresh is performed between tool calls.
 
 Tool targets do not trigger discovery. Nested instructions remain accessible through ordinary tools, and their contents are not automatically promoted into the system prompt. There is no mandatory Read-before-Bash rule, automatic nested instruction loading, changed-instruction gate, or deferred tool execution.
 

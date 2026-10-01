@@ -2,8 +2,9 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import "./session-menu.css";
 
-export function SessionMenu({ id, x, y, trigger, settled, onSettle, onClose, onRename, onDelete }: {
-  id: string; x: number; y: number; trigger: RefObject<HTMLButtonElement | null>; settled: boolean; onSettle(): void; onClose(restoreFocus: boolean): void; onRename(): void; onDelete(): void;
+export function SessionMenu({ id, x, y, trigger, settled, branch, onSettle, onClose, onRename, onDelete, onNewOnBranch }: {
+  id: string; x: number; y: number; trigger: RefObject<HTMLButtonElement | null>; settled: boolean; branch: string | null;
+  onSettle(): void; onClose(restoreFocus: boolean): void; onRename(): void; onDelete(): void; onNewOnBranch(): void;
 }) {
   const menu = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -16,7 +17,12 @@ export function SessionMenu({ id, x, y, trigger, settled, onSettle, onClose, onR
       const target = event.target as Node;
       if (!element.contains(target) && !trigger.current?.contains(target)) onClose(false);
     };
-    const repositioned = (event: Event) => { if (!element.contains(event.target as Node)) onClose(false); };
+    // Close when the row the menu belongs to moves: a scroll of something holding it, or the window resizing.
+    // Other panes (such as a streaming chat history) scrolling must not close it.
+    const repositioned = (event: Event) => {
+      const target = event.target;
+      if (event.type === "resize" || target === document || (target instanceof Node && !element.contains(target) && !!trigger.current && target.contains(trigger.current))) onClose(false);
+    };
     document.addEventListener("pointerdown", outside, true);
     window.addEventListener("resize", repositioned);
     document.addEventListener("scroll", repositioned, true);
@@ -44,6 +50,7 @@ export function SessionMenu({ id, x, y, trigger, settled, onSettle, onClose, onR
     }}>
     <button role="menuitem" type="button" onClick={() => { onClose(true); onRename(); }}>Rename</button>
     <button role="menuitem" type="button" onClick={() => { onClose(true); onSettle(); }}>{settled ? "Unsettle" : "Settle"}</button>
+    {branch && <button role="menuitem" type="button" title={`New thread on ${branch}`} onClick={() => { onClose(false); onNewOnBranch(); }}>New thread on {branch}</button>}
     <div className="session-menu__separator" role="separator" />
     <button role="menuitem" type="button" className="session-menu__delete" onClick={() => { onClose(true); onDelete(); }}>Delete</button>
   </div>, document.body);

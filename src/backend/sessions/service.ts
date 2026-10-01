@@ -8,6 +8,8 @@ import type { FileOperationStore } from "../file-tools/store.js";
 import type { TurnStore } from "./turn-store.js";
 import type { CompactionStore } from "./compaction-store.js";
 import { SessionRepository, summary } from "./repository.js";
+import type { WorkspaceRecord } from "./workspace-record.js";
+import type { SessionWorkspace } from "../../contracts/session-workspace.js";
 
 export class Sessions extends EventEmitter {
   private index: ReturnType<SessionRepository["list"]>;
@@ -55,9 +57,25 @@ export class Sessions extends EventEmitter {
     const validated = this.models.validateSelection(accountKey, settings);
     return this.publish(this.repository.use(location, (db) => db.configure(revision, validated)));
   }
+  workspace<T>(location: SessionLocation, work: (record: WorkspaceRecord) => T) { return this.repository.use(location, db => work(db.workspace)); }
+  /** The session's index entry, without opening its database. */
+  find(location: SessionLocation) {
+    return this.index.sessions.find(item => item.sessionId === location.sessionId && item.projectId === location.projectId) ?? null;
+  }
+  configureWorkspace(location: SessionLocation, revision: number, next: SessionWorkspace) {
+    return this.publish(this.repository.use(location, db => db.workspace.configure(revision, next)));
+  }
+  /** Records backend workspace progress; null when `change` declined. */
+  updateWorkspace(location: SessionLocation, change: (current: SessionWorkspace) => SessionWorkspace | null) {
+    const document = this.repository.use(location, db => db.workspace.update(change));
+    return document && this.publish(document);
+  }
+  /** Deletes a session; emits "removed" with its last summary, so its worktree can be kept track of. */
   remove(location: SessionLocation, revision: number) {
+    const removed = this.find(location);
     this.repository.remove(location, revision);
     this.index = { ...this.index, sessions: this.index.sessions.filter((item) => item.sessionId !== location.sessionId || item.projectId !== location.projectId) };
     this.emit("change");
+    if (removed) this.emit("removed", removed);
   }
 }

@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
-import { SessionId } from "./sessions.js";
+import { WorkspaceTarget } from "./workspace-target.js";
 
 export const WORKSPACE_SEARCH_MAX_LIMIT = 200;
 export const WorkspaceEntryKind = Schema.Literals(["file", "directory"]);
@@ -16,7 +16,7 @@ export class WorkspaceSearchError extends Schema.TaggedError<WorkspaceSearchErro
 export const WorkspaceSearchRpc = RpcGroup.make(
   Rpc.make("workspace.searchEntries", {
     payload: {
-      projectId: SessionId, query: Schema.String.check(Schema.isMaxLength(256)),
+      ...WorkspaceTarget.fields, query: Schema.String.check(Schema.isMaxLength(256)),
       limit: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(WORKSPACE_SEARCH_MAX_LIMIT)),
     },
     success: WorkspaceSearchResult, error: WorkspaceSearchError,

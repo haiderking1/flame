@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import type { GitHosting, GitPublish } from "@contracts/git";
+import type { WorkspaceKey } from "../../../backend/workspaceKey";
 import { gitHosting, gitOperations, gitErrorMessage } from "../../../backend/git";
 import { WorkspaceIcon } from "../WorkspaceIcon";
 import { GitDialogFrame } from "./GitDialogFrame";
@@ -13,9 +14,9 @@ const placeholders: Record<Provider, string> = { github: "owner/repo", gitlab: "
 /** Splits "owner/name" and checks both parts are present. */
 export const validRepository = (value: string) => { const [owner, ...rest] = value.trim().split("/"); return !!owner && rest.length > 0 && rest.every(Boolean); };
 /** t3code's publish wizard: choose a signed-in host, name the repository, then see where it went. */
-export default function PublishDialog({ projectId, run, onClose }: { projectId: string; run(input: RunInput): Promise<string | null>; onClose(): void }) {
+export default function PublishDialog({ workspace, run, onClose }: { workspace: WorkspaceKey; run(input: RunInput): Promise<string | null>; onClose(): void }) {
   const readHosting = useAtomSet(gitHosting, { mode: "promise" });
-  const operations = useAtomValue(gitOperations(projectId));
+  const operations = useAtomValue(gitOperations(workspace));
   const [hostings, setHostings] = useState<readonly GitHosting[] | null>(null), [hostingError, setHostingError] = useState<string | null>(null);
   const [step, setStep] = useState(0), [chosen, setChosen] = useState<Provider | null>(null);
   const [repository, setRepository] = useState<string | null>(null), [visibility, setVisibility] = useState<GitPublish["visibility"]>("private");

@@ -1,3 +1,4 @@
+import type { WorkspaceKey } from "../../../backend/workspaceKey";
 import { useEffect, useId, useState, type RefObject } from "react";
 import type { WorkspaceEntry } from "@contracts/workspace-search";
 import type { PromptEditorHandle } from "../editor/PromptEditor";
@@ -8,16 +9,16 @@ import { usePathSearch } from "./usePathSearch";
  * The `@` file menu: finds the mention token at the caret, searches the project for it, and turns the chosen
  * entry into a chip. Escape hides the menu until the caret leaves that token.
  */
-export function useFileMentions({ projectId, text, cursor, focused, blocked, editor }: {
-  projectId: string | null; text: string; cursor: number | null; focused: boolean; blocked: boolean; editor: RefObject<PromptEditorHandle | null>;
+export function useFileMentions({ workspace, text, cursor, focused, blocked, editor }: {
+  workspace: WorkspaceKey | null; text: string; cursor: number | null; focused: boolean; blocked: boolean; editor: RefObject<PromptEditorHandle | null>;
 }) {
   const listId = useId();
   const trigger = cursor === null ? null : detectMentionTrigger(text, cursor);
   const [dismissed, setDismissed] = useState<number | null>(null);
   useEffect(() => { if (!trigger && dismissed !== null) setDismissed(null); }, [trigger, dismissed]);
-  const open = !!trigger && !!projectId && focused && !blocked && dismissed !== trigger.start;
+  const open = !!trigger && !!workspace && focused && !blocked && dismissed !== trigger.start;
   const query = open ? trigger.query.trim() : "";
-  const search = usePathSearch(open ? projectId : null, open ? query : null);
+  const search = usePathSearch(open ? workspace : null, open ? query : null);
   const items = query ? search.entries : [];
   const [highlight, setHighlight] = useState({ query: "", index: 0 });
   const index = highlight.query === query.toLowerCase() ? Math.min(highlight.index, Math.max(0, items.length - 1)) : 0;

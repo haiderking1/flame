@@ -33,3 +33,8 @@
 .session-list__warning { margin: 4px 10px; color: #d39d93; font-size: 11px; overflow-wrap: anywhere; }
 @media (hover: none) { .session-list__actions { opacity: 1; pointer-events: auto; } .session-list__time { visibility: hidden; } .session-list__row:not([data-settled]) .session-list__project { padding-right: 88px; } .session-list__row[data-settled] .session-list__item { padding-right: 84px; } }
 @media (forced-colors: active) { .session-list__item[aria-current], .session-list__item:focus-visible, .session-list__options:focus-visible { outline: 1px solid Highlight; } }
+.session-list__worktree { display: inline-flex; align-items: center; gap: 4px; min-width: 0; margin-right: auto; color: #6b6b6b; font-size: 11px; }
+.session-list__worktree svg { width: 12px; height: 12px; flex-shrink: 0; opacity: .8; }
+.session-list__branch { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-list__mismatch { display: inline-flex; color: #e5b567; }
+.session-list__mismatch svg { width: 12px; height: 12px; }

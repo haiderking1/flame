@@ -10,7 +10,7 @@ import { agentInstructions } from "./instructions.js";
 
 export async function agentContext(location: SessionLocation, runtime: BashRuntime | undefined,
   files: FileTools | undefined, signal: AbortSignal) {
-  const cwd = files?.workingDirectory(location.projectId) ?? runtime?.workingDirectory(location.projectId);
+  const cwd = files?.workingDirectory(location) ?? runtime?.workingDirectory(location);
   const projectInstructions = cwd ? formatProjectContext(await loadProjectContextFiles({ cwd, signal })) : undefined;
   const tools = !!runtime || !!files;
   const overhead = estimateTextTokens(JSON.stringify({ instructions: agentInstructions(tools, !!files, cwd, projectInstructions),

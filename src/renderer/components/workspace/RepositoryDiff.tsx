@@ -4,8 +4,9 @@ import { useGitFileView } from "./git/useGitFileView";
 import { RepositoryCodeView } from "./code/RepositoryCodeView";
 import { DiffToolbar } from "./DiffToolbar";
 import { DiffFileTree } from "./DiffFileTree";
-export function RepositoryDiff({projectId,onClose}:{projectId:string;onClose():void}) {
-  const {status,pending,error,refresh}=useGitStatus(projectId);
+import type { WorkspaceKey } from "../../backend/workspaceKey";
+export function RepositoryDiff({workspace,onClose}:{workspace:WorkspaceKey;onClose():void}) {
+  const {status,pending,error,refresh}=useGitStatus(workspace);
   const [query,setQuery]=useState(""), filter=useDeferredValue(query);
   const [path,setPath]=useState<string|null>(null), [scope,setScope]=useState<"working"|"staged">("working");
   const [reload,setReload]=useState(0), [copied,setCopied]=useState("");
@@ -13,7 +14,7 @@ export function RepositoryDiff({projectId,onClose}:{projectId:string;onClose():v
   const files=useMemo(()=>{const needle=filter.toLowerCase();return status?.files.filter(file=>file.path.toLowerCase().includes(needle) && (scope === "staged" ? file.index !== " " && file.index !== "?":file.worktree !== " " || file.index === "?")) ?? [];},[status,filter,scope]);
   useEffect(()=>{if(path && !files.some(file=>file.path === path)) setPath(null);},[files,path]);
   const selected=useMemo(()=>status?.files.find(file=>file.path === path),[status,path]);
-  const {view,loading,failure}=useGitFileView(projectId,path,scope,selected,reload);
+  const {view,loading,failure}=useGitFileView(workspace,path,scope,selected,reload);
   useEffect(()=>{setCopied("");},[path,scope,view]);
   async function copy(){if(!view || view.binary)return;const source=view;try{await navigator.clipboard.writeText(source.after);setCopied("Copied complete source");}catch{setCopied("Copy failed");}}
   return <div className="diff-view">

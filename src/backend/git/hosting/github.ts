@@ -20,6 +20,15 @@ export const github: Hosting = {
       });
     return newestFirst(matches, updated);
   },
+  async changeRequest(cwd, number, signal) {
+    const item = parseJson<Listed & { isCrossRepository?: boolean }>((await hostingCommand(GH, cwd, ["pr", "view", String(number),
+      "--json", "number,title,url,baseRefName,headRefName,state,isCrossRepository,headRepositoryOwner"], { signal })).stdout, GH.label);
+    return { number: item.number, title: item.title, url: item.url, baseBranch: item.baseRefName, headBranch: item.headRefName, state: state(item.state),
+      crossRepository: item.isCrossRepository === true, headOwner: item.headRepositoryOwner?.login ?? null };
+  },
+  async checkoutChangeRequest(cwd, number, branch, signal) {
+    await hostingCommand(GH, cwd, ["pr", "checkout", String(number), "--force", ...(branch ? ["--branch", branch] : [])], { signal, timeout: 300_000 });
+  },
   async createChangeRequest(cwd, input, signal) {
     await hostingCommand(GH, cwd, ["pr", "create", "--base", input.base, "--head", input.head.selector, "--title", input.title, "--body-file", input.bodyFile], { signal, timeout: 120_000 });
   },

@@ -28,12 +28,12 @@ export class RemoteStatus {
   private readonly lookups = new Map<string, Lookup>();
   private readonly epochs = new Map<string, number>();
   private readonly controller = new AbortController();
-  constructor(private readonly changed: (projectId: string) => void, private readonly busy: (root: string) => boolean, private readonly now: () => number = Date.now) {}
-  /** Attaches the cached change request and schedules any refresh that is due. */
-  attach(status: GitStatus): GitStatus {
+  constructor(private readonly changed: (root: string) => void, private readonly busy: (root: string) => boolean, private readonly now: () => number = Date.now) {}
+  /** Attaches the cached change request and schedules any refresh that is due; changes are announced for `workspace`. */
+  attach(status: GitStatus, workspace: string): GitStatus {
     if (!status.repository || !status.root) return status;
-    this.scheduleFetch(status);
-    return { ...status, pr: this.lookup(status) };
+    this.scheduleFetch(status, workspace);
+    return { ...status, pr: this.lookup(status, workspace) };
   }
   /** Forgets cached remote knowledge after an action changed the branch, upstream or change requests. */
   invalidate(root: string) {
@@ -41,7 +41,7 @@ export class RemoteStatus {
     const fetch = this.fetches.get(root); if (fetch) fetch.at = 0;
   }
   close() { this.controller.abort(); }
-  private scheduleFetch(status: GitStatus) {
+  private scheduleFetch(status: GitStatus, workspace: string) {
     const root = status.root!, remote = upstreamRemote(status), now = this.now();
     if (!remote || this.busy(root)) return;
     const state = this.fetches.get(root) ?? { at: 0, failures: 0, retryAt: 0, running: false };
@@ -50,7 +50,7 @@ export class RemoteStatus {
     state.running = true;
     void this.fetch(root, remote).then(updated => {
       state.at = this.now(); state.failures = 0; state.retryAt = 0;
-      if (updated) this.changed(status.projectId);
+      if (updated) this.changed(workspace);
     }, () => { state.failures++; state.at = this.now(); state.retryAt = this.now() + backoff(30_000, state.failures); })
       .finally(() => { state.running = false; });
   }
@@ -61,7 +61,7 @@ export class RemoteStatus {
       { signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]), timeout: FETCH_TIMEOUT_MS });
     return before !== await refs();
   }
-  private lookup(status: GitStatus): GitPullRequest | null {
+  private lookup(status: GitStatus, workspace: string): GitPullRequest | null {
     const root = status.root!, hosting = hostingFor(status.provider?.kind), branch = status.branch;
     if (!hosting || !branch) return null;
     const wanted = status.isDefaultBranch ? "open" : "all";
@@ -81,7 +81,7 @@ export class RemoteStatus {
         entry.failures = 0; entry.expires = this.now() + (next?.state === "open" ? PR_OPEN_TTL_MS : PR_OTHER_TTL_MS);
         const different = JSON.stringify(next) !== JSON.stringify(entry.value);
         entry.value = next;
-        if (different) this.changed(status.projectId);
+        if (different) this.changed(workspace);
       }, () => { entry.failures++; entry.expires = this.now() + backoff(20_000, entry.failures); })
       .finally(() => { entry.running = false; });
     return value;

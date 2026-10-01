@@ -37,6 +37,18 @@ if (args[0] === 'pr' && args[1] === 'create') {
   fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify(prs));
   console.log('https://github.com/acme/app/pull/' + number); process.exit(0);
 }
+if (args[0] === 'pr' && args[1] === 'view') {
+  const pr = prs.find(item => String(item.number) === args[2]);
+  if (!pr) { process.stderr.write('no pull requests found for ' + args[2] + '\\n'); process.exit(1); }
+  console.log(JSON.stringify(pr)); process.exit(0);
+}
+if (args[0] === 'pr' && args[1] === 'checkout') {
+  // Like gh: fetch the pull request head from the base repository and force the local branch onto it here.
+  const pr = prs.find(item => String(item.number) === args[2]), git = cmd => require('node:child_process').execFileSync('git', cmd, { stdio: 'pipe' });
+  if (!pr) { process.stderr.write('no pull requests found\\n'); process.exit(1); }
+  git(['fetch', '-q', 'origin', 'refs/pull/' + pr.number + '/head']); git(['checkout', '-q', '-B', value('--branch') ?? pr.headRefName, 'FETCH_HEAD']);
+  process.exit(0);
+}
 process.stderr.write('unexpected gh call ' + args.join(' ') + '\\n'); process.exit(1);
 `;
   await writeFile(join(dir, 'gh'), script, { mode: 0o755 });

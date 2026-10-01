@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { Schema } from "effect";
 import { SessionDocument, SessionEntry, SessionError, fitsSessionText, type SessionLocation, type SessionPage } from "../../contracts/sessions.js";
 import type { ModelSelection } from "../../contracts/models.js";
+import { LOCAL_WORKSPACE } from "../../contracts/session-workspace.js";
 import { checkDatabase, missing, storageError } from "./files.js";
 import { initializeSession } from "./schema.js";
 import { migrateSession } from "./migrations.js";
@@ -19,6 +20,8 @@ import { migrateFileTools } from "./file-tools-migration.js";
 import { migrateLs } from "./ls-migration.js";
 import { migrateCompaction } from "./compaction-migration.js";
 import { migrateReadImages } from "./read-images-migration.js";
+import { migrateWorkspace } from "./workspace-migration.js";
+import { WorkspaceRecord } from "./workspace-record.js";
 import { CompactionStore } from "./compaction-store.js";
 import { mentionNames } from "../../contracts/file-mentions.js";
 
@@ -31,6 +34,7 @@ export class SessionDatabase {
   readonly files: FileOperationStore;
   readonly images: ImageStore;
   readonly compactions: CompactionStore;
+  readonly workspace: WorkspaceRecord;
   constructor(filename: string, private readonly location: SessionLocation, settings?: ModelSelection | null) {
     checkDatabase(filename);
     this.db = new DatabaseSync(filename);
@@ -40,7 +44,7 @@ export class SessionDatabase {
       if (version === 0 && settings !== undefined) {
         this.db.exec("PRAGMA journal_mode=WAL;");
         initializeSession(this.db, location, settings);
-      } else if (typeof version !== "number" || version < 1 || version > 9) throw storageError();
+      } else if (typeof version !== "number" || version < 1 || version > 10) throw storageError();
       const legacySettlement = typeof version !== "number" || version < 4;
       this.read(true, legacySettlement);
       if (version === 0 || version === 1) migrateSession(this.db);
@@ -50,26 +54,34 @@ export class SessionDatabase {
       if (typeof version !== "number" || version < 6) migrateLs(this.db);
       if (typeof version !== "number" || version < 7) migrateImages(this.db);
       if (typeof version !== "number" || version < 8) migrateCompaction(this.db);
-      if (version !== 9) migrateReadImages(this.db);
+      if (typeof version !== "number" || version < 9) migrateReadImages(this.db);
+      if (version !== 10) migrateWorkspace(this.db);
       this.images = new ImageStore(this.db, join(dirname(filename), "images"), () => this.read(), work => this.transaction(work));
       this.files = new FileOperationStore(this.db, () => this.read(), work => this.transaction(work), this.images);
       this.jobs = new BashStore(this.db, () => this.read());
       this.compactions = new CompactionStore(this.db, () => this.read(), work => this.transaction(work), this.images, (id, output) => this.files.restoreResults(id, output));
       this.turns = new TurnStore(this.db, () => this.read(), (work) => this.transaction(work), (revision, id, text, images) => this.append(revision, id, text, images),
         (id, output) => this.files.restoreResults(id, output), this.images, this.compactions);
+      this.workspace = new WorkspaceRecord(this.db, () => this.read(), revision => this.expect(revision), work => this.transaction(work), () => this.turns.assertIdle(),
+        () => this.jobs.list().some(job => job.status === "running" || job.status === "claimed"), () => this.hasMessages());
     } catch (error) { this.db.close(); throw error; }
   }
   read(includeDeleted = false, legacy = false): SessionDocument {
     const row = this.db.prepare(`SELECT id AS sessionId, project_id AS projectId, title, created_at AS createdAt,
-      updated_at AS updatedAt, revision, draft, settings, deleted, leaf_id AS leafId, ${legacy ? "NULL" : "settled_at"} AS settledAt FROM session WHERE singleton = 1`).get();
+      updated_at AS updatedAt, revision, draft, settings, deleted, leaf_id AS leafId, ${legacy ? "NULL" : "settled_at"} AS settledAt,
+      ${this.version() >= 10 ? "workspace" : "NULL"} AS workspace FROM session WHERE singleton = 1`).get();
     if (!row || row.sessionId !== this.location.sessionId || row.projectId !== this.location.projectId) throw storageError();
     if (!includeDeleted && row.deleted === 1) throw missing();
-    const hasCompaction = Number(this.db.prepare("PRAGMA user_version").get()?.user_version) >= 8;
+    const hasCompaction = this.version() >= 8;
     const meter = hasCompaction ? this.db.prepare("SELECT context,settings FROM turns WHERE context IS NOT NULL ORDER BY created_at DESC,rowid DESC LIMIT 1").get() : null;
     const settings = JSON.parse(String(row.settings));
     const storedContext = meter && JSON.parse(String(meter.settings)).modelId === settings?.modelId ? meter.context : null;
-    return Schema.decodeUnknownSync(SessionDocument)({ ...row, settings, ...(storedContext ? { context: JSON.parse(String(storedContext)) } : {}) });
+    const workspace = row.workspace === null ? LOCAL_WORKSPACE : JSON.parse(String(row.workspace));
+    return Schema.decodeUnknownSync(SessionDocument)({ ...row, settings, workspace, ...(storedContext ? { context: JSON.parse(String(storedContext)) } : {}) });
   }
+  private version() { return Number(this.db.prepare("PRAGMA user_version").get()?.user_version); }
+  /** Whether anyone has sent a message yet; a new worktree can only be chosen before the first one. */
+  private hasMessages() { return !!this.db.prepare("SELECT 1 FROM entries WHERE kind='user' LIMIT 1").get(); }
   private transaction<T>(work: () => T): T {
     if (this.db.isTransaction) return work();
     this.db.exec("BEGIN IMMEDIATE");

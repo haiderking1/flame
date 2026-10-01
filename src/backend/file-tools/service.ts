@@ -12,8 +12,9 @@ import { FileToolError, FilePersistenceFailure, fileError, type FileOperation, t
 
 /** Emits "mutated" (location) after every edit/write attempt, since even failed or uncertain ones may have touched disk. */
 export class FileTools extends EventEmitter {
-  constructor(private sessions: Sessions, private projectPath: (id: string) => string) { super(); }
-  workingDirectory(projectId: string) { return this.projectPath(projectId); }
+  constructor(private sessions: Sessions, private root: (location: SessionLocation) => string) { super(); }
+  /** The folder this session works in: its worktree, or its project checkout. */
+  workingDirectory(location: SessionLocation) { return this.root(location); }
   ledger(location: SessionLocation) {
     const entries = this.sessions.files(location, store => store.ledger());
     return entries.length ? [{ role: "user", content: [{ type: "input_text", text: `[Saved file-operation ledger, not a new human request. These are historical outcomes, not proof of current file contents. Inspect before retrying uncertain operations; never blindly replay them.]\n${JSON.stringify(entries)}` }] }] : [];
@@ -26,7 +27,7 @@ export class FileTools extends EventEmitter {
     let operation: FileOperation, path: string;
     try {
       operation = parseOperation(call.name, call.arguments);
-      path = resolvePath(this.workingDirectory(location.projectId), operation.path);
+      path = resolvePath(this.workingDirectory(location), operation.path);
     } catch (error) {
       if (!(error instanceof FileToolError)) throw error;
       return { status: "failed", path: "", summary: "Invalid file-tool arguments. No filesystem operation was started.", error: fileError(error) };

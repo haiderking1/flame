@@ -21,7 +21,7 @@ export function fakeWriter(reply = {}) {
 export async function gitFixture(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'flame-git-')), cwd = join(root, 'project'), projectId = randomUUID(); await mkdir(cwd);
   const store = new GitStore(join(root, 'git.sqlite')), changed = [], writer = options.writer ?? fakeWriter();
-  const service = new GitService(store, id => { if (id !== projectId) throw new Error('Unknown project'); return cwd; }, { writer, changed: id => changed.push(id), openPath: options.openPath });
+  const service = new GitService(store, target => { if (target.projectId !== projectId) throw new Error('Unknown project'); return cwd; }, { writer, changed: id => changed.push(id), openPath: options.openPath });
   t.after(async () => { await service.close(); store.close(); await rm(root, { recursive: true, force: true }); });
   const input = (action, extra = {}) => ({ projectId, requestId: randomUUID(), action, message: 'Add initial source', filePaths: null, featureBranch: false, expectedBranch: null, model: null, publish: null, ...extra });
   const terminal = async id => { for (let i = 0; i < 1000; i++) { const operation = store.get(id); if (operation?.state !== 'running') return operation; await delay(10); } assert.fail('Git operation never completed'); };

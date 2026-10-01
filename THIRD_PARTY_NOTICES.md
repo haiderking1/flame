@@ -4,7 +4,7 @@ Flame includes work adapted from the projects below. Thank you to their authors.
 
 ## T3 Code
 
-Flame's Git workflow, file icons and `@` file mentions are adapted from [T3 Code](https://github.com/pingdotgg/t3code) (commit `6b286ae`). The adapted parts are:
+Flame's Git workflow, file icons, `@` file mentions and session worktrees are adapted from [T3 Code](https://github.com/pingdotgg/t3code) (commit `6b286ae`). The adapted parts are:
 
 - the context-aware Git action button, its options menu and their disabled-reason rules
   (`src/renderer/components/workspace/git/gitActionLogic.ts`)
@@ -18,6 +18,13 @@ Flame's Git workflow, file icons and `@` file mentions are adapted from [T3 Code
 - the `@` mention trigger, the Markdown file-link format for mentions and its parsing, the mention menu's behavior,
   and the fff-based project file search with its limits and refresh rules
   (`src/contracts/file-mentions.ts`, `src/renderer/components/composer/mentions/`, `src/backend/workspace-search/`)
+- worktrees per session: creating a worktree on a placeholder branch with the first message and its staged setup
+  (fetch from origin, checkout progress, submodules, setup script, agent hand-off), naming the branch from the message
+  with T3 Code's branch-name prompt, following branch changes, restoring a deleted worktree, removal and the automatic
+  cleanup rules with their safety checks, pull request checkout into a worktree, and the workspace and branch pickers,
+  setup card, branch mismatch notice and settings with their wording
+  (`src/backend/worktrees/`, `src/contracts/worktrees.ts`, `src/contracts/worktree-setup.ts`,
+  `src/renderer/components/composer/workspace/`, `src/renderer/components/settings/worktrees/`)
 
 ```
 MIT License

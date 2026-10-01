@@ -22,8 +22,8 @@ export async function agentLoop(client: Pick<CodexInferenceClient, "run">, reque
     signal.throwIfAborted();
     const prefix = text ? `${text}\n\n` : "";
     let streamed = prefix;
-    const cwd = files?.workingDirectory(location.projectId) ?? runtime?.workingDirectory(location.projectId);
-    if (cwd !== prepared.cwd) throw new InferenceFailure("The project's working directory changed during this turn. No further tools were executed.");
+    const cwd = files?.workingDirectory(location) ?? runtime?.workingDirectory(location);
+    if (cwd !== prepared.cwd) throw new InferenceFailure("This session's working directory changed during this turn. No further tools were executed.");
     const current = { ...request, ...prepared, input: [...input] };
     const stream = (delta: string) => {
       streamed += delta;

@@ -11,6 +11,10 @@ import { WRITER_INSTRUCTIONS } from "./prompts.js";
 const GENERATION_TIMEOUT_MS = 180_000;
 export type CommitText = { subject: string; body: string; branch: string | null };
 export type ChangeRequestText = { title: string; body: string };
+/** Names a session's worktree branch from its first message. */
+export interface BranchNamer {
+  branch(prompt: string, images: readonly unknown[], signal: AbortSignal): Promise<string>;
+}
 export interface GitWriter {
   commit(prompt: string, model: ModelSelection | null, includeBranch: boolean, signal: AbortSignal): Promise<CommitText>;
   changeRequest(prompt: string, model: ModelSelection | null, signal: AbortSignal): Promise<ChangeRequestText>;
@@ -39,8 +43,8 @@ export function changeRequestText(reply: Record<string, unknown>): ChangeRequest
   return { title: commitSubject(field(reply, "title"), "Update project changes").slice(0, 256), body: field(reply, "body") };
 }
 /** Writes commit messages and change request text with the Git text model from Settings, else the chat model. */
-export class CodexGitWriter implements GitWriter {
-  constructor(private readonly auth: Pick<CodexAuth, "usageSession" | "refresh">, private readonly models: Pick<CodexModels, "validateSelection" | "state">,
+export class CodexGitWriter implements GitWriter, BranchNamer {
+  constructor(private readonly auth: Pick<CodexAuth, "usageSession" | "refresh">, private readonly models: Pick<CodexModels, "validateSelection" | "state"> & Partial<Pick<CodexModels, "supportsImages">>,
     private readonly client: Pick<CodexInferenceClient, "run">) {}
   async commit(prompt: string, model: ModelSelection | null, includeBranch: boolean, signal: AbortSignal) {
     return commitText(parseReply(await this.generate(prompt, model, signal)), includeBranch);
@@ -48,16 +52,23 @@ export class CodexGitWriter implements GitWriter {
   async changeRequest(prompt: string, model: ModelSelection | null, signal: AbortSignal) {
     return changeRequestText(parseReply(await this.generate(prompt, model, signal)));
   }
-  private async generate(prompt: string, model: ModelSelection | null, signal: AbortSignal) {
+  /** A branch name suggestion, raw; the caller normalizes it. Images go along only when the Git text model reads them. */
+  async branch(prompt: string, images: readonly unknown[], signal: AbortSignal) {
+    const name = field(parseReply(await this.generate(prompt, null, signal, images)), "branch");
+    if (!name) throw new GitError({ code: "COMMAND", message: "The model did not suggest a branch name." });
+    return name;
+  }
+  private async generate(prompt: string, model: ModelSelection | null, signal: AbortSignal, images: readonly unknown[] = []) {
     if (!this.auth.usageSession()) await this.auth.refresh().catch(() => {});
     const account = this.auth.usageSession();
     if (!account) throw new GitError({ code: "INVALID", message: "Sign in to OpenAI in Providers to generate text, or write the commit message yourself." });
     const settings = this.settings(account.key, model);
+    const withImages = images.length && this.models.supportsImages?.(account.key, settings.modelId) !== false ? images : [];
     const id = randomUUID();
     try {
       const result = await this.client.run({ accountId: account.accountId, access: account.access, sessionId: id, promptCacheKey: id,
         settings, tools: false, fileTools: false, bashTools: false,
-        instructionsOverride: WRITER_INSTRUCTIONS, input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }] }, () => {},
+        instructionsOverride: WRITER_INSTRUCTIONS, input: [{ role: "user", content: [{ type: "input_text", text: prompt }, ...withImages] }] }, () => {},
         AbortSignal.any([signal, AbortSignal.timeout(GENERATION_TIMEOUT_MS)]));
       return result.text;
     } catch (error) {

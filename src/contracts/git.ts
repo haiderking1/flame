@@ -3,6 +3,7 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import { SessionId } from "./sessions.js";
 import { ModelSelection } from "./models.js";
 import { SourceControlProvider } from "./source-control.js";
+import { WorkspaceTarget } from "./workspace-target.js";
 const Path = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096));
 export class GitError extends Schema.TaggedError<GitError>()("GitError", {
   code: Schema.Literals(["INVALID", "NOT_FOUND", "BUSY", "COMMAND", "STORAGE", "UNAVAILABLE"]), message: Schema.String,
@@ -30,7 +31,7 @@ const Name = Schema.String.check(Schema.isMaxLength(256));
 export const GitPublish = Schema.Struct({ provider: Schema.Literals(["github", "gitlab"]), repository: Schema.String.check(Schema.isMinLength(3), Schema.isMaxLength(256)),
   visibility: Schema.Literals(["private", "public"]), remote: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)), protocol: Schema.Literals(["ssh", "https"]) });
 export type GitPublish = typeof GitPublish.Type;
-export const GitStart = Schema.Struct({ projectId: SessionId, requestId: SessionId, action: GitAction,
+export const GitStart = Schema.Struct({ ...WorkspaceTarget.fields, requestId: SessionId, action: GitAction,
   // Empty asks the selected model to write the commit message.
   message: Schema.String.check(Schema.isMaxLength(10_000)),
   // Null commits every change; otherwise exactly these paths are staged and committed.
@@ -72,14 +73,14 @@ export type GitHosting = typeof GitHosting.Type;
 export const GitFileView = Schema.Struct({ path: Path, beforePath: Path, before: Schema.String, after: Schema.String, binary: Schema.Boolean, mode: Schema.Literals(["working", "staged"]), version: Schema.String });
 export type GitFileView = typeof GitFileView.Type;
 export const GitRpc = RpcGroup.make(
-  Rpc.make("git.status", { payload: { projectId: SessionId }, success: GitStatus, error: GitError }),
+  Rpc.make("git.status", { payload: WorkspaceTarget, success: GitStatus, error: GitError }),
   Rpc.make("git.start", { payload: GitStart, success: GitOperation, error: GitError }),
-  Rpc.make("git.watch", { payload: { projectId: SessionId }, success: Schema.Array(GitOperation), error: GitError, stream: true }),
-  Rpc.make("git.file", { payload: { projectId: SessionId, path: Path, mode: Schema.Literals(["working", "staged"]) }, success: GitFileView, error: GitError }),
-  // Advances when agent tools may have changed project files; clients recheck status on change.
-  Rpc.make("git.changes", { payload: { projectId: SessionId }, success: Schema.Number, stream: true }),
+  Rpc.make("git.watch", { payload: WorkspaceTarget, success: Schema.Array(GitOperation), error: GitError, stream: true }),
+  Rpc.make("git.file", { payload: { ...WorkspaceTarget.fields, path: Path, mode: Schema.Literals(["working", "staged"]) }, success: GitFileView, error: GitError }),
+  // Advances when agent tools may have changed files in the target's folder; clients recheck status on change.
+  Rpc.make("git.changes", { payload: WorkspaceTarget, success: Schema.Number, stream: true }),
   // Readiness of the hosting CLIs used to publish repositories and open change requests.
   Rpc.make("git.hosting", { success: Schema.Array(GitHosting), error: GitError }),
   // Opens a repository file in the user's default application.
-  Rpc.make("git.open", { payload: { projectId: SessionId, path: Path }, success: Schema.Void, error: GitError }),
+  Rpc.make("git.open", { payload: { ...WorkspaceTarget.fields, path: Path }, success: Schema.Void, error: GitError }),
 );

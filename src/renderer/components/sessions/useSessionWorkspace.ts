@@ -6,6 +6,8 @@ import { useAtomSet } from "@effect/atom-react";
 import type { ModelSelection } from "@contracts/models";
 import { fitsSessionText, SessionError, type SessionDocument, type SessionLocation, type SessionPage, type SessionSummary } from "@contracts/sessions";
 import { changeSession, createSession, deleteSession, readSession, sessionErrorMessage, sessionHistory } from "../../backend/sessions";
+import { configureWorkspace } from "../../backend/worktrees";
+import type { SessionWorkspace } from "@contracts/session-workspace";
 import { startTurn, stopTurn } from "../../backend/turns";
 import { useTurnState } from "./useTurnState";
 import { rememberActiveSession, restoreActiveSession } from "./activeSession";
@@ -24,6 +26,7 @@ export function useSessionWorkspace() {
   const history = useAtomSet(sessionHistory, { mode: "promise" });
   const change = useAtomSet(changeSession, { mode: "promise" });
   const remove = useAtomSet(deleteSession, { mode: "promise" });
+  const place = useAtomSet(configureWorkspace, { mode: "promise" });
   const [document, setDocument] = useState<SessionDocument | null>(null);
   const turnState = useTurnState(document);
   const [page, setPage] = useState<SessionPage>({ entries: [], nextBefore: null });
@@ -92,7 +95,18 @@ export function useSessionWorkspace() {
     } finally { navigating.current = false; setTransitioning(false); }
     return true;
   }
-  async function newSession(projectId: string) {
+  /** Changes where the open session works; the backend checks the choice and rejects a new worktree after the first message. */
+  function placeSession(workspace: SessionWorkspace) {
+    const target = current.current;
+    return enqueue(async () => {
+      const latest = current.current;
+      if (!target || !latest || latest.sessionId !== target.sessionId || latest.projectId !== target.projectId) throw new Error("Session changed");
+      const saved = await place({ projectId: latest.projectId, sessionId: latest.sessionId, revision: latest.revision, workspace });
+      adopt(saved); setError(null);
+      return saved;
+    }, false);
+  }
+  async function newSession(projectId: string, workspace?: SessionWorkspace) {
     if (navigating.current) return;
     navigating.current = true; setTransitioning(true);
     try {
@@ -100,7 +114,8 @@ export function useSessionWorkspace() {
       const location = pendingCreate.current?.projectId === projectId ? pendingCreate.current : { projectId, sessionId: crypto.randomUUID() };
       pendingCreate.current = location;
       await enqueue(async () => {
-        const loaded = await create(location);
+        let loaded = await create(location);
+        if (workspace && JSON.stringify(loaded.workspace) !== JSON.stringify(workspace)) loaded = await place({ ...location, revision: loaded.revision, workspace });
         const messages = await history({ ...location, before: null });
         adopt(loaded); setPage(messages);
         text.current = loaded.draft; setDraft(loaded.draft); pendingSend.current = null;
@@ -215,7 +230,7 @@ export function useSessionWorkspace() {
   }, [turnState.turn?.id, turnState.turn?.status, turnState.turn?.revision, pending, transitioning, document?.revision]);
   return { document, page, draft, error, transitioning, turn: awaitingMessageHistory ? null : turnState.turn, running: turnState.running,
     stop: () => turnState.stop().catch((error) => { setError(sessionErrorMessage(error)); }), busy: pending > 0 || transitioning, dirty: !!document && draft !== document.draft,
-    editDraft, open, newSession, send, loadOlder, reload, flushDraft, compact, accountKey: turnState.accountKey,
+    editDraft, open, newSession, placeSession, send, loadOlder, reload, flushDraft, compact, accountKey: turnState.accountKey,
     renameSession: (target: SessionSummary, title: string) => editSession(target, { type: "rename", title }),
     settleSession: (target: SessionSummary, settled: boolean) => editSession(target, { type: "settle", settled }),
     deleteSession: (target: SessionSummary) => editSession(target, { type: "delete" }),

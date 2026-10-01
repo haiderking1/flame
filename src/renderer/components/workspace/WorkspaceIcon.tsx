@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 export type WorkspaceIconName = "branch" | "commit" | "push" | "chevron" | "close" | "refresh" | "diff" | "split" | "unified" | "wrap" | "tree" | "file" | "copy" | "check" | "collapse"
-  | "loader" | "circle-check" | "circle-alert" | "info" | "cloud-upload" | "cloud-download" | "pull-request" | "branch-plus" | "lock" | "globe" | "chevron-right" | "external";
+  | "loader" | "circle-check" | "circle-alert" | "info" | "cloud-upload" | "cloud-download" | "pull-request" | "branch-plus" | "lock" | "globe" | "chevron-right" | "external"
+  | "folder" | "folder-git" | "folder-git-2" | "history" | "search" | "plus" | "terminal";
 const paths: Record<WorkspaceIconName, string> = {
   branch: "M6 3v12m0-6c8 0 12-2 12-6M3 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0M15 3a3 3 0 1 0 6 0a3 3 0 1 0-6 0",
   commit: "M3 12h5m8 0h5M8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0",
@@ -25,6 +26,14 @@ const paths: Record<WorkspaceIconName, string> = {
   globe: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18",
   "chevron-right": "m10 8 4 4-4 4",
   external: "M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6",
+  // Lucide's folder, folder-git, folder-git-2 and history, as T3 Code uses for workspaces.
+  folder: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z",
+  "folder-git": "M10 13a2 2 0 1 0 4 0a2 2 0 1 0-4 0M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z M14 13h3M7 13h3",
+  "folder-git-2": "M18 19a5 5 0 0 1-5-5v8M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5M11 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0M18 19a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
+  history: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5M12 7v5l4 2",
+  search: "M4 10.5a6.5 6.5 0 1 0 13 0a6.5 6.5 0 1 0-13 0M16 16l4 4",
+  plus: "M12 5v14M5 12h14",
+  terminal: "M4 17l6-6-6-6M12 19h8",
 };
 export function WorkspaceIcon({ name, className, style }: { name: WorkspaceIconName; className?: string; style?: CSSProperties }) {
   return <svg className={className} style={style} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;

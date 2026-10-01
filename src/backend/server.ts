@@ -37,12 +37,19 @@ import { gitHandlers } from "./git/handlers.js";
 import { WorkspaceChanges } from "./git/changes.js";
 import { WorkspaceSearch } from "./workspace-search/service.js";
 import { workspaceSearchHandlers } from "./workspace-search/handlers.js";
+import { WorkspaceRoots } from "./worktrees/roots.js";
+import { WorktreeStore } from "./worktrees/store.js";
+import { Worktrees } from "./worktrees/service.js";
+import { worktreeHandlers } from "./worktrees/handlers.js";
+import { defaultWorktreesDirectory } from "./worktrees/paths.js";
+import type { WorkspaceTarget } from "../contracts/workspace-target.js";
+import type { SessionLocation } from "../contracts/sessions.js";
 import { CodexGitWriter } from "./git/writer/writer.js";
 import { CodexInferenceClient } from "./turns/client.js";
 import { authorizedRequest, authorizedImageRequest, imageCorsHeaders } from "./server-auth.js";
 export { authorizedRequest } from "./server-auth.js";
 
-export const startServer = (options: { filename: string; token: string; origin: string; openBrowser: (url: string) => Promise<void>; openPath?: (path: string) => Promise<void>; usageClient?: CodexUsageClient; modelsClient?: CodexModelsClient; inferenceClient?: Pick<CodexInferenceClient, "run">; ready: (port: number) => void }) => Effect.gen(function* () {
+export const startServer = (options: { filename: string; token: string; origin: string; worktreesDirectory?: string; openBrowser: (url: string) => Promise<void>; openPath?: (path: string) => Promise<void>; usageClient?: CodexUsageClient; modelsClient?: CodexModelsClient; inferenceClient?: Pick<CodexInferenceClient, "run">; ready: (port: number) => void }) => Effect.gen(function* () {
   const store = yield* Effect.acquireRelease(Effect.sync(() => new ProjectStore(options.filename)), (store) => Effect.sync(() => store.close()));
   const auth = yield* Effect.acquireRelease(Effect.promise(async () => {
     const auth = new CodexAuth({ store: new AuthStore(join(homedir(), ".flame", "agent")), openBrowser: options.openBrowser });
@@ -55,28 +62,33 @@ export const startServer = (options: { filename: string; token: string; origin: 
   const models = yield* Effect.acquireRelease(Effect.sync(() => new CodexModels(auth, modelsStore, options.modelsClient)), (models) => Effect.promise(() => models.close()));
   const repository = new SessionRepository(join(dirname(options.filename), "projects"), store);
   const sessions = new Sessions(repository, models);
-  const projectPath = (id: string) => {
-    const project = store.list().find(project => project.id === id);
-    if (!project) throw new Error("Project not found");
-    return project.path;
-  };
+  const roots = new WorkspaceRoots(store, sessions);
+  const target = (input: WorkspaceTarget) => roots.target(input);
+  const sessionRoot = (location: SessionLocation) => roots.session(location);
   const changes = new WorkspaceChanges();
   changes.setMaxListeners(0); // One listener per subscribed client stream.
   const writer = new CodexGitWriter(auth, models, options.inferenceClient ?? new CodexInferenceClient());
-  const git = yield* Effect.acquireRelease(Effect.sync(() => openGitRuntime(join(dirname(options.filename), "git.sqlite"), projectPath,
-    { writer, openPath: options.openPath, changed: projectId => changes.touch(projectId) })), git => Effect.promise(() => git.close()));
-  const bash = yield* Effect.acquireRelease(Effect.sync(() => new BashRuntime(sessions, projectPath)), bash => Effect.sync(() => bash.close()));
-  const files = new FileTools(sessions, projectPath);
-  const touched = (location: { projectId: string }) => changes.touch(location.projectId);
+  const git = yield* Effect.acquireRelease(Effect.sync(() => openGitRuntime(join(dirname(options.filename), "git.sqlite"), target,
+    { writer, openPath: options.openPath, changed: root => changes.touch(root) })), git => Effect.promise(() => git.close()));
+  const bash = yield* Effect.acquireRelease(Effect.sync(() => new BashRuntime(sessions, sessionRoot)), bash => Effect.sync(() => bash.close()));
+  const files = new FileTools(sessions, sessionRoot);
+  const touched = (location: SessionLocation) => { try { changes.touch(roots.session(location)); } catch { /* The session was deleted meanwhile. */ } };
   bash.on("completed", touched); files.on("mutated", touched);
-  const workspaceSearch = yield* Effect.acquireRelease(Effect.sync(() => new WorkspaceSearch(projectPath)), search => Effect.sync(() => search.close()));
+  const workspaceSearch = yield* Effect.acquireRelease(Effect.sync(() => new WorkspaceSearch(target)), search => Effect.sync(() => search.close()));
   // Files the agent creates or deletes show up in @ mentions without waiting on the folder watcher.
-  changes.on("change", (projectId: string) => workspaceSearch.refresh(projectId));
+  changes.on("change", (root: string) => workspaceSearch.refresh(root));
   const images = yield* Effect.acquireRelease(Effect.sync(() => new Images(sessions,
     new ImageStaging(join(dirname(options.filename), "image-uploads"), location => repository.assertUploadTarget(location)))), images => Effect.promise(() => images.close()));
-  const turns = yield* Effect.acquireRelease(Effect.sync(() => new Turns(sessions, auth, models, options.inferenceClient, bash, files)), (turns) => Effect.promise(() => turns.close()));
+  // Late-bound: worktree cleanup must not remove a folder a response or Bash job is using, and turns are created after worktrees.
+  let turns: Turns | undefined;
+  const busy = (path: string) => sessions.snapshot().sessions.some(session => (session.workspace.worktreePath ?? roots.project(session.projectId)) === path
+    && (turns?.isRunning(session) || bash.list(session).some(job => job.status === "running" || job.status === "claimed")));
+  const worktreeStore = yield* Effect.acquireRelease(Effect.sync(() => new WorktreeStore(options.filename)), store => Effect.sync(() => store.close()));
+  const worktrees = yield* Effect.acquireRelease(Effect.sync(() => new Worktrees({ sessions, projects: store, roots, store: worktreeStore,
+    directory: options.worktreesDirectory ?? defaultWorktreesDirectory(), namer: writer, changed: root => changes.touch(root), busy })), worktrees => Effect.promise(() => worktrees.close()));
+  turns = yield* Effect.acquireRelease(Effect.sync(() => new Turns(sessions, auth, models, options.inferenceClient, bash, files, worktrees)), (turns) => Effect.promise(() => turns.close()));
   const rpc = yield* RpcServer.toHttpEffectWebsocket(BackendRpc).pipe(
-    Effect.provide(gitHandlers(git, changes)), Effect.provide(workspaceSearchHandlers(workspaceSearch)), Effect.provide(imageHandlers(images)), Effect.provide(bashHandlers(bash)), Effect.provide(turnHandlers(turns)), Effect.provide(sessionHandlers(sessions)), Effect.provide(modelsHandlers(models)), Effect.provide(usageHandlers(usage)), Effect.provide(authHandlers(auth)), Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
+    Effect.provide(gitHandlers(git, changes, target)), Effect.provide(worktreeHandlers(worktrees)), Effect.provide(workspaceSearchHandlers(workspaceSearch)), Effect.provide(imageHandlers(images)), Effect.provide(bashHandlers(bash)), Effect.provide(turnHandlers(turns!)), Effect.provide(sessionHandlers(sessions)), Effect.provide(modelsHandlers(models)), Effect.provide(usageHandlers(usage)), Effect.provide(authHandlers(auth)), Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
   );
   const server = yield* NodeHttpServer.make(createServer, {
     host: "127.0.0.1", port: 0, gracefulShutdownTimeout: "2 seconds", websocket: { maxPayload: 64 * 1024 },

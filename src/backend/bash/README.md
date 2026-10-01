@@ -5,7 +5,7 @@ The backend connects Responses function calls to durable session-owned Bash jobs
 ## Lifecycle
 
 - `store.ts` persists jobs in each session's SQLite database. The claim is committed before spawn. The process identity is committed before releasing an stdin gate that permits the shell to execute the command. A repeated call identifier observes the existing claim, never launches again.
-- `process.ts` starts a noninteractive shell in the project's directory with an explicitly selected environment and its own POSIX process group. Actual command stdin is `/dev/null`. Each call starts fresh; shell variables and directory changes do not carry to later calls.
+- `process.ts` starts a noninteractive shell in the session's folder (its worktree, or the project checkout; see `src/backend/worktrees/README.md`) with an explicitly selected environment and its own POSIX process group. Actual command stdin is `/dev/null`. Each call starts fresh; shell variables and directory changes do not carry to later calls.
 - There are no command execution, inactivity, or post-exit timeouts. Spawn failure and shell exit are reported independently of inherited stdout/stderr handles. Stop signals the group with SIGKILL. A stop request is not reported as successful termination until the OS reports exit.
 - The job owns ordinary descendants in its process group. Shell exit also kills leftovers. To run in the background, use the tool's `background` argument, not `&`, daemonization, or a new session/group.
 - `service.ts` checkpoints bounded output while the job runs. Checkpoint failure requests termination instead of silently continuing side effects. UI watches expose command, state, output, and an explicit per-job Stop action.

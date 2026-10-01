@@ -1,6 +1,7 @@
 import type { DraftImage } from "../images/draft-storage";
 import { useEffect, useRef, useState } from "react";
 import { SessionError, type SessionLocation, type SessionPage } from "@contracts/sessions";
+import type { SessionWorkspace } from "@contracts/session-workspace";
 import { sessionErrorMessage } from "../../backend/sessions";
 import { useModelCatalog } from "../composer/models/useModelCatalog";
 import { useProjectScope } from "../sidebar/useProjectScope";
@@ -8,6 +9,7 @@ import { rememberActiveSession, restoreActiveSession } from "./activeSession";
 import { useProjectDrafts } from "./useProjectDrafts";
 import { useSessionWorkspace } from "./useSessionWorkspace";
 import { useStartProjectSession } from "./useStartProjectSession";
+import { defaultWorkspace, useWorktreeSettings } from "../composer/workspace/worktreeDefaults";
 
 const emptyPage: SessionPage = { entries: [], nextBefore: null };
 export function useProjectWorkspace() {
@@ -16,6 +18,7 @@ export function useProjectWorkspace() {
   const drafts = useProjectDrafts();
   const catalog = useModelCatalog();
   const start = useStartProjectSession();
+  const worktreeSettings = useWorktreeSettings();
   const [draftMode, setDraftMode] = useState(() => {
     const active = restoreActiveSession();
     return !active || !!projectScope && drafts.get(projectScope).value?.sessionId === active.sessionId;
@@ -51,7 +54,8 @@ export function useProjectWorkspace() {
     await transition(async () => {
       const value = drafts.get(projectId).value;
       if (!value) throw new Error("Project draft is unavailable");
-      const draft = { ...value, text: message };
+      // A session never sent from keeps following the project default until the user picks a workspace.
+      const draft = { ...value, text: message, workspace: value.workspace ?? defaultWorkspace(worktreeSettings, projectId) };
       drafts.save(projectId, draft);
       const result = await start(projectId, draft, catalog.accountKey, catalog.selection, value => drafts.save(projectId, value), images, signal);
       accepted = result.sentImages;
@@ -97,7 +101,14 @@ export function useProjectWorkspace() {
       drafts.flush(projectId);
     },
     open, send,
-    newSession: async (projectId: string) => transition(async () => { await workspace.newSession(projectId); setDraftMode(false); }),
+    newSession: async (projectId: string, place?: SessionWorkspace) => transition(async () => { await workspace.newSession(projectId, place); setDraftMode(false); }),
+    // Where the new session in the composer will work, saved with its draft until the first message creates it.
+    draftWorkspace: state?.value?.workspace ?? null,
+    setDraftWorkspace: (place: SessionWorkspace) => {
+      if (!projectId) return;
+      const value = drafts.get(projectId).value;
+      if (value) drafts.save(projectId, { ...value, workspace: place });
+    },
     discardDraft: () => {
       if (!projectId) return workspace.discardDraft();
       // Keep retry identities if a send may already have reached the backend.
