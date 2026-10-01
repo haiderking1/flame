@@ -68,7 +68,8 @@ test('cleanup removes the worktree of a deleted session when asked, but never on
   writeFileSync(join(secret.path, '.env'), 'TOKEN=1\n');
   mkdirSync(join(clean.path, 'node_modules')); writeFileSync(join(clean.path, 'node_modules', 'x.js'), '');
   for (const session of [dirty, secret, clean]) remove(h, session.location);
-  await until(() => !existsSync(clean.path), 'the clean worktree to be removed');
+  // Git deletes the folder before it exits, and the record is forgotten only after that.
+  await until(() => !existsSync(clean.path) && !h.store.kept().some(item => item.path === clean.path), 'the clean worktree to be removed and forgotten');
   assert.ok(existsSync(kept.path), 'a live session keeps its worktree');
   assert.ok(existsSync(dirty.path), 'uncommitted work is never removed');
   assert.ok(existsSync(secret.path), 'ignored files such as .env are never removed');
