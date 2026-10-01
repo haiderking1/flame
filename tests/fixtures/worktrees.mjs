@@ -63,6 +63,27 @@ void app.whenReady().then(async () => {
     await wait("document.querySelector('.composer .composer-settings__model').getAttribute('aria-label') === 'Select model: Test model'");
     await captureUI(driver, 'worktree-toolbar-local');
 
+    // A menu used with the mouse leaves its trigger unlit, though focus goes back to it; Escape from the keyboard keeps the focus ring.
+    const input = (method, params) => window.webContents.debugger.sendCommand(method, params);
+    const mouse = async expression => {
+      const { x, y } = await evaluate(`(() => { const box = (${expression}).getBoundingClientRect(); return { x: box.x + box.width / 2, y: box.y + box.height / 2 }; })()`);
+      for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await input('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
+    };
+    const trigger = "document.querySelector('.composer .composer-settings__model')", option = "document.querySelector('.model-picker:popover-open .model-picker__option')";
+    await mouse(trigger); await wait(`!!${option} && document.activeElement?.matches('.model-picker input')`);
+    await input('Input.insertText', { text: 'Test' }); await wait(`!!${option}`);
+    await mouse(option);
+    await wait(`!document.querySelector('.model-picker:popover-open') && document.activeElement === ${trigger}`);
+    await input('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 500 });
+    assert.equal(await evaluate(`${trigger}.matches(':focus-visible')`), false, 'a model picked with the mouse leaves no focus ring');
+    assert.equal(await evaluate(`getComputedStyle(${trigger}).backgroundColor`), 'rgba(0, 0, 0, 0)', 'nor a highlight');
+    await mouse(trigger); await wait(`!!document.querySelector('.model-picker:popover-open') && document.activeElement?.matches('.model-picker input')`);
+    await input('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await input('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await wait(`!document.querySelector('.model-picker:popover-open') && document.activeElement === ${trigger}`);
+    assert.equal(await evaluate(`${trigger}.matches(':focus-visible')`), true, 'Escape from the keyboard keeps the focus ring');
+    await evaluate(`${trigger}.blur()`);
+
     // Choose a new worktree for the draft; its base defaults to the branch checked out, from origin as Settings default.
     await click(workspaceTrigger); await wait(`!!(${menuItem('New worktree')})`);
     await captureUI(driver, 'worktree-workspace-menu');

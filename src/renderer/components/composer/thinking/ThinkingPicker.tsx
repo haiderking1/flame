@@ -5,6 +5,7 @@ import { useComposerPopoverPosition } from "../useComposerPopoverPosition";
 import { effortLabel } from "./effortLabel";
 import { ServiceTierOptions } from "./ServiceTierOptions";
 import "./thinking-picker.css";
+import { returnFocus, settleTriggerFocus } from "../../../lib/returnFocus";
 
 export function ThinkingPicker({ model, effort, serviceTier, busy, error, onSelect, onSelectTier }: {
   model: CatalogModel | undefined; effort: string | null; serviceTier: ServiceTier; busy: boolean; error: string | null;
@@ -25,7 +26,7 @@ export function ThinkingPicker({ model, effort, serviceTier, busy, error, onSele
       items?.[index]?.focus();
     }
   }, [open, levels]);
-  function close() { popup.current?.hidePopover(); trigger.current?.focus(); }
+  function close() { popup.current?.hidePopover(); returnFocus(trigger.current); }
   async function select(work: () => Promise<void>) {
     if (busy || saving.current) return;
     saving.current = true;
@@ -41,7 +42,7 @@ export function ThinkingPicker({ model, effort, serviceTier, busy, error, onSele
       aria-haspopup="menu" aria-controls={`${id}-menu`} aria-expanded={open} aria-busy={busy}>
       <span>{label}</span>{serviceTier === "priority" && <small className="thinking-picker__default">Fast</small>}<ComposerChevron />
     </button>
-    <div ref={popup} id={id} popover="auto" className="thinking-picker" onToggle={(event) => setOpen(event.newState === "open")}
+    <div ref={popup} id={id} popover="auto" className="thinking-picker" onToggle={(event) => { setOpen(event.newState === "open"); if (event.newState === "closed") settleTriggerFocus(trigger.current); }}
       onBlur={(event) => {
         if (event.relatedTarget && event.relatedTarget !== trigger.current && !event.currentTarget.contains(event.relatedTarget)) popup.current?.hidePopover();
       }} onKeyDown={(event) => {

@@ -4,6 +4,7 @@ import { WorkspaceIcon, type WorkspaceIconName } from "../../workspace/Workspace
 import { ComposerChevron } from "../ComposerChevron";
 import { useComposerPopoverPosition } from "../useComposerPopoverPosition";
 import { currentWorkspaceLabel, lockedWorkspaceLabel, modeLabel, previousWorktreeLabel, type PreviousWorktree } from "./workspaceLogic";
+import { returnFocus, settleTriggerFocus } from "../../../lib/returnFocus";
 
 export type WorkspaceSelectHandle = { open(): void };
 type Option = { id: "local" | "worktree" | "previous"; label: string; detail?: string; icon: WorkspaceIconName };
@@ -27,17 +28,17 @@ export const WorkspaceSelect = forwardRef<WorkspaceSelectHandle, { workspace: Se
   useLayoutEffect(() => { if (open) { setActive(Math.max(0, options.findIndex(option => option.id === selected))); menu.current?.focus(); } }, [open]);
   if (locked) return <span className="branch-toolbar__static" title={lockedWorkspaceLabel(workspace)}><WorkspaceIcon name={workspaceIcon(workspace)} /><span>{lockedWorkspaceLabel(workspace)}</span></span>;
   const label = selected === "worktree" ? modeLabel("worktree") : currentWorkspaceLabel(workspace.worktreePath);
-  function choose(option: Option) { popup.current?.hidePopover(); trigger.current?.focus(); onChoose(option.id); }
+  function choose(option: Option) { popup.current?.hidePopover(); returnFocus(trigger.current); onChoose(option.id); }
   return <>
     <button ref={trigger} type="button" className="composer-settings__control branch-toolbar__trigger" aria-label={`Workspace: ${label}`} aria-haspopup="menu" aria-expanded={open}
       aria-controls={id} popoverTarget={id} disabled={busy} title={previous ? `${label}. ${previousWorktreeLabel(previous)} is available.` : label}>
       <WorkspaceIcon name={workspaceIcon(workspace)} /><span className="composer-settings__label">{label}</span><ComposerChevron />
     </button>
-    <div ref={popup} id={id} popover="auto" className="branch-menu workspace-menu" onToggle={event => setOpen(event.newState === "open")}>
+    <div ref={popup} id={id} popover="auto" className="branch-menu workspace-menu" onToggle={event => { setOpen(event.newState === "open"); if (event.newState === "closed") settleTriggerFocus(trigger.current); }}>
       <div ref={menu} role="menu" aria-label="Workspace" tabIndex={-1} aria-activedescendant={`${id}-${active}`} className="branch-menu__list" onKeyDown={event => {
         if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); setActive(index => (index + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length); }
         else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); choose(options[active]!); }
-        else if (event.key === "Escape") { event.preventDefault(); popup.current?.hidePopover(); trigger.current?.focus(); }
+        else if (event.key === "Escape") { event.preventDefault(); popup.current?.hidePopover(); returnFocus(trigger.current); }
       }}>
         <p className="branch-menu__group" aria-hidden="true">Workspace</p>
         {options.map((option, index) => <div key={option.id} id={`${id}-${index}`} role="menuitemradio" aria-checked={option.id === selected}

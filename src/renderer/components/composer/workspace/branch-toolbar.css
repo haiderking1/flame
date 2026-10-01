@@ -1,13 +1,23 @@
-/* T3 Code's context strip under the composer: where the session works and on which branch. */
-.branch-toolbar { display: flex; align-items: center; gap: 4px; min-width: 0; margin: 6px 4px 0; container: branch-toolbar / inline-size; }
-.branch-toolbar .composer-settings__control { height: 26px; padding: 0 8px; font-size: 13px; }
+/* T3 Code's context strip: a tray tucked under the composer, inset from its sides, with where the session works and on
+   which branch. Its top 16px sit behind the composer; the seam shadow starts where the composer ends. */
+.branch-toolbar { position: relative; isolation: isolate; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; box-sizing: border-box;
+  width: calc(100% - 44px); margin: -16px auto 0; padding: 20px 8px 4px 4px; container: branch-toolbar / inline-size; }
+.branch-toolbar::before { content: ""; position: absolute; inset: 0; z-index: -1; box-sizing: border-box; border: 1px solid rgb(255 255 255 / 7%); border-radius: 0 0 16px 16px;
+  /* The composer's glass continues under the strip, so history scrolling behind it stays hidden. */
+  background: linear-gradient(to bottom, transparent 0 16px, rgb(0 0 0 / 18%) 16px, transparent 26px), rgb(17 17 17 / 80%);
+  backdrop-filter: blur(12px) saturate(1.14); box-shadow: 0 14px 32px -18px rgb(0 0 0 / 75%);
+  mask-image: linear-gradient(to bottom, transparent 16px, #000 16px); pointer-events: none; }
+@supports not (backdrop-filter: blur(1px)) { .branch-toolbar::before { background: linear-gradient(to bottom, transparent 0 16px, rgb(0 0 0 / 18%) 16px, transparent 26px), #111111; } }
+/* T3's dim resting controls: small, regular weight, lit only on hover, while open, or for keyboard focus. */
+.branch-toolbar .composer-settings__control, .branch-toolbar__static { height: 24px; gap: 4px; padding: 0 7px; border-radius: 6px; color: rgb(130 130 130 / 70%); font-size: 12px; font-weight: 400; line-height: 16px; }
+.branch-toolbar .composer-settings__control:not(:disabled):hover, .branch-toolbar .composer-settings__control:focus-visible,
+.branch-toolbar .composer-settings__control[aria-expanded="true"] { background: rgb(255 255 255 / 4%); color: rgb(245 245 245 / 80%); }
 .branch-toolbar__branch { min-width: 0; margin-left: auto; }
 .branch-toolbar__trigger { min-width: 0; }
-.branch-toolbar__trigger svg:first-child { width: 14px; height: 14px; }
-.branch-toolbar__static { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; color: #858585; font-size: 13px; font-weight: 500; white-space: nowrap; }
-.branch-toolbar__static svg { width: 14px; height: 14px; flex-shrink: 0; }
+.branch-toolbar__trigger svg, .branch-toolbar__static svg { width: 12px; height: 12px; flex-shrink: 0; }
+.branch-toolbar__trigger svg:last-child:not(:first-child) { opacity: 0.5; }
+.branch-toolbar__static { display: inline-flex; align-items: center; white-space: nowrap; }
 .branch-toolbar__error { flex-basis: 100%; margin: 4px 8px 0; color: #fb414a; font-size: 12px; overflow-wrap: anywhere; }
-.branch-toolbar { flex-wrap: wrap; }
 @container branch-toolbar (max-width: 360px) { .branch-toolbar__trigger:not(.branch-toolbar__branch) .composer-settings__label { display: none; } }
 
 .branch-menu { position: fixed; inset: auto; margin: 0; padding: 0; width: min(300px, calc(100vw - 16px)); box-sizing: border-box; border: 1px solid var(--dropdown-border); border-radius: 12px;

@@ -7,6 +7,7 @@ import { ProjectIcon } from "./ProjectIcon";
 import { useProjectFilterPosition } from "./useProjectFilterPosition";
 import "./project-filter.css";
 import { VirtualOptions } from "../virtual/VirtualOptions";
+import { returnFocus, settleTriggerFocus } from "../../lib/returnFocus";
 
 export function ProjectFilter({ scope, onChange, anchor }: {
   scope: string | null; onChange(id: string | null): void; anchor: RefObject<HTMLElement | null>;
@@ -30,7 +31,7 @@ export function ProjectFilter({ scope, onChange, anchor }: {
   useEffect(() => {
     if (open) document.getElementById(`${id}-option-${activeIndex}`)?.scrollIntoView({ block: "nearest" });
   }, [open, activeIndex, id]);
-  function close() { popup.current?.hidePopover(); setOpen(false); trigger.current?.focus(); }
+  function close() { popup.current?.hidePopover(); setOpen(false); returnFocus(trigger.current); }
   function select(value: string | null) { if (query !== deferredQuery) return; onChange(value); close(); }
   const label = selected ? `Filter threads by project: ${selected.name}` : "Filter threads by project";
   return <>
@@ -38,6 +39,7 @@ export function ProjectFilter({ scope, onChange, anchor }: {
       {selected ? <ProjectIcon project={selected} /> : <PickerIcon name="folder" />}
     </button>
     <div ref={popup} id={id} popover="auto" className="project-filter" onToggle={(event) => {
+      if (event.newState === "closed") settleTriggerFocus(trigger.current);
       const opening = event.newState === "open";
       setOpen(opening);
       if (opening) { setQuery(""); setHighlighted(scope); input.current?.focus(); }

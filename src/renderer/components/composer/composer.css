@@ -1,6 +1,8 @@
 .composer {
   container: composer / inline-size;
   position: relative;
+  /* Above the context strip, whose top tucks behind it. */
+  z-index: 1;
   isolation: isolate;
   padding: 16px;
   background: transparent;

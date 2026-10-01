@@ -1,6 +1,7 @@
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { WorkspaceIcon } from "./WorkspaceIcon";
 import "./select-menu.css";
+import { returnFocus, settleTriggerFocus } from "../../lib/returnFocus";
 
 export type SelectOption<T extends string> = { value: T; label: string };
 type Props<T extends string> = {
@@ -38,7 +39,7 @@ export function SelectMenu<T extends string>({ value, options, onChange, label, 
   }
   function close() {
     menu.current?.hidePopover();
-    trigger.current?.focus({ preventScroll: true });
+    returnFocus(trigger.current, { preventScroll: true });
   }
   function navigate(event: KeyboardEvent<HTMLDivElement>) {
     if (event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -67,6 +68,7 @@ export function SelectMenu<T extends string>({ value, options, onChange, label, 
     </button>
     <div id={id} ref={menu} popover="auto" role="menu" aria-label={label} className={`select-menu flame-scrollbar${menuClassName ? ` ${menuClassName}` : ""}`} style={{ positionAnchor: anchor }}
       onToggle={event => {
+        if (event.newState === "closed") settleTriggerFocus(trigger.current);
         const opening = event.newState === "open";
         setOpen(opening);
         if (opening) focus(requestedFocus.current ?? Math.max(0, selected));

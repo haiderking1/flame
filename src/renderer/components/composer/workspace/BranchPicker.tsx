@@ -6,6 +6,7 @@ import { ComposerChevron } from "../ComposerChevron";
 import { useComposerPopoverPosition } from "../useComposerPopoverPosition";
 import type { RefsState } from "./useGitRefs";
 import { branchTriggerLabel, folderName, looksLikePullRequest } from "./workspaceLogic";
+import { returnFocus, settleTriggerFocus } from "../../../lib/returnFocus";
 
 export type BranchPickerHandle = { open(): void };
 type Item = { kind: "ref"; ref: GitRef } | { kind: "create"; name: string } | { kind: "pull-request"; reference: string };
@@ -38,7 +39,7 @@ export const BranchPicker = forwardRef<BranchPickerHandle, {
   const selectedName = pending ? workspace.baseBranch ?? refs.list?.defaultBranch ?? refs.list?.current ?? null : refs.list?.current ?? workspace.branch;
   const label = branchTriggerLabel(pending ? { ...workspace, baseBranch: selectedName } : workspace, refs.list?.current ?? null);
   function choose(item: Item) {
-    popup.current?.hidePopover(); trigger.current?.focus();
+    popup.current?.hidePopover(); returnFocus(trigger.current);
     if (item.kind === "ref") onPick(item.ref);
     else if (item.kind === "create") onCreate(item.name);
     else onPullRequest(item.reference);
@@ -49,8 +50,8 @@ export const BranchPicker = forwardRef<BranchPickerHandle, {
       <WorkspaceIcon name="branch" /><span className="composer-settings__label">{label}</span><ComposerChevron />
     </button>
     <div ref={popup} id={id} popover="auto" className="branch-menu branch-picker" role="dialog" aria-label={pending ? "Base branch" : "Branches"}
-      onToggle={event => { setOpen(event.newState === "open"); if (event.newState === "open") setQuery(""); }}
-      onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); popup.current?.hidePopover(); trigger.current?.focus(); } }}>
+      onToggle={event => { setOpen(event.newState === "open"); if (event.newState === "open") setQuery(""); else settleTriggerFocus(trigger.current); }}
+      onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); popup.current?.hidePopover(); returnFocus(trigger.current); } }}>
       <header className="branch-picker__search">
         <WorkspaceIcon name="search" />
         <input ref={input} value={query} placeholder="Search refs..." aria-label="Search refs" role="combobox" aria-expanded={open} aria-controls={`${id}-list`} aria-autocomplete="list"

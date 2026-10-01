@@ -5,6 +5,7 @@ import { filterModels, isLegacyModel, type ModelOption } from "./modelOptions";
 import { ModelPickerList } from "./ModelPickerList";
 import { useComposerPopoverPosition } from "../useComposerPopoverPosition";
 import "./model-picker.css";
+import { returnFocus, settleTriggerFocus } from "../../../lib/returnFocus";
 
 export function ModelPicker({ models, selectedId, onSelect, emptyMessage = "No models available yet.", error, busy = false, placeholder }: {
   models: readonly ModelOption[]; selectedId: string | null; onSelect(id: string): void | Promise<void>;
@@ -32,7 +33,7 @@ export function ModelPicker({ models, selectedId, onSelect, emptyMessage = "No m
   useLayoutEffect(() => {
     if (open) document.getElementById(`${id}-option-${index}`)?.scrollIntoView({ block: "nearest" });
   }, [open, index, query, id]);
-  function close() { popup.current?.hidePopover(); trigger.current?.focus(); }
+  function close() { popup.current?.hidePopover(); returnFocus(trigger.current); }
   async function select(model: ModelOption) {
     if (busy || query !== deferredQuery) return;
     try { await onSelect(model.id); close(); } catch { /* Keep the picker open to show the save error. */ }
@@ -44,6 +45,7 @@ export function ModelPicker({ models, selectedId, onSelect, emptyMessage = "No m
       <span className="composer-settings__label">{selected?.name ?? selectedId ?? placeholder ?? "Select model"}</span><ComposerChevron />
     </button>
     <div ref={popup} id={id} popover="auto" className="model-picker" data-keyboard={index >= 0 || undefined} onPointerMove={() => setHighlighted(null)} onToggle={(event) => {
+      if (event.newState === "closed") settleTriggerFocus(trigger.current);
       setOpen(event.newState === "open");
       if (event.newState === "open") { setQuery(""); setHighlighted(null); setLegacyOpen(false); }
     }} onBlur={(event) => {

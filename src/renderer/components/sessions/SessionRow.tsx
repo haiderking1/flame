@@ -13,6 +13,7 @@ import { branchMismatch, folderName, movedWorkspace } from "../composer/workspac
 import { gitStatusStore } from "../workspace/git/gitStatusStore";
 import { useThreadStatus } from "../notifications/useThreadStatus";
 import { Tooltip } from "../tooltip/Tooltip";
+import { returnFocus } from "../../lib/returnFocus";
 
 export function SessionRow({ session, project, now, onOpened, onDelete }: {
   now: number; session: SessionSummary; project?: Project; onOpened(): void; onDelete(session: SessionSummary): void;
@@ -74,7 +75,7 @@ export function SessionRow({ session, project, now, onOpened, onDelete }: {
   }
   function closeMenu(restoreFocus: boolean) {
     setMenu(null);
-    if (restoreFocus) opener.current?.focus();
+    if (restoreFocus) returnFocus(opener.current);
   }
   return <div className="session-list__row" data-editing={editing !== null || undefined} data-menu-open={!!menu || undefined} data-settled={session.settledAt !== null || undefined}
     onContextMenu={event => {
