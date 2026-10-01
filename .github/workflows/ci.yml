@@ -1,57 +1,57 @@
 name: CI
 
-# Every push to main and every pull request: typecheck, the full test suite, and installers built on every platform.
+# Every push to main and every pull request: typecheck, the full test suite, and the packaged app smoke-tested on Linux.
+# Installers for every platform are built when a change can affect packaging, and when run manually; nightly releases
+# build them every day main changed.
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test:
+  plan:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
-        with: { bun-version: 1.4.2 }
-      - uses: actions/setup-node@v5
-        with: { node-version: 26 }
-      # Bun's packages, Electron and electron-builder's tools, kept between runs.
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-            ~/.cache/electron
-            ~/.cache/electron-builder
-            ~/Library/Caches/electron
-            ~/Library/Caches/electron-builder
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
-          key: flame-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
-          restore-keys: flame-${{ runner.os }}-${{ runner.arch }}-
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: git config --global user.name "Flame CI" && git config --global user.email "ci@users.noreply.github.com"
-      # Ubuntu 24.04 blocks the unprivileged user namespaces Chromium's sandbox needs; allow them rather than run Electron unsandboxed.
-      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - run: bun run test
-
-  version:
-    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ steps.plan.outputs.version }}
+      quick: ${{ steps.plan.outputs.quick }}
     steps:
       - uses: actions/checkout@v5
+      # What packages the app, what it loads natively, and the main process: changes here build every platform.
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            packaging:
+              - package.json
+              - bun.lock
+              - patches/**
+              - resources/**
+              - scripts/desktop/**
+              - src/main/**
+              - .github/**
       # A CI build is a preview: it is never offered as an update.
-      - id: version
-        run: echo "version=$(node -p "require('./package.json').version")-ci.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+      - id: plan
+        env:
+          PACKAGING: ${{ steps.changes.outputs.packaging }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "version=$(node -p "require('./package.json').version")-ci.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "quick=$([ "$PACKAGING" = true ] || [ "$MANUAL" = true ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
+  test:
+    uses: ./.github/workflows/test.yml
 
   desktop:
-    needs: version
+    needs: plan
     uses: ./.github/workflows/build-desktop.yml
     with:
-      version: ${{ needs.version.outputs.version }}
+      version: ${{ needs.plan.outputs.version }}
+      quick: ${{ needs.plan.outputs.quick == 'true' }}

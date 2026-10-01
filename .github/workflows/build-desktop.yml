@@ -1,6 +1,7 @@
 name: Build desktop
 
 # Builds Flame's installers on every platform and architecture, and smoke-tests the Linux ones. Called by CI and Release.
+# A quick build is Linux x64's AppImage alone: enough to smoke-test the packaged app.
 on:
   workflow_call:
     inputs:
@@ -12,43 +13,44 @@ on:
         description: Sign and notarize when the repository has the secrets
         type: boolean
         default: false
+      quick:
+        description: Build only Linux x64's AppImage
+        type: boolean
+        default: false
 
 jobs:
+  targets:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - id: targets
+        env: { QUICK: "${{ inputs.quick }}" }
+        run: |
+          all='[
+            { "os": "ubuntu-24.04", "platform": "linux", "arch": "x64", "unpacked": "linux-unpacked" },
+            { "os": "ubuntu-24.04-arm", "platform": "linux", "arch": "arm64", "unpacked": "linux-arm64-unpacked" },
+            { "os": "macos-15", "platform": "mac", "arch": "arm64" },
+            { "os": "macos-15-intel", "platform": "mac", "arch": "x64" },
+            { "os": "windows-2025", "platform": "win", "arch": "x64" },
+            { "os": "windows-11-arm", "platform": "win", "arch": "arm64" }
+          ]'
+          if [ "$QUICK" = true ]; then filter='[.[0] + { "formats": "AppImage" }]'; else filter='.'; fi
+          echo "matrix=$(jq -c "$filter" <<< "$all")" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: targets
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: ubuntu-24.04, platform: linux, arch: x64, unpacked: linux-unpacked }
-          - { os: ubuntu-24.04-arm, platform: linux, arch: arm64, unpacked: linux-arm64-unpacked }
-          - { os: macos-15, platform: mac, arch: arm64 }
-          - { os: macos-15-intel, platform: mac, arch: x64 }
-          - { os: windows-2025, platform: win, arch: x64 }
-          - { os: windows-11-arm, platform: win, arch: arm64 }
+        include: ${{ fromJSON(needs.targets.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
       SIGNED: ${{ inputs.sign && (matrix.platform == 'mac' || matrix.platform == 'win') && secrets.CSC_LINK != '' }}
     steps:
       - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
-        with: { bun-version: 1.4.2 }
-      - uses: actions/setup-node@v5
-        with: { node-version: 26 }
-      # Bun's packages, Electron and electron-builder's tools, kept between runs.
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-            ~/.cache/electron
-            ~/.cache/electron-builder
-            ~/Library/Caches/electron
-            ~/Library/Caches/electron-builder
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
-          key: flame-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
-          restore-keys: flame-${{ runner.os }}-${{ runner.arch }}-
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       # electron-builder's bundled .deb packager is x86 only; arm64 uses the system's.
       - if: matrix.platform == 'linux' && matrix.arch == 'arm64'
         run: sudo apt-get update && sudo apt-get install -y ruby ruby-dev && sudo gem install fpm --no-document && echo "USE_SYSTEM_FPM=true" >> "$GITHUB_ENV"
@@ -57,8 +59,9 @@ jobs:
         env: { APPLE_API_KEY_P8: "${{ secrets.APPLE_API_KEY_P8 }}" }
       - name: Package
         shell: bash
-        run: node scripts/desktop/package.mjs --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --version "${{ inputs.version }}" $([ "$SIGNED" = "true" ] && echo --signed)
+        run: node scripts/desktop/package.mjs --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --version "${{ inputs.version }}" $([ -n "$FORMATS" ] && echo --target "$FORMATS") $([ "$SIGNED" = "true" ] && echo --signed)
         env:
+          FORMATS: ${{ matrix.formats }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}

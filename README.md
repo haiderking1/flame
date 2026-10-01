@@ -28,7 +28,7 @@ bun run typecheck
 bun run test
 ```
 
-CI runs both on every push to main and every pull request, and builds the installers for every platform (see Packaging and releases).
+CI runs both on every push to main and every pull request, split across four runners; each runner still runs its tests one at a time, because the Electron UI tests time real windows. CI also packages Linux x64's AppImage and smoke-tests it. It builds the installers for every platform (see Packaging and releases) when a change touches packaging: `package.json`, `bun.lock`, `patches/`, `resources/`, `scripts/desktop/`, `src/main/` or `.github/`. Run CI manually to build them all for any commit.
 
 The tests use real Electron renderers, check isolation, and exercise composer typing, resizing, keyboard behavior, IME handling, Git lifecycle, diff workers, virtual history and nested tool lists, search, and draft durability. Failure tests cover interrupted Git claims, storage failures, worker recovery, and actual failed WASM initialization. Development tests verify CSS updates, React Fast Refresh with draft preservation, HTML reloads, and submission success/failure with a test-only callback. The debugging pipe is enabled only by the tests.
 
@@ -48,7 +48,7 @@ package.json's version is the next stable release. The Release workflow publishe
 - **Nightly**: every day when `main` changed, or on demand, as `X.Y.Z-nightly.YYYYMMDD.N`. A nightly installs beside the stable app as Flame (Nightly).
 - **Preview**: on demand, as `X.Y.Z-preview.<run>`; it never offers itself as an update.
 
-Each release builds Linux, macOS and Windows for x64 and arm64, runs the tests and the Linux smoke check, and merges the per-architecture update manifests. Signing and notarization run when the repository has the `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER` secrets; without them the installers are unsigned, and macOS cannot install updates.
+Each release builds Linux, macOS and Windows for x64 and arm64 while the tests run, smoke-checks the Linux builds, publishes only once both pass, and merges the per-architecture update manifests. Signing and notarization run when the repository has the `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER` secrets; without them the installers are unsigned, and macOS cannot install updates.
 
 Installed builds check for updates 15 seconds after starting and every 4 minutes. Downloading and installing wait for you: the sidebar shows an update button while an update is available, downloading, ready or failed, and **Settings → About** shows the version, the update button and the update track (Stable or Nightly). **Help → Check for Updates…** (the Flame menu on macOS) checks at once. Installing asks first, stops the backend and restarts Flame on the new version. On Linux, updates work for the AppImage and the .deb; the AppImage adds itself to the app launcher with its icon so Wayland bars show it. Set `FLAME_DISABLE_AUTO_UPDATE=1` to turn updates off.
 

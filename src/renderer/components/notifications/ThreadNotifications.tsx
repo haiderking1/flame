@@ -50,7 +50,8 @@ export function ThreadNotifications() {
       const key = runKey(state), title = eventTitle(kind);
       const body = (AsyncResult.isSuccess(index) ? index.value.sessions.find(session => runKey(session) === key)?.title : null) ?? "Thread";
       if (includesSound(settings.notificationMode)) playNotificationSound(kind);
-      const active = sessions?.document && runKey(sessions.document) === key;
+      // A new thread's first reply can finish before the thread opens; it is still the one on screen.
+      const active = sessions?.viewing && runKey(sessions.viewing) === key;
       if (settings.inAppNotifications && focused() && !active) {
         toastStore.show({ id: `thread:${key}`, scope: null, type: kind === "completion" ? "success" : "error", title, description: body, dismissAfterVisibleMs: 10_000,
           action: { label: "Open thread", run: () => open(key) } });

@@ -44,36 +44,12 @@ jobs:
   test:
     needs: plan
     if: needs.plan.outputs.publish == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
-        with: { bun-version: 1.4.2 }
-      - uses: actions/setup-node@v5
-        with: { node-version: 26 }
-      # Bun's packages, Electron and electron-builder's tools, kept between runs.
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-            ~/.cache/electron
-            ~/.cache/electron-builder
-            ~/Library/Caches/electron
-            ~/Library/Caches/electron-builder
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
-          key: flame-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
-          restore-keys: flame-${{ runner.os }}-${{ runner.arch }}-
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: git config --global user.name "Flame CI" && git config --global user.email "ci@users.noreply.github.com"
-      # Ubuntu 24.04 blocks the unprivileged user namespaces Chromium's sandbox needs; allow them rather than run Electron unsandboxed.
-      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - run: bun run test
+    uses: ./.github/workflows/test.yml
 
+  # Builds alongside the tests; nothing is published unless both pass.
   build:
-    needs: [plan, test]
+    needs: plan
+    if: needs.plan.outputs.publish == 'true'
     uses: ./.github/workflows/build-desktop.yml
     secrets: inherit
     with:
@@ -81,28 +57,11 @@ jobs:
       sign: true
 
   release:
-    needs: [plan, build]
+    needs: [plan, test, build]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
-        with: { bun-version: 1.4.2 }
-      - uses: actions/setup-node@v5
-        with: { node-version: 26 }
-      # Bun's packages, Electron and electron-builder's tools, kept between runs.
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-            ~/.cache/electron
-            ~/.cache/electron-builder
-            ~/Library/Caches/electron
-            ~/Library/Caches/electron-builder
-            ~/AppData/Local/electron/Cache
-            ~/AppData/Local/electron-builder/Cache
-          key: flame-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
-          restore-keys: flame-${{ runner.os }}-${{ runner.arch }}-
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - uses: actions/download-artifact@v5
         with: { path: assets, merge-multiple: true }
       - run: node scripts/desktop/merge-update-manifests.mjs assets

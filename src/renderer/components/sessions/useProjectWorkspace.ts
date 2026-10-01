@@ -28,6 +28,9 @@ export function useProjectWorkspace() {
   const guard = useRef(false);
   const projectId = projectScope && (draftMode || !workspace.document) ? projectScope : null;
   const state = projectId ? drafts.get(projectId) : null;
+  // The thread on screen: the new thread being composed, before and while its first message creates it, or the open one.
+  const viewing: SessionLocation | undefined = state?.value && projectId ? { projectId, sessionId: state.value.sessionId }
+    : !projectId && workspace.document ? { projectId: workspace.document.projectId, sessionId: workspace.document.sessionId } : undefined;
   async function transition(work: () => Promise<void>) {
     if (guard.current) throw new Error("Workspace navigation is still busy");
     guard.current = true; setBusy(true); setError(null);
@@ -86,7 +89,7 @@ export function useProjectWorkspace() {
     dirty: state ? state.dirty : workspace.dirty,
     error: state?.error ?? error ?? (projectId ? null : workspace.error),
     canCompose: state ? !!state.value : !!workspace.document,
-    imageLocation: state?.value && projectId ? { projectId, sessionId: state.value.sessionId } : !projectId && workspace.document ? { projectId: workspace.document.projectId, sessionId: workspace.document.sessionId } : undefined,
+    viewing, imageLocation: viewing,
     prepareAttachments: async () => {
       if (projectId) { const value = drafts.get(projectId).value; if (!value) throw new Error("Project draft unavailable"); drafts.save(projectId, value); }
       else await workspace.flushDraft();
