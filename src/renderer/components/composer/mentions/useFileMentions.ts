@@ -2,7 +2,7 @@ import type { WorkspaceKey } from "../../../backend/workspaceKey";
 import { useEffect, useId, useState, type RefObject } from "react";
 import type { WorkspaceEntry } from "@contracts/workspace-search";
 import type { PromptEditorHandle } from "../editor/PromptEditor";
-import { detectMentionTrigger } from "./mentionText";
+import { detectMentionTrigger } from "./mentionSyntax";
 import { usePathSearch } from "./usePathSearch";
 
 /**

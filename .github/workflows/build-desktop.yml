@@ -50,8 +50,9 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      # Ubuntu 24.04 blocks the unprivileged user namespaces Chromium's sandbox needs; allow them rather than run Flame unsandboxed.
       - if: matrix.platform == 'linux'
-        run: node scripts/desktop/smoke.mjs release/${{ matrix.unpacked }}
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 && node scripts/desktop/smoke.mjs release/${{ matrix.unpacked }}
       # Per-architecture manifests are merged when releasing; give each a name of its own.
       - name: Name update manifests by architecture
         shell: bash

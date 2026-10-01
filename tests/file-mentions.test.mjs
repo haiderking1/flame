@@ -7,7 +7,7 @@ import Paragraph from '@tiptap/extension-paragraph';
 import Text from '@tiptap/extension-text';
 import { mentionNames } from '../dist/contracts/file-mentions.js';
 register('./helpers/contracts-alias.mjs', import.meta.url);
-const { serializeFileMention, findFileMentions, detectMentionTrigger, basename } = await import('../src/renderer/components/composer/mentions/mentionText.ts');
+const { serializeFileMention, findFileMentions, detectMentionTrigger, basename } = await import('../src/renderer/components/composer/mentions/mentionSyntax.ts');
 const { promptToDoc, docToPrompt, offsetAt, posAt, MENTION_NODE } = await import('../src/renderer/components/composer/editor/promptDoc.ts');
 
 test('mentions serialize to file links that parse back, including folders and awkward names', () => {

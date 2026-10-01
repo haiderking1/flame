@@ -9,7 +9,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { flushSync } from "react-dom";
 import { FileMentionNode } from "./mentionNode";
 import { docToPrompt, MENTION_NODE, offsetAt, posAt, promptToDoc } from "./promptDoc";
-import { serializeFileMention } from "../mentions/mentionText";
+import { serializeFileMention } from "../mentions/mentionSyntax";
 import "./prompt-editor.css";
 
 export type PromptEditorHandle = {

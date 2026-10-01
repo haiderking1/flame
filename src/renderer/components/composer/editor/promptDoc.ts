@@ -1,6 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { findFileMentions } from "../mentions/mentionText";
+import { findFileMentions } from "../mentions/mentionSyntax";
 
 export const MENTION_NODE = "fileMention";
 /**

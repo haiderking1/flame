@@ -55,6 +55,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: git config --global user.name "Flame CI" && git config --global user.email "ci@users.noreply.github.com"
+      # Ubuntu 24.04 blocks the unprivileged user namespaces Chromium's sandbox needs; allow them rather than run Electron unsandboxed.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: bun run test
 
   build:

@@ -1,5 +1,5 @@
 import { FileIcon } from "../../files/FileIcon";
-import { basename } from "./mentionText";
+import { basename } from "./mentionSyntax";
 import "./file-mention.css";
 
 /** A mentioned file or folder: its icon and name, with the full project path on hover. */
