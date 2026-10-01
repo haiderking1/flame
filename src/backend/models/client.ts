@@ -1,22 +1,20 @@
 import { ModelsError, type ModelCatalog } from "../../contracts/models.js";
-import type { CodexAuth } from "../auth/service.js";
+import type { ApiSession } from "../auth/service.js";
+import { modelsRoute } from "../openai/routes.js";
 import { parseModels } from "./payload.js";
 
-export type ModelsSession = NonNullable<ReturnType<CodexAuth["usageSession"]>>;
-// Catalog protocol compatibility, not Flame's application version. Never used to pin model IDs.
-export const CATALOG_VERSION = "0.159.0";
-export const CATALOG_URL = `https://chatgpt.com/backend-api/codex/models?client_version=${CATALOG_VERSION}`;
+export type ModelsSession = Omit<ApiSession, "method"> & Partial<Pick<ApiSession, "method">>;
+export { CATALOG_VERSION, CODEX_CATALOG_URL as CATALOG_URL } from "../openai/routes.js";
 const MAX_BYTES = 4 * 1024 * 1024;
 
 export class CodexModelsClient {
   constructor(private readonly request: typeof fetch = fetch) {}
   async read(session: ModelsSession, previous: ModelCatalog | null, signal: AbortSignal): Promise<ModelCatalog> {
     try {
-      const response = await this.request(CATALOG_URL, {
+      const route = modelsRoute(session);
+      const response = await this.request(route.url, {
         method: "GET", redirect: "error", cache: "no-store",
-        headers: { Authorization: `Bearer ${session.access}`, "ChatGPT-Account-Id": session.accountId,
-          Accept: "application/json", "User-Agent": "Flame", originator: "flame",
-          ...(previous?.etag ? { "If-None-Match": previous.etag } : {}) },
+        headers: { ...route.headers, Accept: "application/json", ...(previous?.etag ? { "If-None-Match": previous.etag } : {}) },
         signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
       });
       if (response.status === 304 && previous) return { ...previous, fetchedAt: Date.now() };

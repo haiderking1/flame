@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { Schema } from "effect";
 import { ModelCatalog, ModelSelection } from "../../contracts/models.js";
-import { CATALOG_URL } from "./client.js";
+import { CODEX_CATALOG_URL } from "../openai/routes.js";
 
 export class ModelsStore {
   private readonly db: DatabaseSync;
@@ -19,8 +19,9 @@ export class ModelsStore {
         account TEXT PRIMARY KEY, selection TEXT NOT NULL
       ) STRICT;`);
   }
-  load(account: string): ModelCatalog | null {
-    const row = this.db.prepare("SELECT catalog FROM codex_models_cache WHERE account = ? AND endpoint = ?").get(account, CATALOG_URL);
+  /** The catalog last read from `endpoint` for the account. */
+  load(account: string, endpoint = CODEX_CATALOG_URL): ModelCatalog | null {
+    const row = this.db.prepare("SELECT catalog FROM codex_models_cache WHERE account = ? AND endpoint = ?").get(account, endpoint);
     if (!row) return null;
     try {
       const catalog = Schema.decodeUnknownSync(ModelCatalog)(JSON.parse(String(row.catalog)));
@@ -28,9 +29,9 @@ export class ModelsStore {
       return catalog;
     } catch { return null; }
   }
-  save(account: string, catalog: ModelCatalog) {
+  save(account: string, catalog: ModelCatalog, endpoint = CODEX_CATALOG_URL) {
     this.db.prepare("INSERT INTO codex_models_cache VALUES (?, ?, ?) ON CONFLICT(account, endpoint) DO UPDATE SET catalog=excluded.catalog")
-      .run(account, CATALOG_URL, JSON.stringify(catalog));
+      .run(account, endpoint, JSON.stringify(catalog));
   }
   loadSelection(account: string): ModelSelection | null {
     return this.readSelection("codex_model_selection", account);

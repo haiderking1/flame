@@ -32,13 +32,18 @@ The tests use real Electron renderers, check isolation, and exercise composer ty
 
 ## OpenAI sign-in
 
-Open **Settings → Providers**, then use the Codex toggle to sign in through your default browser. The loopback callback uses port 1455; another Codex sign-in must not be using that port. You can cancel from Flame. Once connected, the logo's status dot turns green and the toggle signs out.
+Open **Settings → Providers**, where OpenAI has two rows: **ChatGPT** (official) and **Codex** (legacy). **Sign in** on either row opens your default browser; you can cancel from Flame. Once connected, that row's status dot turns green, it shows the account, and its toggle signs out. Flame holds one OpenAI sign-in at a time; signing in on the other row replaces it.
+
+- **Sign in with ChatGPT** is OpenAI's sign-in for apps that use a ChatGPT plan. The first sign-in registers Flame for your account and workspace; ChatGPT then lists Flame under **Settings → Usage**, where you can limit how much of your plan it may use. Flame verifies the ID token against OpenAI's published keys, requires the plan-usage permission, and sends responses and model requests to the public API (`api.openai.com/v1`). Its loopback callback takes any free port on `127.0.0.1`. Signing in again after the session expires reuses the registration; after signing out, the next sign-in registers anew. Flame keeps a random installation ID, which OpenAI ties registrations to, across sign-outs.
+- **Legacy Codex sign-in** uses the Codex CLI's registration and ChatGPT's Codex backend, as before. Its loopback callback uses port 1455; another Codex sign-in must not be using that port.
 
 Credentials are stored in `~/.flame/agent/auth.json`. On Unix, Flame restricts the directories to `0700` and the file to `0600`, rejects symlinks and unexpected ownership, and replaces the file atomically. This is plaintext credential storage, protected by filesystem permissions, not encryption. Never share or commit this file. Sign-out removes Flame's saved credentials; it does not revoke sessions on OpenAI's website.
 
 The backend restores saved account state without a loading screen and refreshes expiring tokens in the background. It keeps credentials out of renderer RPC responses. Models and supported thinking levels/service tiers are discovered from OpenAI and cached locally. Codex inference and the tool loop run directly in Flame's backend.
 
 ## Codex usage
+
+With **Sign in with ChatGPT**, only ChatGPT shows how much of the plan Flame has used: **Settings → Usage** links to ChatGPT's usage settings, and a response that hits the plan's limit says so. The rest of this section applies to the legacy Codex sign-in.
 
 **Settings → Usage** shows weekly usage, reset time, and available banked resets. Account-scoped snapshots are cached in SQLite, refreshed in the background while viewed, and retained if a read fails. Missing provider data is shown as unavailable, not zero.
 

@@ -3,11 +3,12 @@ import { bashTools } from "../bash/tools.js";
 import { fileTools } from "../file-tools/definitions.js";
 import { agentInstructions } from "./instructions.js";
 import { ReasoningContext, reasoningSettings } from "./reasoning-context.js";
-import { isContextOverflow, providerFailure, readProviderError, ContextOverflow } from "./provider-errors.js";
+import { isContextOverflow, planFailureMessage, providerFailure, readProviderError, ContextOverflow } from "./provider-errors.js";
+import { responsesRoute, type ApiCredentials } from "../openai/routes.js";
 import type { ModelSelection } from "../../contracts/models.js";
 import { events, InferenceFailure } from "./sse.js";
 export { InferenceFailure } from "./sse.js";
-export type InferenceRequest = { accountId: string; access: string; sessionId: string; settings: ModelSelection; input: unknown[]; supportsImages?: boolean; cwd?: string; projectInstructions?: string; tools?: boolean; fileTools?: boolean; bashTools?: boolean; instructionsOverride?: string; promptCacheKey?: string };
+export type InferenceRequest = ApiCredentials & { sessionId: string; settings: ModelSelection; input: unknown[]; supportsImages?: boolean; cwd?: string; projectInstructions?: string; tools?: boolean; fileTools?: boolean; bashTools?: boolean; instructionsOverride?: string; promptCacheKey?: string };
 import { object, ResponseOutput, type InferenceResult } from "./output.js";
 export type { InferenceResult } from "./output.js";
 const failure = (message: string): never => { throw new InferenceFailure(message); };
@@ -27,15 +28,17 @@ export class CodexInferenceClient {
         ...(reasoning ? { reasoning } : {}),
         ...(request.settings.serviceTier === "priority" ? { service_tier: "priority" } : {}),
       };
-      const response = await this.fetcher("https://chatgpt.com/backend-api/codex/responses", {
+      const route = responsesRoute(request, request.sessionId);
+      const response = await this.fetcher(route.url, {
         method: "POST", signal: combined, redirect: "error", cache: "no-store",
-        headers: { Authorization: `Bearer ${request.access}`, "ChatGPT-Account-Id": request.accountId,
-          "Content-Type": "application/json", Accept: "text/event-stream", "OpenAI-Beta": "responses=experimental", originator: "flame", "User-Agent": "Flame", "session-id": request.sessionId },
+        headers: { ...route.headers, "Content-Type": "application/json", Accept: "text/event-stream" },
         body: JSON.stringify(body),
       });
       if (!response.ok) {
-        if ((response.status === 400 || response.status === 413) && isContextOverflow(await readProviderError(response))) throw new ContextOverflow("OpenAI's context window is full.");
-        await response.body?.cancel();
+        const error = await readProviderError(response);
+        if ((response.status === 400 || response.status === 413) && isContextOverflow(error)) throw new ContextOverflow("OpenAI's context window is full.");
+        const plan = planFailureMessage(error);
+        if (plan) return failure(plan);
         return failure(response.status === 401 || response.status === 403 ? "OpenAI could not authorize this response. Check your sign-in in Providers."
           : response.status === 429 ? "OpenAI rate-limited this response. Check Usage before trying again. No banked reset was used."
           : `OpenAI could not generate a response (HTTP ${response.status}). The request was not replayed.`);

@@ -7,11 +7,12 @@ import type { CodexAuth } from "../auth/service.js";
 
 const TTL = 60_000;
 const uncertainMessage = "A reset request has an unknown outcome. No further resets will be sent from Flame. Check your usage on ChatGPT before taking any further action.";
+const managedMessage = "ChatGPT shows how much of your plan Flame has used. Open ChatGPT → Settings → Usage.";
 const failure = (error: unknown) => error instanceof UsageError ? error.message : "Codex usage could not be saved or read. Check disk space and permissions.";
 type Intent = ResetConfirmation & { session: UsageSession; credit: string };
 
 export class CodexUsage extends EventEmitter {
-  state: UsageState = { connected: false, snapshot: null, message: null };
+  state: UsageState = { connected: false, managedInChatGPT: false, snapshot: null, message: null };
   private session: UsageSession | null = null;
   private controller = new AbortController();
   private flight?: Promise<void>;
@@ -33,8 +34,9 @@ export class CodexUsage extends EventEmitter {
     this.session = next;
     this.intent = undefined;
     this.flight = undefined;
-    this.state = { connected: !!next, snapshot: null, message: null };
-    if (next) {
+    // Sign in with ChatGPT may only call the public API; its usage lives in ChatGPT's settings.
+    this.state = { connected: !!next, managedInChatGPT: next?.method === "chatgpt", snapshot: null, message: null };
+    if (next && next.method !== "chatgpt") {
       try { this.state = { ...this.state, snapshot: this.store.load(next.key) }; this.decorate(); }
       catch (error) { this.state = { ...this.state, message: failure(error) }; }
     }
@@ -48,6 +50,7 @@ export class CodexUsage extends EventEmitter {
   private requireSession() {
     const session = this.auth.usageSession();
     if (!session || this.closed) throw new UsageError({ message: "Sign in to OpenAI in Providers first." });
+    if (session.method === "chatgpt") throw new UsageError({ message: managedMessage });
     return session;
   }
   private decorate() {
@@ -72,7 +75,7 @@ export class CodexUsage extends EventEmitter {
   refresh(force = false): Promise<void> {
     if (this.flight) return this.flight;
     const session = this.auth.usageSession();
-    if (!session || this.closed) return Promise.resolve();
+    if (!session || session.method === "chatgpt" || this.closed) return Promise.resolve();
     const age = Date.now() - (this.state.snapshot?.fetchedAt ?? 0);
     if (!force && age >= 0 && age < TTL) return Promise.resolve();
     const signal = this.controller.signal;
@@ -81,7 +84,7 @@ export class CodexUsage extends EventEmitter {
         const { snapshot } = await this.client.read(session, signal);
         if (!this.current(session)) return;
         this.store.save(session.key, snapshot);
-        this.state = { connected: true, snapshot, message: null };
+        this.state = { connected: true, managedInChatGPT: false, snapshot, message: null };
         this.decorate();
       } catch (error) {
         if (!this.current(session)) return;

@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { CodexAuth } from '../dist/backend/auth/service.js';
 import { AuthStore } from '../dist/backend/auth/store.js';
-import { CodexTokens } from '../dist/backend/auth/codex/protocol.js';
-import { listenForCode } from '../dist/backend/auth/codex/callback.js';
+import { codexSignIn, CodexTokens } from '../dist/backend/auth/codex/protocol.js';
+import { listenForCallback } from '../dist/backend/auth/callback.js';
 
 async function wait(check) { for (let i = 0; i < 100; i++) { if (check()) return; await delay(10); } assert.fail('Timed out waiting for authentication'); }
 const credential = { type: 'oauth', access: 'access', refresh: 'refresh', expires: Date.now() + 3_600_000, accountId: 'account', email: null, plan: null };
@@ -17,21 +17,21 @@ test('browser callback, token exchange, disk persistence and restart form a comp
   const store = new AuthStore(join(root, '.flame', 'agent'));
   let port;
   const auth = new CodexAuth({ store,
-    callback: async (state, signal) => { const listener = await listenForCode(state, signal, 0); port = listener.port; return listener; },
+    callback: async (state, signal, callback) => { const listener = await listenForCallback(state, signal, { ...callback, port: 0 }); port = listener.port; return listener; },
     openBrowser: async (url) => {
       const state = new URL(url).searchParams.get('state');
       const response = await fetch(`http://127.0.0.1:${port}/auth/callback?state=${state}&code=test-code`);
       assert.equal(response.status, 200);
     },
-    tokens: new CodexTokens(async (_url, init) => {
+    methods: { codex: codexSignIn(new CodexTokens(async (_url, init) => {
       assert.equal(init.body.get('code'), 'test-code');
       const jwt = `header.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'account' } })).toString('base64url')}.signature`;
       return Response.json({ access_token: jwt, refresh_token: 'test-refresh', expires_in: 3600 });
-    }),
+    })) },
   });
   try {
     await auth.initialize();
-    auth.login();
+    auth.login('codex');
     await wait(() => auth.state.phase === 'connected');
     assert.equal((await store.load()).refresh, 'test-refresh');
     await auth.close();
@@ -50,13 +50,13 @@ test('cancellation rolls back a login already inside an atomic credential write'
   let writing = false;
   const commit = new Promise((resolve) => { release = resolve; });
   const auth = new CodexAuth({
-    store: { load: async () => saved, save: async (value) => { if (value) { writing = true; await commit; } saved = value; } },
+    store: { load: async () => saved, save: async (value) => { if (value) { writing = true; await commit; } saved = value; }, agentHostId: async () => 'urn:uuid:00000000-0000-4000-8000-000000000000' },
     openBrowser: async () => {},
-    callback: async () => ({ code: Promise.resolve('code'), port: 0, close() {} }),
-    tokens: { exchange: async () => credential, refresh: async () => credential },
+    callback: async () => ({ params: Promise.resolve(new URLSearchParams({ code: 'code' })), port: 0, close() {} }),
+    methods: { codex: codexSignIn({ exchange: async () => credential, refresh: async () => credential }) },
   });
   await auth.initialize();
-  auth.login();
+  auth.login('codex');
   await wait(() => writing);
   const cancelled = auth.cancel();
   release();

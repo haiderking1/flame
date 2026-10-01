@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { ModelsError, type ModelsState, type ModelSelection, type ServiceTier } from "../../contracts/models.js";
 import type { CodexAuth } from "../auth/service.js";
 import { CodexModelsClient, type ModelsSession } from "./client.js";
+import { modelsRoute } from "../openai/routes.js";
 import type { ModelsStore } from "./store.js";
 import { modelSelection, reconcileGitText, reconcileSelection, thinkingSelection } from "./selection.js";
 
@@ -33,7 +34,7 @@ export class CodexModels extends EventEmitter {
     this.state = { connected: !!next, accountKey: next?.key ?? null, catalog: null, selection: null, message: null, gitText: null };
     if (next) {
       try {
-        const catalog = this.store.load(next.key), models = catalog?.models ?? [];
+        const catalog = this.store.load(next.key, modelsRoute(next).url), models = catalog?.models ?? [];
         this.state = { ...this.state, catalog, selection: reconcileSelection(models, this.store.loadSelection(next.key)),
           gitText: reconcileGitText(models, this.store.loadGitText(next.key)) };
       }
@@ -78,7 +79,7 @@ export class CodexModels extends EventEmitter {
         try {
           this.state = { ...this.state, selection: reconcileSelection(catalog.models, this.store.loadSelection(session.key)),
             gitText: reconcileGitText(catalog.models, this.store.loadGitText(session.key)) };
-          this.store.save(session.key, catalog);
+          this.store.save(session.key, catalog, modelsRoute(session).url);
         }
         catch { this.state = { ...this.state, message: storageMessage }; }
       } catch (error) {

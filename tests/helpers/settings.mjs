@@ -23,13 +23,13 @@ export async function checkSettings({ evaluate, send, savedAuthPath }) {
   })()`), 'Settings belongs at the bottom of the sidebar');
   await evaluate("document.querySelector('[aria-label=\"Settings\"]').click()");
   await wait("document.querySelector('.settings-page') !== null");
-  await wait("document.querySelector('.provider-row__switch')?.disabled === false");
+  await wait("document.querySelector('.provider-row__switch, .provider-row__sign-in')?.disabled === false");
   if (savedAuthPath) {
     assert.ok(await evaluate(`(() => {
-      const dot = document.querySelector('.provider-connection-status');
-      return document.querySelector('.provider-row__switch').getAttribute('aria-checked') === 'true' &&
+      const dot = document.querySelector('[data-method=codex] .provider-connection-status');
+      return document.querySelector('[data-method=codex] .provider-row__switch').getAttribute('aria-checked') === 'true' &&
         getComputedStyle(dot).backgroundColor === 'rgb(74, 222, 128)' && dot.getAttribute('aria-label') === 'Connected' &&
-        document.querySelector('#codex-auth-description').textContent === 'Connected · test@example.com · plus' &&
+        document.querySelector('#codex-auth-status').textContent === 'Connected · test@example.com · plus' &&
         !document.body.textContent.includes('fake-access-token');
     })()`), 'Saved authentication renders immediately through RPC without a loading screen');
     const emailState = () => evaluate(`(() => {
@@ -53,20 +53,20 @@ export async function checkSettings({ evaluate, send, savedAuthPath }) {
     await evaluate("document.querySelector('[aria-label=\"Settings\"]').click()");
     await wait("document.querySelector('.private-email') !== null");
     assert.equal((await emailState()).blur, 'blur(4px)', 'Email must hide again when reopening settings');
-    await evaluate("document.querySelector('[aria-label=\"Sign out of OpenAI\"]').click()");
-    await wait("document.querySelector('.provider-row__switch')?.getAttribute('aria-checked') === 'false' && !document.querySelector('.provider-row__switch').disabled");
+    await evaluate("document.querySelector('[aria-label=\"Sign out of Codex\"]').click()");
+    await wait("!document.querySelector('.provider-row__switch') && document.querySelector('[data-method=codex] .provider-row__sign-in')?.disabled === false");
     assert.deepEqual(JSON.parse(await readFile(savedAuthPath, 'utf8')), { other: { preserved: true } });
   }
   assert.ok(await evaluate(`(() => {
     const workspace = document.querySelector('.workspace');
     const page = document.querySelector('.settings-page');
-    const toggle = page.querySelector('[role=switch]');
+    const signIns = [...page.querySelectorAll('.provider-row__sign-in')];
     const logo = page.querySelector('img');
     return getComputedStyle(workspace).display === 'none' && !page.closest('dialog') &&
       document.querySelector('.settings-navigation [aria-current=page]').textContent === 'Providers' &&
-      !document.querySelector('.sidebar-toolbar') && !toggle.disabled && toggle.getAttribute('aria-checked') === 'false' &&
-      toggle.getAttribute('aria-label') === 'Sign in with OpenAI' &&
-      page.querySelector('h2').textContent === 'Codex' && !logo.src.startsWith('https:');
+      !document.querySelector('.sidebar-toolbar') && !page.querySelector('[role=switch]') && signIns.every(button => !button.disabled) &&
+      signIns.map(button => button.getAttribute('aria-label')).join() === 'Sign in with ChatGPT,Sign in with Codex' &&
+      [...page.querySelectorAll('h2')].map(heading => heading.textContent).join() === 'ChatGPT official,Codex legacy' && !logo.src.startsWith('https:');
   })()`));
   await wait("document.querySelector('.provider-row img').complete && document.querySelector('.provider-row img').naturalWidth > 0");
   assert.ok(await evaluate(`(() => {

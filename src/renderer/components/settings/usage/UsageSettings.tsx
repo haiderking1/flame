@@ -5,6 +5,7 @@ import { Option } from "effect";
 import { usageAtom, refreshUsage, usageErrorMessage } from "../../../backend/usage";
 import openaiLogo from "../../../assets/providers/openai.svg?no-inline";
 import { ResetConfirmationDialog } from "./ResetConfirmationDialog";
+import { ChatGPTPlanUsage } from "./ChatGPTPlanUsage";
 import { useBankedReset } from "./useBankedReset";
 import "./usage-settings.css";
 
@@ -37,7 +38,7 @@ export function UsageSettings() {
   }
   return <section className="usage-settings" aria-labelledby="usage-heading">
     <h1 id="usage-heading">Usage</h1>
-    <article className="usage-card" aria-labelledby="usage-codex-heading">
+    {state?.managedInChatGPT ? <ChatGPTPlanUsage /> : <article className="usage-card" aria-labelledby="usage-codex-heading">
       <header className="usage-card__header"><span className="usage-card__logo"><img src={openaiLogo} alt="" /></span><h2 id="usage-codex-heading">Codex</h2>
         <button type="button" disabled={!state?.connected || refreshing} onClick={() => void update()}>Refresh</button>
       </header>
@@ -54,7 +55,7 @@ export function UsageSettings() {
         <button type="button" disabled={!state?.connected || !snapshot?.canReset || reset.busy} onClick={() => void reset.open()}>Use a banked reset</button>
       </div>
       {snapshot && <p className="usage-card__updated">Last updated {new Date(snapshot.fetchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>}
-    </article>
+    </article>}
     {error && <p className="usage-settings__message" role="alert">{error}</p>}
     {reset.message && <p className="usage-settings__message" role="status">{reset.message}</p>}
     {reset.confirmation && <ResetConfirmationDialog confirmation={reset.confirmation} busy={reset.busy} onYes={() => void reset.yes()} onNo={reset.no} />}

@@ -1,6 +1,8 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
+/** Where ChatGPT shows, and lets the user limit, what other apps spend of their plan. */
+export const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
 const Id = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256));
 export const UsageSnapshot = Schema.Struct({
   fetchedAt: Schema.Number,
@@ -9,7 +11,8 @@ export const UsageSnapshot = Schema.Struct({
   canReset: Schema.Boolean,
 });
 export type UsageSnapshot = typeof UsageSnapshot.Type;
-export const UsageState = Schema.Struct({ connected: Schema.Boolean, snapshot: Schema.NullOr(UsageSnapshot), message: Schema.NullOr(Schema.String) });
+/** `managedInChatGPT`: signed in with ChatGPT, whose usage and limits only ChatGPT shows. */
+export const UsageState = Schema.Struct({ connected: Schema.Boolean, managedInChatGPT: Schema.Boolean, snapshot: Schema.NullOr(UsageSnapshot), message: Schema.NullOr(Schema.String) });
 export type UsageState = typeof UsageState.Type;
 export const ResetConfirmation = Schema.Struct({ id: Id, title: Schema.String, expiresAt: Schema.Number });
 export type ResetConfirmation = typeof ResetConfirmation.Type;

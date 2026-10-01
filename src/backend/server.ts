@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { Effect } from "effect";
-import { NodeHttpServer } from "@effect/platform-node";
+// Only the HTTP server: the package index also loads modules such as NodeRedis, whose peer dependencies Flame does not ship.
+import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { homedir } from "node:os";
@@ -8,6 +9,8 @@ import { dirname, join } from "node:path";
 import { BackendRpc } from "../contracts/backend.js";
 import { AuthStore } from "./auth/store.js";
 import { CodexAuth } from "./auth/service.js";
+import type { SignInMethod } from "./auth/sign-in.js";
+import type { AuthMethod } from "../contracts/auth.js";
 import { authHandlers } from "./auth/handlers.js";
 import { UsageStore } from "./usage/store.js";
 import { CodexUsage } from "./usage/service.js";
@@ -51,10 +54,10 @@ import { CodexInferenceClient } from "./turns/client.js";
 import { authorizedRequest, authorizedImageRequest, imageCorsHeaders } from "./server-auth.js";
 export { authorizedRequest } from "./server-auth.js";
 
-export const startServer = (options: { filename: string; token: string; origin: string; worktreesDirectory?: string; openBrowser: (url: string) => Promise<void>; openPath?: (path: string) => Promise<void>; usageClient?: CodexUsageClient; modelsClient?: CodexModelsClient; inferenceClient?: Pick<CodexInferenceClient, "run">; ready: (port: number) => void }) => Effect.gen(function* () {
+export const startServer = (options: { filename: string; token: string; origin: string; worktreesDirectory?: string; openBrowser: (url: string) => Promise<void>; openPath?: (path: string) => Promise<void>; authMethods?: Partial<Record<AuthMethod, SignInMethod>>; usageClient?: CodexUsageClient; modelsClient?: CodexModelsClient; inferenceClient?: Pick<CodexInferenceClient, "run">; ready: (port: number) => void }) => Effect.gen(function* () {
   const store = yield* Effect.acquireRelease(Effect.sync(() => new ProjectStore(options.filename)), (store) => Effect.sync(() => store.close()));
   const auth = yield* Effect.acquireRelease(Effect.promise(async () => {
-    const auth = new CodexAuth({ store: new AuthStore(join(homedir(), ".flame", "agent")), openBrowser: options.openBrowser });
+    const auth = new CodexAuth({ store: new AuthStore(join(homedir(), ".flame", "agent")), openBrowser: options.openBrowser, methods: options.authMethods });
     await auth.initialize();
     return auth;
   }), (auth) => Effect.promise(() => auth.close()));

@@ -17,7 +17,7 @@ export function authHandlers(auth: CodexAuth) {
       }),
       (publish) => Effect.sync(() => { auth.removeListener("change", publish); }),
     ), { bufferSize: 1, strategy: "sliding" }),
-    "codex.auth.login": () => Effect.sync(() => auth.login()),
+    "codex.auth.login": ({ method }) => Effect.sync(() => auth.login(method)),
     "codex.auth.cancel": () => operation(() => auth.cancel()),
     "codex.auth.logout": () => operation(() => auth.logout()),
   });

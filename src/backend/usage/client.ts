@@ -1,7 +1,9 @@
 import { UsageError, type ResetOutcome } from "../../contracts/usage.js";
+import type { AuthMethod } from "../../contracts/auth.js";
 import { parseCredits, parseOutcome, parseUsage, type UsageData } from "./payloads.js";
 
-export type UsageSession = { key: string; accountId: string; access: string; epoch: number };
+/** The legacy Codex sign-in's account; Sign in with ChatGPT never reaches this client. */
+export type UsageSession = { key: string; method?: AuthMethod; accountId: string | null; access: string; epoch: number };
 const ROOT = "https://chatgpt.com/backend-api/wham";
 
 export class CodexUsageClient {
@@ -10,7 +12,7 @@ export class CodexUsageClient {
     try {
       const response = await this.request(`${ROOT}/${path}`, {
         method: body ? "POST" : "GET", redirect: "error", cache: "no-store",
-        headers: { Authorization: `Bearer ${session.access}`, "ChatGPT-Account-Id": session.accountId,
+        headers: { Authorization: `Bearer ${session.access}`, ...(session.accountId ? { "ChatGPT-Account-Id": session.accountId } : {}),
           Accept: "application/json", "User-Agent": "Flame", ...(body ? { "Content-Type": "application/json" } : {}) },
         body: body ? JSON.stringify(body) : undefined,
         signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),

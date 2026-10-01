@@ -8,9 +8,10 @@ import { request } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import { AuthStore } from '../dist/backend/auth/store.js';
 import { CodexAuth } from '../dist/backend/auth/service.js';
-import { OAuthFailure, credentialFromResponse } from '../dist/backend/auth/credentials.js';
-import { authorization, CodexTokens, REDIRECT_URI } from '../dist/backend/auth/codex/protocol.js';
-import { listenForCode } from '../dist/backend/auth/codex/callback.js';
+import { OAuthFailure } from '../dist/backend/auth/credentials.js';
+import { credentialFromResponse } from '../dist/backend/auth/codex/credential.js';
+import { authorization, codexSignIn, CodexTokens, REDIRECT_URI } from '../dist/backend/auth/codex/protocol.js';
+import { listenForCallback } from '../dist/backend/auth/callback.js';
 import { allowedOAuthUrl } from '../dist/main/oauthBrowser.js';
 
 const jwt = (payload) => `header.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.signature`;
@@ -56,7 +57,8 @@ test('Codex OAuth uses PKCE, scoped browser URL, and safe token exchange/refresh
 
 test('OAuth loopback callback validates state and host, handles denial, abort, replay and occupied ports', async () => {
   const controller = new AbortController();
-  const listener = await listenForCode('expected-state', controller.signal, 0);
+  const callback = { port: 0, path: '/auth/callback' };
+  const listener = await listenForCallback('expected-state', controller.signal, callback);
   const base = `http://127.0.0.1:${listener.port}`;
   try {
     assert.equal((await fetch(`${base}/auth/callback?state=wrong&code=secret`)).status, 400);
@@ -68,20 +70,20 @@ test('OAuth loopback callback validates state and host, handles denial, abort, r
     assert.equal((await fetch(`${base}/auth/callback?state=expected-state&state=expected-state&code=secret`)).status, 400);
     assert.equal((await fetch(`${base}/other`)).status, 404);
     assert.equal((await fetch(`${base}/auth/callback?state=expected-state&code=secret`, { method: 'POST' })).status, 400);
-    await assert.rejects(listenForCode('second', controller.signal, listener.port), /port 1455/);
+    await assert.rejects(listenForCallback('second', controller.signal, { ...callback, port: listener.port }), new RegExp(`port ${listener.port}`));
     const response = await fetch(`${base}/auth/callback?state=expected-state&code=secret`);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('cache-control'), 'no-store');
-    assert.equal(await listener.code, 'secret');
+    assert.equal((await listener.params).get('code'), 'secret');
     assert.equal((await fetch(`${base}/auth/callback?state=expected-state&code=secret`)).status, 409);
   } finally { listener.close(); }
-  const denied = await listenForCode('state', controller.signal, 0);
+  const denied = await listenForCallback('state', controller.signal, callback);
   await fetch(`http://127.0.0.1:${denied.port}/auth/callback?state=state&error=access_denied&error_description=secret`);
-  await assert.rejects(denied.code, /not approved/);
+  await assert.rejects(denied.params, /not approved/);
   denied.close();
-  const aborted = await listenForCode('state', controller.signal, 0);
+  const aborted = await listenForCallback('state', controller.signal, callback);
   controller.abort();
-  await assert.rejects(aborted.code, /cancelled/);
+  await assert.rejects(aborted.params, /cancelled/);
 });
 
 test('auth.json is private, atomic, preserves other providers, survives reopen, and refuses symlinks/corruption', async () => {
@@ -125,10 +127,10 @@ function harness(options = {}) {
   let calls = 0;
   const code = deferred();
   const auth = new CodexAuth({
-    store: { load: async () => saved, save: async (value) => { if (options.save) await options.save(value); saved = value; } },
+    store: { load: async () => saved, save: async (value) => { if (options.save) await options.save(value); saved = value; }, agentHostId: async () => 'urn:uuid:00000000-0000-4000-8000-000000000000' },
     openBrowser: async (url) => { assert.ok(allowedOAuthUrl(url)); opens++; if (options.openBrowser) await options.openBrowser(url); },
-    callback: async (_state, signal) => ({ port: 1455, close() {}, code: Promise.race([code.promise, new Promise((_, reject) => { signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }); })]) }),
-    tokens: { exchange: async () => credential(), refresh: async (...args) => { calls++; return options.refresh ? options.refresh(...args) : credentialFromResponse(tokens('rotated')); } },
+    callback: async (_state, signal) => ({ port: 1455, close() {}, params: Promise.race([code.promise.then(value => new URLSearchParams({ code: value })), new Promise((_, reject) => { signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }); })]) }),
+    methods: { codex: codexSignIn({ exchange: async () => credential(), refresh: async (...args) => { calls++; return options.refresh ? options.refresh(...args) : credentialFromResponse(tokens('rotated')); } }) },
   });
   return { auth, code, saved: () => saved, opens: () => opens, calls: () => calls };
 }
@@ -137,7 +139,7 @@ test('auth lifecycle signs in, publishes no secrets, refreshes once, persists ro
   const h = harness();
   await h.auth.initialize();
   try {
-    h.auth.login(); h.auth.login();
+    h.auth.login('codex'); h.auth.login('codex');
     await wait(() => h.opens() === 1);
     assert.equal(h.auth.state.phase, 'authorizing');
     h.code.resolve('code');
@@ -157,7 +159,7 @@ test('auth lifecycle signs in, publishes no secrets, refreshes once, persists ro
 test('cancel and sign-out fence late login/refresh results, failures retain credentials unless revoked', async () => {
   const login = harness();
   await login.auth.initialize();
-  login.auth.login();
+  login.auth.login('codex');
   await wait(() => login.opens() === 1);
   await login.auth.cancel();
   login.code.resolve('late');

@@ -1,30 +1,38 @@
 import { EventEmitter } from "node:events";
 import { createHash } from "node:crypto";
-import type { CodexAuthState } from "../../contracts/auth.js";
-import { type Credential, OAuthFailure } from "./credentials.js";
+import type { AuthMethod, CodexAuthState } from "../../contracts/auth.js";
+import { type Credential, isChatGPT, methodOf, OAuthFailure } from "./credentials.js";
 import type { AuthStore } from "./store.js";
-import { authorization, CodexTokens } from "./codex/protocol.js";
-import { listenForCode } from "./codex/callback.js";
+import type { SignInMethod } from "./sign-in.js";
+import { codexSignIn } from "./codex/protocol.js";
+import { chatgptSignIn } from "./chatgpt/protocol.js";
+import { listenForCallback } from "./callback.js";
 
 const message = (error: unknown) => error instanceof OAuthFailure ? error.message : "OpenAI authentication could not complete. Try again.";
 
 type Options = {
-  store: Pick<AuthStore, "load" | "save">;
+  store: Pick<AuthStore, "load" | "save" | "agentHostId">;
   openBrowser(url: string): Promise<void>;
-  tokens?: Pick<CodexTokens, "exchange" | "refresh">;
-  callback?: typeof listenForCode;
+  methods?: Partial<Record<AuthMethod, SignInMethod>>;
+  callback?: typeof listenForCallback;
 };
+/** The signed-in account as API clients use it: Sign in with ChatGPT calls the public API, the legacy sign-in Codex's. */
+export type ApiSession = { key: string; method: AuthMethod; accountId: string | null; access: string; epoch: number };
+// Model choices and caches are kept per account key, so a legacy account keeps the key it always had.
+const accountKey = (credential: Credential) => createHash("sha256")
+  .update(isChatGPT(credential) ? `chatgpt\0${credential.subject}` : `${credential.accountId}\0${credential.email ?? ""}`).digest("hex");
 
+/** The OpenAI sign-in, by Sign in with ChatGPT or the legacy Codex sign-in; one account at a time. */
 export class CodexAuth extends EventEmitter {
-  state: CodexAuthState = { phase: "disconnected", account: null, message: null };
+  state: CodexAuthState = { phase: "disconnected", method: null, account: null, message: null };
   private credential: Credential | null = null;
   private generation = 0;
   private sessionAvailable = false;
-  usageSession() {
+  usageSession(): ApiSession | null {
     const credential = this.credential;
     if (!this.sessionAvailable || !credential || credential.expires <= Date.now() || this.closed) return null;
-    return { key: createHash("sha256").update(`${credential.accountId}\0${credential.email ?? ""}`).digest("hex"),
-      accountId: credential.accountId, access: credential.access, epoch: this.generation };
+    return { key: accountKey(credential), method: methodOf(credential), accountId: isChatGPT(credential) ? null : credential.accountId,
+      access: credential.access, epoch: this.generation };
   }
   private active?: AbortController;
   private timer?: ReturnType<typeof setTimeout>;
@@ -34,8 +42,11 @@ export class CodexAuth extends EventEmitter {
   private failures = 0;
   private needsSave = false;
   private closed = false;
-  private readonly tokens: Pick<CodexTokens, "exchange" | "refresh">;
-  constructor(private readonly options: Options) { super(); this.tokens = options.tokens ?? new CodexTokens(); }
+  private readonly methods: Record<AuthMethod, SignInMethod>;
+  constructor(private readonly options: Options) {
+    super();
+    this.methods = { chatgpt: options.methods?.chatgpt ?? chatgptSignIn(), codex: options.methods?.codex ?? codexSignIn() };
+  }
 
   async initialize() {
     try {
@@ -44,10 +55,11 @@ export class CodexAuth extends EventEmitter {
       if (this.credential) this.schedule();
     } catch (error) { this.publish(message(error)); }
   }
-  private publish(error: string | null = null, authorizing = false) {
+  private publish(error: string | null = null, authorizing: AuthMethod | null = null) {
     const credential = this.credential;
     this.state = {
       phase: authorizing ? "authorizing" : !credential ? "disconnected" : credential.expires > Date.now() ? "connected" : "expired",
+      method: authorizing ?? (credential ? methodOf(credential) : null),
       account: credential ? { email: credential.email, plan: credential.plan } : null,
       message: error,
     };
@@ -75,25 +87,27 @@ export class CodexAuth extends EventEmitter {
     this.timer = setTimeout(() => { void this.refresh(); }, Math.min(wait, 2_147_483_647));
     this.timer.unref();
   }
-  login() {
+  /** Starts signing in by `method`; a sign-in of the other method is replaced once this one completes. */
+  login(method: AuthMethod) {
     if (this.closed || this.state.phase === "authorizing") return;
     this.invalidate();
     this.failures = 0;
     const generation = this.generation;
     const controller = this.active = new AbortController();
-    this.publish(null, true);
-    this.loginTask = this.completeLogin(generation, controller);
+    this.publish(null, method);
+    this.loginTask = this.completeLogin(method, generation, controller);
   }
-  private async completeLogin(generation: number, controller: AbortController) {
+  private async completeLogin(method: AuthMethod, generation: number, controller: AbortController) {
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(10 * 60_000)]);
-    let callback: Awaited<ReturnType<typeof listenForCode>> | undefined;
+    let callback: Awaited<ReturnType<typeof listenForCallback>> | undefined;
     try {
-      const flow = authorization();
-      callback = await (this.options.callback ?? listenForCode)(flow.state, signal);
+      const previous = this.credential && methodOf(this.credential) === method ? this.credential : null;
+      const flow = await this.methods[method].authorize({ previous, hostId: () => this.options.store.agentHostId() });
+      callback = await (this.options.callback ?? listenForCallback)(flow.state, signal, flow.callback);
       signal.throwIfAborted();
-      await this.options.openBrowser(flow.url);
-      const code = await callback.code;
-      const credential = await this.tokens.exchange(code, flow.verifier, signal);
+      await this.options.openBrowser(flow.url(callback.port));
+      const params = await callback.params;
+      const credential = await flow.complete(params, signal);
       await this.enqueue(async () => {
         if (generation !== this.generation || signal.aborted || this.closed) return;
         await this.options.store.save(credential);
@@ -143,7 +157,7 @@ export class CodexAuth extends EventEmitter {
     const controller = this.active = new AbortController();
     this.refreshTask = (async () => {
       try {
-        const updated = this.needsSave ? credential : await this.tokens.refresh(credential, controller.signal);
+        const updated = this.needsSave ? credential : await this.methods[methodOf(credential)].refresh(credential, controller.signal);
         await this.enqueue(async () => {
           if (generation !== this.generation || this.closed) return;
           // A rotated refresh token must not be discarded if disk persistence fails.

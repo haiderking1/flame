@@ -77,7 +77,7 @@ export class CodexGitWriter implements GitWriter, BranchNamer, TitleWriter {
     const withImages = images.length && this.models.supportsImages?.(account.key, settings.modelId) !== false ? images : [];
     const id = randomUUID();
     try {
-      const result = await this.client.run({ accountId: account.accountId, access: account.access, sessionId: id, promptCacheKey: id,
+      const result = await this.client.run({ method: account.method, accountId: account.accountId, access: account.access, sessionId: id, promptCacheKey: id,
         settings, tools: false, fileTools: false, bashTools: false,
         instructionsOverride: instructions, input: [{ role: "user", content: [{ type: "input_text", text: prompt }, ...withImages] }] }, () => {},
         AbortSignal.any([signal, AbortSignal.timeout(GENERATION_TIMEOUT_MS)]));

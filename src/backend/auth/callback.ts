@@ -1,14 +1,19 @@
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { OAuthFailure } from "../credentials.js";
+import { OAuthFailure } from "./credentials.js";
 
-export async function listenForCode(state: string, signal: AbortSignal, port = 1455) {
-  let resolve!: (code: string) => void;
+export type CallbackOptions = { port: number; path: string };
+/**
+ * Listens on 127.0.0.1 for the browser's redirect back from OpenAI. Resolves with the redirect's query once its state
+ * matches and it carries a code; a denial rejects. Only the first valid redirect counts.
+ */
+export async function listenForCallback(state: string, signal: AbortSignal, { port, path }: CallbackOptions) {
+  let resolve!: (params: URLSearchParams) => void;
   let reject!: (error: Error) => void;
   let consumed = false;
-  const code = new Promise<string>((yes, no) => { resolve = yes; reject = no; });
+  const params = new Promise<URLSearchParams>((yes, no) => { resolve = yes; reject = no; });
   // A cancellation may precede the caller attaching its continuation.
-  void code.catch(() => {});
+  void params.catch(() => {});
   const server = createServer({ maxHeaderSize: 8192 }, (request, response) => {
     response.setHeader("Content-Type", "text/plain; charset=utf-8");
     response.setHeader("Cache-Control", "no-store");
@@ -24,7 +29,7 @@ export async function listenForCode(state: string, signal: AbortSignal, port = 1
     let url: URL;
     try { url = new URL(request.url ?? "/", "http://localhost"); }
     catch { fail(400, "Invalid callback URL."); return; }
-    if (url.pathname !== "/auth/callback") { fail(404, "Not found."); return; }
+    if (url.pathname !== path) { fail(404, "Not found."); return; }
     const supplied = Buffer.from(url.searchParams.get("state") ?? "");
     const expected = Buffer.from(state);
     if (url.searchParams.getAll("state").length !== 1 || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
@@ -40,11 +45,12 @@ export async function listenForCode(state: string, signal: AbortSignal, port = 1
     if (!value || value.length > 4096 || url.searchParams.getAll("code").length !== 1) { fail(400, "Missing or invalid authorization code."); return; }
     consumed = true;
     response.end("Authorization received. Return to Flame to check that sign-in completed. You can close this tab.");
-    resolve(value);
+    resolve(url.searchParams);
   });
   server.requestTimeout = 10_000;
   server.headersTimeout = 10_000;
   server.maxConnections = 16;
+  // close() alone leaves a browser's idle spare connections attached to this server.
   const close = () => { signal.removeEventListener("abort", abort); server.close(); server.closeAllConnections(); };
   const abort = () => { reject(new OAuthFailure("Sign-in cancelled or timed out. Try again.")); close(); };
   try {
@@ -54,11 +60,11 @@ export async function listenForCode(state: string, signal: AbortSignal, port = 1
     });
   } catch {
     close();
-    throw new OAuthFailure("Cannot open the OpenAI callback on port 1455. Close any other Codex sign-in and try again.");
+    throw new OAuthFailure(`Cannot open the OpenAI callback on port ${port}. Close any other Codex sign-in and try again.`);
   }
   server.on("error", () => { reject(new OAuthFailure("The sign-in callback stopped. Try again.")); close(); });
   signal.addEventListener("abort", abort, { once: true });
   if (signal.aborted) abort();
   const address = server.address();
-  return { code, close, port: address && typeof address !== "string" ? address.port : port };
+  return { params, close, port: address && typeof address !== "string" ? address.port : port };
 }
