@@ -15,13 +15,13 @@ const credential = { type: 'oauth', access: 'access', refresh: 'refresh', expire
 test('browser callback, token exchange, disk persistence and restart form a complete OAuth lifecycle', async () => {
   const root = await mkdtemp(join(tmpdir(), 'flame-oauth-flow-'));
   const store = new AuthStore(join(root, '.flame', 'agent'));
-  let port;
+  let port, page;
   const auth = new CodexAuth({ store,
     callback: async (state, signal, callback) => { const listener = await listenForCallback(state, signal, { ...callback, port: 0 }); port = listener.port; return listener; },
+    // Like a real browser, opening the page returns at once; the page answers when the sign-in finishes.
     openBrowser: async (url) => {
       const state = new URL(url).searchParams.get('state');
-      const response = await fetch(`http://127.0.0.1:${port}/auth/callback?state=${state}&code=test-code`);
-      assert.equal(response.status, 200);
+      page = fetch(`http://127.0.0.1:${port}/auth/callback?state=${state}&code=test-code`).then(response => response.text());
     },
     methods: { codex: codexSignIn(new CodexTokens(async (_url, init) => {
       assert.equal(init.body.get('code'), 'test-code');
@@ -33,6 +33,7 @@ test('browser callback, token exchange, disk persistence and restart form a comp
     await auth.initialize();
     auth.login('codex');
     await wait(() => auth.state.phase === 'connected');
+    assert.ok((await page).includes('You&#39;re signed in'), 'the browser shows the finished sign-in');
     assert.equal((await store.load()).refresh, 'test-refresh');
     await auth.close();
     const reopened = new CodexAuth({ store: new AuthStore(join(root, '.flame', 'agent')), openBrowser: async () => assert.fail('No browser needed to restore a session') });

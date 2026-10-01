@@ -71,12 +71,30 @@ test('OAuth loopback callback validates state and host, handles denial, abort, r
     assert.equal((await fetch(`${base}/other`)).status, 404);
     assert.equal((await fetch(`${base}/auth/callback?state=expected-state&code=secret`, { method: 'POST' })).status, 400);
     await assert.rejects(listenForCallback('second', controller.signal, { ...callback, port: listener.port }), new RegExp(`port ${listener.port}`));
-    const response = await fetch(`${base}/auth/callback?state=expected-state&code=secret`);
+    // The page waits until Flame says whether the sign-in finished.
+    const pending = fetch(`${base}/auth/callback?state=expected-state&code=secret`);
+    assert.equal((await listener.params).get('code'), 'secret');
+    listener.finish(true);
+    const response = await pending;
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('cache-control'), 'no-store');
-    assert.equal((await listener.params).get('code'), 'secret');
+    assert.match(response.headers.get('content-type'), /^text\/html/);
+    const csp = response.headers.get('content-security-policy');
+    assert.match(csp, /default-src 'none'; style-src 'sha256-[A-Za-z0-9+/]+=*'; img-src data:;/);
+    assert.ok(!/script-src|unsafe-inline/.test(csp));
+    const page = await response.text();
+    assert.ok(page.includes('You&#39;re signed in') && page.includes('data:image/png;base64,') && !/<script/i.test(page));
+    const styleHash = createHash('sha256').update(/<style>([\s\S]*?)<\/style>/.exec(page)[1]).digest('base64');
+    assert.ok(csp.includes(`'sha256-${styleHash}'`), 'the policy allows exactly the page\'s stylesheet');
     assert.equal((await fetch(`${base}/auth/callback?state=expected-state&code=secret`)).status, 409);
   } finally { listener.close(); }
+  for (const [finish, title] of [[false, 'Flame couldn&#39;t finish signing in'], [null, 'Sign-in received']]) {
+    const waiting = await listenForCallback('state', controller.signal, callback);
+    const answer = fetch(`http://127.0.0.1:${waiting.port}/auth/callback?state=state&code=c`);
+    await waiting.params;
+    if (finish === null) waiting.close(); else { waiting.finish(finish); waiting.close(); }
+    assert.ok((await (await answer).text()).includes(title), title);
+  }
   const denied = await listenForCallback('state', controller.signal, callback);
   await fetch(`http://127.0.0.1:${denied.port}/auth/callback?state=state&error=access_denied&error_description=secret`);
   await assert.rejects(denied.params, /not approved/);

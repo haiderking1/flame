@@ -121,7 +121,7 @@ test('Sign in with ChatGPT completes through the browser callback, persists, and
   const fake = fakeOpenAIAuth();
   const legacyJwt = `header.${Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'legacy-account' } })).toString('base64url')}.signature`;
   const legacy = { type: 'oauth', access: legacyJwt, refresh: 'legacy-refresh', expires: Date.now() + 3_600_000, accountId: 'legacy-account', email: null, plan: null };
-  const opened = [];
+  const opened = [], pages = [];
   const auth = new CodexAuth({ store: new AuthStore(directory),
     methods: { chatgpt: chatgptSignIn(tokensFor(fake)), codex: codexSignIn({ exchange: async () => legacy, refresh: async () => legacy }) },
     // The legacy callback's fixed port may be taken on this machine; its sign-in is cancelled before any redirect.
@@ -133,8 +133,8 @@ test('Sign in with ChatGPT completes through the browser callback, persists, and
       fake.nonce = url.searchParams.get('nonce');
       const redirect = new URL(url.searchParams.get('redirect_uri'));
       redirect.search = new URLSearchParams({ code: 'browser-code', state: url.searchParams.get('state'), client_id: 'oaiapp_flame1', scope: fake.scope }).toString();
-      const response = await fetch(redirect);
-      assert.equal(response.status, 200);
+      // Like a real browser, opening the page returns at once; the page answers when the sign-in finishes.
+      pages.push(fetch(redirect).then(async response => ({ status: response.status, text: await response.text() })));
     } });
   try {
     await auth.initialize();
@@ -142,6 +142,9 @@ test('Sign in with ChatGPT completes through the browser callback, persists, and
     assert.equal(auth.state.method, 'chatgpt');
     await wait(() => auth.state.phase === 'connected');
     assert.deepEqual(auth.state, { phase: 'connected', method: 'chatgpt', account: { email: 'plan@example.com', plan: null }, message: null });
+    const shown = await pages[0];
+    assert.equal(shown.status, 200);
+    assert.ok(shown.text.includes('You&#39;re signed in'), 'the browser says the sign-in finished');
     const session = auth.usageSession();
     assert.deepEqual({ method: session.method, accountId: session.accountId, access: session.access }, { method: 'chatgpt', accountId: null, access: 'access-0' });
     assert.equal(session.key, createHash('sha256').update('chatgpt\0user-subject').digest('hex'));

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { app, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,7 @@ import { CodexModelsClient } from '../../dist/backend/models/client.js';
 import { chatgptSignIn, ChatGPTTokens } from '../../dist/backend/auth/chatgpt/protocol.js';
 import { OpenAIKeys } from '../../dist/backend/auth/chatgpt/id-token.js';
 import { allowedOAuthUrl } from '../../dist/main/oauthBrowser.js';
+import { listenForCallback } from '../../dist/backend/auth/callback.js';
 import { rendererDriver } from '../helpers/rendererDriver.mjs';
 import { captureUI } from '../helpers/captureUI.mjs';
 import { fakeOpenAIAuth } from '../helpers/chatgptAuth.mjs';
@@ -58,7 +59,33 @@ void app.whenReady().then(async () => {
     fake.nonce = authorize.searchParams.get('nonce');
     const redirect = new URL(authorize.searchParams.get('redirect_uri'));
     redirect.search = new URLSearchParams({ code: 'browser-code', state: authorize.searchParams.get('state'), client_id: 'oaiapp_flame_ui', scope: fake.scope }).toString();
-    assert.equal((await fetch(redirect)).status, 200);
+    // The browser lands on Flame's page, which answers once the sign-in finished.
+    // Frameless: a framed window crashes Electron's headless mode on Linux.
+    const browser = new BrowserWindow({ show: false, frame: false, width: 900, height: 640 });
+
+    const browserErrors = []; browser.webContents.on('console-message', details => { if (details.level === 'error' || details.level === 'warning') browserErrors.push(details.message); });
+    await browser.loadURL(redirect.href);
+    // Headless windows have no size of their own; give this one a viewport once it has a page, as the app window gets.
+    browser.webContents.debugger.attach('1.3');
+    await browser.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width: 900, height: 640, deviceScaleFactor: 1, mobile: false });
+    const page = () => browser.webContents.executeJavaScript(`({ title: document.querySelector('h1')?.textContent, icon: document.querySelector('.mark img')?.naturalWidth ?? 0,
+      tone: document.querySelector('main')?.className, background: getComputedStyle(document.body).backgroundColor })`);
+    assert.deepEqual({ ...(await page()), background: undefined }, { title: "You're signed in", icon: 128, tone: 'success', background: undefined });
+    const shoot = async name => { if (!process.env.FLAME_SCREENSHOT_DIR) return; const { writeFile } = await import('node:fs/promises');
+      await writeFile(join(process.env.FLAME_SCREENSHOT_DIR, `${name}.png`), (await browser.webContents.capturePage()).toPNG()); };
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    await shoot('callback-signed-in');
+    // A declined sign-in gets the error page.
+    const declined = await listenForCallback('declined-state', new AbortController().signal, { port: 0, path: '/callback' });
+    void declined.params.catch(() => {});
+    await browser.loadURL(`http://127.0.0.1:${declined.port}/callback?state=declined-state&error=access_denied`).catch(() => { /* Electron rejects error statuses; the page still shows. */ });
+    for (let i = 0; i < 100 && (await page().catch(() => ({}))).title !== 'Sign-in was not approved'; i++) await new Promise(resolve => setTimeout(resolve, 50));
+    assert.deepEqual(await page().then(({ title, tone, icon }) => ({ title, tone, icon })), { title: 'Sign-in was not approved', tone: 'error', icon: 128 });
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    await shoot('callback-declined');
+    declined.close();
+    assert.deepEqual(browserErrors, [], 'the page needs nothing its security policy blocks');
+    browser.destroy();
     await wait(`${status}?.startsWith('Connected · ')`);
     assert.equal(await evaluate("document.querySelector('[data-method=chatgpt] .provider-row__switch')?.getAttribute('aria-checked')"), 'true');
     assert.deepEqual(await evaluate("[...document.querySelectorAll('.provider-connection-status')].map(dot => dot.getAttribute('aria-label'))"), ['Connected', 'Not connected']);

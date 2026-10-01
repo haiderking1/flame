@@ -100,6 +100,7 @@ export class CodexAuth extends EventEmitter {
   private async completeLogin(method: AuthMethod, generation: number, controller: AbortController) {
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(10 * 60_000)]);
     let callback: Awaited<ReturnType<typeof listenForCallback>> | undefined;
+    let signedIn = false;
     try {
       const previous = this.credential && methodOf(this.credential) === method ? this.credential : null;
       const flow = await this.methods[method].authorize({ previous, hostId: () => this.options.store.agentHostId() });
@@ -114,6 +115,7 @@ export class CodexAuth extends EventEmitter {
         if (generation !== this.generation || this.closed) return;
         this.credential = credential;
         this.needsSave = false;
+        signedIn = true;
         this.publish();
         this.schedule();
       });
@@ -122,7 +124,11 @@ export class CodexAuth extends EventEmitter {
         this.publish(signal.aborted ? "Sign-in timed out. Try again." : message(error));
         this.schedule();
       }
-    } finally { callback?.close(); }
+    } finally {
+      // The browser's page waits for this, so it says whether the sign-in really finished.
+      callback?.finish?.(signedIn);
+      callback?.close();
+    }
   }
   async cancel() {
     if (this.state.phase !== "authorizing") return;
