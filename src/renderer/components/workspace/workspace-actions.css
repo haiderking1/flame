@@ -1,54 +1,6 @@
-.workspace-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  height: var(--titlebar-height);
-  flex-shrink: 0;
-  padding: 0 calc(var(--titlebar-right) + 1px) 0 12px;
-  position: relative;
-  z-index: 2;
-  pointer-events: none;
-}
-
-.workspace-actions nav {
-  display: flex;
-  gap: 4px;
-  pointer-events: auto;
-}
-
-.workspace-actions nav button {
-  width: 28px;
-  height: 28px;
-}
-
-.workspace-actions button svg {
-  width: 16px;
-  height: 16px;
-}
-
-.workspace-actions button,
-.diff-panel__close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #858585;
-  cursor: pointer;
-}
-
-.workspace-actions button:enabled:hover,
-.workspace-actions button[aria-expanded="true"],
-.diff-panel__close:hover {
-  color: #ededed;
-  background: #1c1c1c;
-}
-
-.workspace-actions button:disabled {
-  opacity: 1;
-  cursor: default;
-}
+.workspace-actions { display: flex; justify-content: flex-end; align-items: center; height: var(--titlebar-height); flex-shrink: 0; padding: 0 calc(var(--titlebar-right) + 4px) 0 12px; position: relative; z-index: 2; pointer-events: none; }
+.workspace-actions nav { display: flex; align-items: center; gap: 8px; pointer-events: auto; }
+.workspace-actions .workspace-diff-toggle, .diff-panel__close { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; padding: 0; border-radius: 5px; background: transparent; color: #939393; cursor: pointer; }.workspace-diff-toggle:hover, .workspace-diff-toggle[aria-expanded=true], .diff-panel__close:hover { background: #ffffff09; color: #eee; }
+.workspace-actions .optional-panel-error, .workspace-actions .optional-panel-loading { position: absolute; top: 32px; right: 0; min-width: 220px; background: #151515; border: 1px solid #ffffff15; border-radius: 8px; padding: 12px; }
+.workspace-icon--spin { animation: workspace-spin 1s linear infinite; }@keyframes workspace-spin { to { transform: rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .workspace-icon--spin { animation-duration: 3s; } }

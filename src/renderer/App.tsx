@@ -1,14 +1,15 @@
-import { useRef, useState } from "react";
+import { lazy, useMemo, useRef, useState } from "react";
 import { useAtomMount } from "@effect/atom-react";
 import { codexAuthAtom } from "./backend/auth";
 import { ProjectPicker } from "./components/projects/ProjectPicker";
-import { SessionProvider } from "./components/sessions/SessionContext";
 import { SessionWorkspace } from "./components/sessions/SessionWorkspace";
 import { WorkspaceActions } from "./components/workspace/WorkspaceActions";
-import { DiffPanel } from "./components/workspace/DiffPanel";
+import { ToastViewport } from "./components/toasts/ToastViewport";
+import { SessionProvider, useSessions } from "./components/sessions/SessionContext";
+import { PanelBoundary } from "./components/workspace/PanelBoundary";
 import { Sidebar } from "./components/sidebar/Sidebar";
 import { SidebarToggle } from "./components/sidebar/SidebarToggle";
-import { SettingsPage } from "./components/settings/SettingsPage";
+const SettingsPage = lazy(() => import("./components/settings/SettingsPage").then(module => ({ default: module.SettingsPage })));
 import type { SettingsSection } from "./components/settings/SettingsNavigation";
 
 import { useMediaQuery } from "./hooks/useMediaQuery";
@@ -19,7 +20,11 @@ export function App() { return <SessionProvider><Workspace /></SessionProvider>;
 function Workspace() {
   useWindowTitlebar();
   useAtomMount(codexAuthAtom);
+  const sessions = useSessions();
+  const activeProject = sessions?.document?.projectId ?? sessions?.projectDraftId ?? sessions?.projectScope ?? null;
   const [diffOpen, setDiffOpen] = useState(false);
+  const [panelRetry, setPanelRetry] = useState(0);
+  const DiffPanel = useMemo(() => lazy(() => import("./components/workspace/DiffPanel")), [panelRetry]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("providers");
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
@@ -53,19 +58,20 @@ function Workspace() {
       <Sidebar expanded={sidebarOpen} mobile={mobile} onClose={closeSidebar}
         onNewProject={() => setProjectPickerOpen(true)} settings={settingsOpen} onSettings={openSettings} onBack={closeSettings} settingsSection={settingsSection} onSettingsSection={setSettingsSection} />
       {projectPickerOpen && <ProjectPicker onClose={() => setProjectPickerOpen(false)} onAdded={() => setProjectPickerOpen(false)} />}
-      {settingsOpen && <SettingsPage section={settingsSection} sidebarVisible={sidebarOpen && !mobile} onClose={closeSettings} />}
+      {settingsOpen && <PanelBoundary onClose={closeSettings} onRetry={() => setPanelRetry(value => value + 1)}><SettingsPage section={settingsSection} sidebarVisible={sidebarOpen && !mobile} onClose={closeSettings} /></PanelBoundary>}
       <main className="workspace" hidden={settingsOpen} aria-label="Flame workspace" onKeyDown={(event) => {
         if (event.key === "Escape" && diffOpen && !event.defaultPrevented) {
           event.preventDefault();
           closeDiff();
         }
       }}>
+        <ToastViewport scope={activeProject} />
         <WorkspaceActions diffOpen={diffOpen} diffButtonRef={diffButton} onToggleDiff={() => setDiffOpen((open) => !open)} />
         <div className="workspace__body">
           <div className="workspace__chat">
             <SessionWorkspace />
           </div>
-          <DiffPanel open={diffOpen} onClose={closeDiff} />
+          {diffOpen && <PanelBoundary key={panelRetry} onClose={closeDiff} onRetry={() => setPanelRetry(value => value + 1)}><DiffPanel open onClose={closeDiff} /></PanelBoundary>}
         </div>
       </main>
     </div>

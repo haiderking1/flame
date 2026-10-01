@@ -17,7 +17,7 @@
 .provider-auth-error { margin: 0; padding: 0 16px 12px 48px; color: #ef9696; font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
 .provider-row__switch { position: relative; flex-shrink: 0; width: 30px; height: 18px; padding: 2px; border: 1px solid #ffffff14; border-radius: 999px; background: #ffffff0d; cursor: default; }
 .provider-row__switch:not(:disabled) { cursor: pointer; }
-.provider-row__switch:not(:disabled):hover, .provider-row__switch:focus-visible { outline: none; box-shadow: 0 0 0 2px #ffffff14; }
+.provider-row__switch:not(:disabled):hover { box-shadow: 0 0 0 2px #ffffff14; }
 .provider-row__switch[aria-checked="true"] { background: #3268ed; border-color: transparent; }
 .provider-row__switch[aria-checked="true"] > span { transform: translateX(12px); background: #101010; }
 .provider-row__switch > span { display: block; width: 12px; height: 12px; border-radius: 50%; background: #737373; }

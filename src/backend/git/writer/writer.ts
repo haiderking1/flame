@@ -1,0 +1,75 @@
+import { randomUUID } from "node:crypto";
+import { GitError } from "../../../contracts/git.js";
+import type { ModelSelection } from "../../../contracts/models.js";
+import type { CodexAuth } from "../../auth/service.js";
+import type { CodexModels } from "../../models/service.js";
+import type { CodexInferenceClient } from "../../turns/client.js";
+import { InferenceFailure } from "../../turns/sse.js";
+import { sanitizeFeatureBranchName } from "../branch-names.js";
+import { WRITER_INSTRUCTIONS } from "./prompts.js";
+
+const GENERATION_TIMEOUT_MS = 180_000;
+export type CommitText = { subject: string; body: string; branch: string | null };
+export type ChangeRequestText = { title: string; body: string };
+export interface GitWriter {
+  commit(prompt: string, model: ModelSelection | null, includeBranch: boolean, signal: AbortSignal): Promise<CommitText>;
+  changeRequest(prompt: string, model: ModelSelection | null, signal: AbortSignal): Promise<ChangeRequestText>;
+}
+/** Extracts the JSON object from a reply, tolerating code fences or stray prose around it. */
+export function parseReply(text: string): Record<string, unknown> {
+  const start = text.indexOf("{"), end = text.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try { const value: unknown = JSON.parse(text.slice(start, end + 1)); if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>; }
+    catch { /* Reported below. */ }
+  }
+  throw new GitError({ code: "COMMAND", message: "The model returned text Flame could not read as a commit message. Write a message yourself or retry." });
+}
+const field = (reply: Record<string, unknown>, key: string) => typeof reply[key] === "string" ? (reply[key] as string).trim() : "";
+/** First line, without trailing periods, at most 72 characters. */
+export function commitSubject(text: string, fallback = "Update project files") {
+  const first = text.trim().split(/\r?\n/, 1)[0]!.trim().replace(/\.+$/, "").trim().slice(0, 72).trim();
+  return first || fallback;
+}
+export function commitText(reply: Record<string, unknown>, includeBranch: boolean): CommitText {
+  const subject = commitSubject(field(reply, "subject"));
+  const branch = includeBranch ? sanitizeFeatureBranchName(field(reply, "branch") || subject) : null;
+  return { subject, body: field(reply, "body"), branch };
+}
+export function changeRequestText(reply: Record<string, unknown>): ChangeRequestText {
+  return { title: commitSubject(field(reply, "title"), "Update project changes").slice(0, 256), body: field(reply, "body") };
+}
+/** Writes commit messages and change request text with the user's selected OpenAI model. */
+export class CodexGitWriter implements GitWriter {
+  constructor(private readonly auth: Pick<CodexAuth, "usageSession" | "refresh">, private readonly models: Pick<CodexModels, "validateSelection" | "state">,
+    private readonly client: Pick<CodexInferenceClient, "run">) {}
+  async commit(prompt: string, model: ModelSelection | null, includeBranch: boolean, signal: AbortSignal) {
+    return commitText(parseReply(await this.generate(prompt, model, signal)), includeBranch);
+  }
+  async changeRequest(prompt: string, model: ModelSelection | null, signal: AbortSignal) {
+    return changeRequestText(parseReply(await this.generate(prompt, model, signal)));
+  }
+  private async generate(prompt: string, model: ModelSelection | null, signal: AbortSignal) {
+    if (!this.auth.usageSession()) await this.auth.refresh().catch(() => {});
+    const account = this.auth.usageSession();
+    if (!account) throw new GitError({ code: "INVALID", message: "Sign in to OpenAI in Providers to generate text, or write the commit message yourself." });
+    // Without an explicit or default selection, any available model can write a commit message.
+    const fallback = this.models.state.catalog?.models[0];
+    const chosen = model ?? this.models.state.selection ?? (fallback ? { modelId: fallback.id, effort: null, serviceTier: "default" as const } : null);
+    if (!chosen) throw new GitError({ code: "INVALID", message: "Choose a model to generate text, or write the commit message yourself." });
+    let settings: ModelSelection;
+    try { settings = this.models.validateSelection(account.key, chosen); }
+    catch { throw new GitError({ code: "INVALID", message: "The selected model is no longer available. Choose another model or write the commit message yourself." }); }
+    const id = randomUUID();
+    try {
+      const result = await this.client.run({ accountId: account.accountId, access: account.access, sessionId: id, promptCacheKey: id,
+        settings: { ...settings, effort: null, serviceTier: "default" }, tools: false, fileTools: false, bashTools: false,
+        instructionsOverride: WRITER_INSTRUCTIONS, input: [{ role: "user", content: [{ type: "input_text", text: prompt }] }] }, () => {},
+        AbortSignal.any([signal, AbortSignal.timeout(GENERATION_TIMEOUT_MS)]));
+      return result.text;
+    } catch (error) {
+      if (signal.aborted) throw new GitError({ code: "UNAVAILABLE", message: "Text generation was interrupted." });
+      if (error instanceof InferenceFailure) throw new GitError({ code: "COMMAND", message: `Text generation failed: ${error.message}` });
+      throw new GitError({ code: "COMMAND", message: "Text generation failed. Write the commit message yourself or retry." });
+    }
+  }
+}

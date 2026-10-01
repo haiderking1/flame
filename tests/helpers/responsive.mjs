@@ -83,13 +83,14 @@ export async function checkResponsive({ evaluate, send }) {
   for (const [width, sheet] of [[990, false], [970, true], [750, true], [320, true]]) {
     await viewport(width);
     await evaluate("document.querySelector('[aria-controls=workspace-diff]').click()");
+    for (let attempt = 0; attempt < 150 && !await evaluate("!!document.querySelector('[aria-label=\"Close diff panel\"]')"); attempt++) await new Promise(resolve => setTimeout(resolve, 20));
     await settle();
     assert.equal(await evaluate("Boolean(document.querySelector('.diff-sheet')?.open)"), sheet);
     assert.ok(await evaluate("document.documentElement.scrollWidth <= innerWidth + 1"), 'Responsive layout must not overflow');
     if (sheet) {
       assert.ok(await evaluate(`(() => {
         const bounds = document.querySelector('.diff-sheet').getBoundingClientRect();
-        const expected = innerWidth <= 760 ? Math.min(innerWidth * .88, 384) : Math.max(320, Math.min(innerWidth * .42, 448));
+        const expected = Math.max(320, Math.min(innerWidth * .88, 560));
         return Math.abs(bounds.width - expected) < 1 && Math.abs(bounds.right - innerWidth) < 1;
       })()`));
       await evaluate("document.querySelector('.diff-sheet').dispatchEvent(new Event('cancel', { cancelable: true }))");

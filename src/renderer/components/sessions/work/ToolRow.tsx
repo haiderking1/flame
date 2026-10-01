@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { memo, useEffect, useId, useState } from "react";
 import { useAtomSet } from "@effect/atom-react";
 import type { BashJob } from "@contracts/bash";
 import type { SessionLocation } from "@contracts/sessions";
@@ -6,6 +6,7 @@ import type { WorkStep } from "@contracts/work";
 import { readBash, stopBash } from "../../../backend/bash";
 import { FileToolRow } from "./FileToolRow";
 import { ThinkingLabel } from "./ThinkingLabel";
+import { useToolDisclosure } from "./ToolDisclosure";
 
 export const isRunning = (job: BashJob) => job.status === "running" || job.status === "claimed";
 export const isFailure = (job: BashJob) => job.status === "failed" || job.status === "interrupted" || (job.status === "exited" && (job.exitCode !== 0 || !!job.message));
@@ -15,12 +16,12 @@ function statusLabel(job?: BashJob) {
   return job.status === "claimed" ? "Starting" : job.status;
 }
 type Props = { step: Extract<WorkStep, { kind: "tool" }>; job?: BashJob; location: SessionLocation };
-export function ToolRow(props: Props) {
+export const ToolRow = memo(function ToolRow(props: Props) {
   return props.step.file ? <FileToolRow step={props.step} detail={props.step.file} location={props.location} /> : <BashToolRow {...props} />;
-}
+});
 function BashToolRow({ step, job: live, location }: Props) {
   const detailId = useId();
-  const [open, setOpen] = useState(false), [saved, setSaved] = useState<BashJob>();
+  const [open, setOpen] = useToolDisclosure(step.id), [saved, setSaved] = useState<BashJob>();
   const [loading, setLoading] = useState(false), [stopping, setStopping] = useState(false), [error, setError] = useState<string>();
   const read = useAtomSet(readBash, { mode: "promise" }), stop = useAtomSet(stopBash, { mode: "promise" });
   const job = live ?? saved;
@@ -31,6 +32,7 @@ function BashToolRow({ step, job: live, location }: Props) {
     catch { setError("Could not load command output."); }
     finally { setLoading(false); }
   }
+  useEffect(() => { if (open) void load(); }, [open, step.jobId]);
   async function cancel() {
     if (!job) return;
     setStopping(true); setError(undefined);

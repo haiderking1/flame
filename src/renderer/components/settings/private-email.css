@@ -1,4 +1,4 @@
 .private-email { display: inline; max-width: 100%; margin: 0; padding: 0; border: 0; border-radius: 3px; background: transparent; color: inherit; font: inherit; text-align: inherit; overflow-wrap: anywhere; cursor: pointer; vertical-align: baseline; }
 .private-email span { filter: blur(4px); user-select: none; }
 .private-email[data-revealed="true"] span { filter: none; user-select: text; }
-.private-email:focus-visible { outline: none; background: #ffffff0a; box-shadow: 0 0 0 2px #ffffff14; }
+.private-email:focus-visible { background: #ffffff0a; }

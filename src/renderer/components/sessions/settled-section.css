@@ -6,7 +6,7 @@
 .settled-section__toggle[aria-expanded=true] svg { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) { .settled-section__toggle svg { transition: none; } }
 .settled-section__toggle:hover { color: #bbb; background: #ffffff05; }
-.settled-section__toggle:focus-visible { outline: 1px solid #888; outline-offset: -1px; }
+
 .settled-section__toggle:disabled { cursor: default; }
 .session-list__row[data-settled] .session-list__item { display: flex; align-items: center; height: 36px; gap: 10px; }
 .session-list__row[data-settled] .session-list__project { display: contents; }

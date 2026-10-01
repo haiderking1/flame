@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { VirtualOptions } from "../virtual/VirtualOptions";
 import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { addProjectAtom, browseAtom, resultMessage } from "../../backend/projects";
@@ -15,16 +17,19 @@ export function FolderBrowser({ onBack, onAdded }: { onBack(): void; onAdded(pro
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const parsed = folderQuery(query);
-  const atom = browseAtom(parsed.directory);
+  const directory = useDebouncedValue(parsed.directory);
+  const waitingForQuery = directory !== parsed.directory;
+  const filter = useDeferredValue(parsed.filter);
+  const atom = browseAtom(directory);
   const result = useAtomValue(atom);
   const retry = useAtomRefresh(atom);
   const add = useAtomSet(addProjectAtom, { mode: "promise" });
   const added = useAtomValue(addProjectAtom);
-  const data = AsyncResult.isSuccess(result) && !result.waiting ? result.value : null;
-  const entries = data?.entries.filter((entry) => entry.name.toLocaleLowerCase().includes(parsed.filter.toLocaleLowerCase())) ?? [];
+  const data = AsyncResult.isSuccess(result) && !result.waiting && !waitingForQuery ? result.value : null;
+  const entries = useMemo(() => { const needle=filter.toLocaleLowerCase(); return data?.entries.filter(entry => entry.name.toLocaleLowerCase().includes(needle)) ?? []; }, [data,filter]);
   const index = Math.min(selected, Math.max(0, entries.length - 1));
   const input = useRef<HTMLInputElement>(null);
-  useEffect(() => { document.getElementById(`folder-option-${index}`)?.scrollIntoView({ block: "nearest" }); }, [index, query, data]);
+  useEffect(() => { if(entries.length <= 100) document.getElementById(`folder-option-${index}`)?.scrollIntoView({ block: "nearest" }); }, [index, entries]);
   function navigate(path: string) { setQuery(directoryQuery(path, data?.homePath)); setSelected(0); input.current?.focus(); }
   async function submit() {
     if (!data || busy.current || parsed.filter) return;
@@ -33,9 +38,9 @@ export function FolderBrowser({ onBack, onAdded }: { onBack(): void; onAdded(pro
     catch { /* The mutation atom exposes the typed error below. */ }
     finally { busy.current = false; if (mounted.current) setSaving(false); }
   }
-  const error = resultMessage(result);
+  const error = waitingForQuery ? null : resultMessage(result);
   return <section className="folder-browser" aria-label="Choose a local folder" onKeyDown={(event) => {
-    if (saving) return;
+    if (saving || filter !== parsed.filter || waitingForQuery) return;
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); void submit(); }
     else if (event.target === input.current && event.key === "ArrowDown") { event.preventDefault(); setSelected(Math.min(entries.length - 1, index + 1)); }
     else if (event.target === input.current && event.key === "ArrowUp") { event.preventDefault(); setSelected(Math.max(0, index - 1)); }
@@ -48,14 +53,14 @@ export function FolderBrowser({ onBack, onAdded }: { onBack(): void; onAdded(pro
         value={query} onChange={(event) => { setQuery(event.target.value); setSelected(0); }} spellCheck={false} disabled={saving} />
       <button type="button" className="project-picker__add" onMouseDown={(event) => event.preventDefault()} onClick={() => void submit()} disabled={!data || saving || Boolean(parsed.filter)}>{saving ? "Adding…" : "Add"}<kbd>Ctrl Enter</kbd></button>
     </header>
-    <div className="project-picker__body" aria-busy={result.waiting}>
+    <div className="project-picker__body" aria-busy={result.waiting || waitingForQuery || filter !== parsed.filter}>
       <p className="project-picker__label">Directories</p>
-      {result.waiting || AsyncResult.isInitial(result) ? <p role="status">Loading folders…</p> : null}
+      {result.waiting || waitingForQuery || AsyncResult.isInitial(result) ? <p role="status">Loading folders…</p> : null}
       {error ? <p role="alert">{error} <button type="button" onClick={retry}>Retry</button></p> : null}
       <div id="folder-options" role="listbox" aria-label="Directories">
-        {entries.map((entry, i) => <div key={entry.path} id={`folder-option-${i}`} role="option" aria-selected={i === index} className="project-picker__option" onMouseMove={() => setSelected(i)}>
-          <button type="button" tabIndex={-1} disabled={saving} onMouseDown={(event) => event.preventDefault()} onClick={() => navigate(entry.path)}><PickerIcon name="folder" /><span>{entry.name}</span></button>
-        </div>)}
+        <VirtualOptions items={entries} itemKey={entry => entry.path} selectedIndex={index} render={(entry, i) => <div key={entry.path} id={`folder-option-${i}`} role="option" aria-selected={i === index} className="project-picker__option" onMouseMove={() => setSelected(i)}>
+          <button type="button" tabIndex={-1} disabled={saving || filter !== parsed.filter} onMouseDown={(event) => event.preventDefault()} onClick={() => navigate(entry.path)}><PickerIcon name="folder" /><span>{entry.name}</span></button>
+        </div>} />
       </div>
       {data && entries.length === 0 ? <p role="status">{parsed.filter ? "No matching folders." : "No visible subfolders. You can add this folder."}</p> : null}
       {data?.truncated ? <p role="status">This directory is large. Showing a limited listing; type a full folder path to navigate directly.</p> : null}

@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { Profiler, useRef, useState } from "react";
+import { recordCommit } from "../../lib/performance";
 import { Composer } from "../composer/Composer";
 import { useSessions } from "./SessionContext";
 import { SessionDialog } from "./SessionDialog";
@@ -9,6 +10,7 @@ import { useComposerOverlay } from "./useComposerOverlay";
 import { useHistoryScroll } from "./useHistoryScroll";
 import { usePendingImageMessage } from "./usePendingImageMessage";
 import { UserMessage } from "./work/UserMessage";
+import { HistoryScrollContext } from "../virtual/HistoryScrollContext";
 
 export function SessionWorkspace() {
   const sessions = useSessions()!;
@@ -22,12 +24,12 @@ export function SessionWorkspace() {
   const composer = useRef<HTMLDivElement>(null);
   useComposerOverlay(composer, history);
   const saveState = sessions.busy ? "saving" : sessions.dirty ? "unsaved" : "saved";
-  useHistoryScroll(history, `${active?.projectId ?? ""}:${active?.sessionId ?? ""}`, sessions.page.entries, `${sessions.turn?.text ?? ""}:${pending?.id ?? ""}`);
+  const captureHistoryAnchor = useHistoryScroll(history, `${active?.projectId ?? ""}:${active?.sessionId ?? ""}`, sessions.page.entries, `${sessions.turn?.text ?? ""}:${pending?.id ?? ""}`);
   return <>
-    <div ref={history} hidden={(!active && !pending) || empty} className="session-history flame-scrollbar" role="region" aria-label="Session history">
+    <div ref={history} hidden={(!active && !pending) || empty} className="session-history flame-scrollbar" role="region" tabIndex={0} aria-label="Session history">
       <div className="session-history__content">
-      {sessions.page.nextBefore && <button className="session-history__older" disabled={sessions.busy} onClick={() => { void sessions.loadOlder().catch(() => {}); }}>Load earlier messages</button>}
-      {active ? <SessionTimeline key={`${active.projectId}:${active.sessionId}`} location={active} entries={sessions.page.entries} compactions={sessions.page.compactions} turn={sessions.turn} revision={active.revision} imagePreview={preview.message} />
+      {sessions.page.nextBefore && <button className="session-history__older" disabled={sessions.busy} onClick={() => { captureHistoryAnchor(); void sessions.loadOlder().catch(() => {}); }}>Load earlier messages</button>}
+      {active ? <HistoryScrollContext value={history}><Profiler id="timeline" onRender={recordCommit}><SessionTimeline key={`${active.projectId}:${active.sessionId}`} location={active} entries={sessions.page.entries} compactions={sessions.page.compactions} turn={sessions.turn} revision={active.revision} imagePreview={preview.message} /></Profiler></HistoryScrollContext>
         : pending && <UserMessage text={pending.text} images={pending.images} pending />}
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import type { SessionLocation } from "../../contracts/sessions.js";
 import type { ToolCall } from "../bash/tools.js";
 import type { Sessions } from "../sessions/service.js";
@@ -9,8 +10,9 @@ import { mutateText } from "./mutate.js";
 import { parseOperation } from "./validation.js";
 import { FileToolError, FilePersistenceFailure, fileError, type FileOperation, type FileResult } from "./types.js";
 
-export class FileTools {
-  constructor(private sessions: Sessions, private projectPath: (id: string) => string) {}
+/** Emits "mutated" (location) after every edit/write attempt, since even failed or uncertain ones may have touched disk. */
+export class FileTools extends EventEmitter {
+  constructor(private sessions: Sessions, private projectPath: (id: string) => string) { super(); }
   workingDirectory(projectId: string) { return this.projectPath(projectId); }
   ledger(location: SessionLocation) {
     const entries = this.sessions.files(location, store => store.ledger());
@@ -53,6 +55,7 @@ export class FileTools {
           ? readOnly ? "Read-only operation stopped." : "Operation stopped before a target-file commit. Newly created parent directories may remain."
           : fileError(error) };
     }
+    if (!readOnly) this.emit("mutated", location);
     // Record completed commits even if Stop arrived during rename/fsync. Never call them rolled back.
     try { this.sessions.files(location, store => store.finish(turnId, call.call_id, result, image)); }
     catch { throw new FilePersistenceFailure("result", readOnly); }

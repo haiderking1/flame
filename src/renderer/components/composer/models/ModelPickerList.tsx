@@ -1,4 +1,5 @@
 import openaiLogo from "../../../assets/providers/openai.svg?no-inline";
+import { VirtualOptions } from "../../virtual/VirtualOptions";
 import type { ModelOption } from "./modelOptions";
 
 export function ModelPickerList({ id, current, legacy, expanded, searching, selectedId, highlightedIndex, onSelect, onToggle }: {
@@ -13,14 +14,14 @@ export function ModelPickerList({ id, current, legacy, expanded, searching, sele
     </div>;
   }
   return <div className="model-picker__list flame-scrollbar">
-    <div id={`${id}-list`} role="listbox" aria-label="OpenAI models">{current.map(row)}</div>
+    <div id={`${id}-list`} role="listbox" aria-label="OpenAI models">{<VirtualOptions items={current} itemKey={model => model.id} selectedIndex={highlightedIndex} render={row} rowHeight={44} />}</div>
     {legacy.length > 0 && <button type="button" className="model-picker__legacy" aria-expanded={expanded} aria-controls={`${id}-legacy-list`} disabled={searching}
       title={searching ? "Search includes legacy models" : undefined} onClick={onToggle}>
       <span><span>Legacy models</span><small>{legacy.length} {legacy.length === 1 ? "model" : "models"}</small></span>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d={expanded ? "m6 9 6 6 6-6" : "m9 6 6 6-6 6"} /></svg>
     </button>}
     <div id={`${id}-legacy-list`} role="listbox" aria-label="Legacy OpenAI models" hidden={!expanded || !legacy.length}>
-      {expanded && legacy.map((model, index) => row(model, current.length + index))}
+      {expanded && <VirtualOptions items={legacy} itemKey={model => model.id} selectedIndex={highlightedIndex - current.length} render={(model, index) => row(model, current.length + index)} rowHeight={44} />}
     </div>
   </div>;
 }

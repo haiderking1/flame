@@ -2,7 +2,7 @@ import { app, shell, utilityProcess } from "electron";
 import { allowedOAuthUrl } from "./oauthBrowser.js";
 import { randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export async function launchBackend(onUnexpectedExit: () => void) {
@@ -13,11 +13,18 @@ export async function launchBackend(onUnexpectedExit: () => void) {
   const child = utilityProcess.fork(fileURLToPath(new URL("../backend/entry.js", import.meta.url)), [], { serviceName: "Flame backend", stdio: "pipe" });
   child.stderr?.on("data", (data: Buffer) => console.error(data.toString()));
   child.on("message", (message: unknown) => {
-    const data = message as { type?: string; id?: string; url?: unknown } | null;
-    if (data?.type !== "open-browser" || typeof data.id !== "string") return;
-    const reply = (ok: boolean) => { if (child.pid) child.postMessage({ type: "browser-result", id: data.id, ok }); };
-    if (!allowedOAuthUrl(data.url)) { reply(false); return; }
-    void shell.openExternal(data.url).then(() => reply(true), () => reply(false));
+    const data = message as { type?: string; id?: string; url?: unknown; path?: unknown } | null;
+    if (typeof data?.id !== "string") return;
+    if (data.type === "open-browser") {
+      const reply = (ok: boolean) => { if (child.pid) child.postMessage({ type: "browser-result", id: data.id, ok }); };
+      if (!allowedOAuthUrl(data.url)) { reply(false); return; }
+      void shell.openExternal(data.url).then(() => reply(true), () => reply(false));
+    } else if (data.type === "open-path") {
+      // The backend resolves the path inside a project before asking; only absolute local paths are accepted here.
+      const reply = (ok: boolean) => { if (child.pid) child.postMessage({ type: "path-result", id: data.id, ok }); };
+      if (typeof data.path !== "string" || !isAbsolute(data.path) || data.path.includes("\0")) { reply(false); return; }
+      void shell.openPath(data.path).then(error => reply(!error), () => reply(false));
+    }
   });
   let stopping = false;
   let started = false;

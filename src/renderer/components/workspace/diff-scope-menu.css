@@ -1,0 +1,5 @@
+.diff-scope-trigger { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 126px; padding: 4px 5px; border: 0; border-radius: 5px; background: transparent; color: #d4d4d4; font: inherit; font-size: 11px; font-weight: 500; cursor: pointer; }
+.diff-scope-trigger > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }.diff-scope-trigger > svg { width: 12px; height: 12px; flex-shrink: 0; color: #777; }
+.diff-scope-trigger:hover, .diff-scope-trigger[aria-expanded=true] { background: #ffffff07; }.diff-scope-trigger:focus-visible { background: #ffffff0d; }
+.diff-scope-menu { width: 176px; }
+@media(max-width:500px) { .diff-scope-trigger { max-width: 112px; } }

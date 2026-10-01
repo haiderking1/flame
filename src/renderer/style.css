@@ -1,5 +1,6 @@
 @import "./fonts/fonts.css";
 @import "./styles/scrollbar.css";
+@import "./styles/dropdown.css";
 
 :root {
   color-scheme: dark;
@@ -23,7 +24,9 @@ select {
   font: inherit;
 }
 
-button:focus {
+/* No focus rings anywhere: keyboard focus is shown with row backgrounds, border colors and button brightening instead. */
+:focus,
+:focus-visible {
   outline: none;
 }
 

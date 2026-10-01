@@ -20,6 +20,7 @@ import { checkProjects } from "./helpers/projects.mjs";
 import { checkProjectFilter } from "./helpers/projectFilter.mjs";
 import { checkSettings } from "./helpers/settings.mjs";
 import { checkComposerSubmission } from "./helpers/composerSubmission.mjs";
+import { checkDevelopmentDiff } from "./helpers/developmentDiff.mjs";
 
 for (const mode of ["production", "development"]) {
 test(`${mode}: composer window${mode === "development" ? " with live updates" : ""}`, { timeout: 35_000 }, async (t) => {
@@ -160,6 +161,7 @@ test(`${mode}: composer window${mode === "development" ? " with live updates" : 
   }
 
   if (mode === "development") {
+    await checkDevelopmentDiff({ evaluate, folder: join(profile, 'folders') });
     // Wait for the HMR client connection before changing the temporary fixture.
     for (let attempt = 0; attempt < 100 && server.ws.clients.size === 0; attempt++) await delay(50);
     assert.ok(server.ws.clients.size > 0, "Vite HMR WebSocket did not connect");

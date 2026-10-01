@@ -22,7 +22,7 @@ export const SessionDocument = Schema.Struct({
 });
 export type SessionDocument = typeof SessionDocument.Type;
 export const SessionEntry = Schema.Struct({
-  id: SessionId, parentId: Schema.NullOr(SessionId), createdAt: Schema.Number, turnStatus: Schema.optionalKey(Schema.NullOr(TurnStatus)),
+  id: SessionId, parentId: Schema.NullOr(SessionId), createdAt: Schema.Number, turnId: Schema.optionalKey(Schema.NullOr(SessionId)), turnStatus: Schema.optionalKey(Schema.NullOr(TurnStatus)),
   activity: Schema.optionalKey(WorkActivity), images: Schema.optionalKey(Schema.Array(ImageInfo)), requestId: Schema.optionalKey(Schema.NullOr(SessionId)),
   kind: Schema.Literals(["user", "settings", "assistant"]), text: Schema.NullOr(Schema.String.check(Schema.isMaxLength(1024 * 1024))), settings: Schema.NullOr(ModelSelection),
 });

@@ -1,0 +1,8 @@
+.select-menu { position: fixed; top: anchor(bottom); left: anchor(left); position-try-fallbacks: flip-block, flip-inline; margin: 6px 0 0; box-sizing: border-box; max-width: calc(100vw - 16px); max-height: min(260px, calc(100dvh - 16px)); overflow-y: auto; padding: 4px; border: 1px solid var(--dropdown-border); border-radius: 10px; background: var(--dropdown-surface); backdrop-filter: var(--dropdown-blur); color: var(--dropdown-text); box-shadow: var(--dropdown-shadow); font-size: 12px; line-height: 20px; }
+.select-menu::backdrop { background: transparent; }
+.select-menu button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 28px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: #d4d4d4; font: inherit; text-align: left; cursor: pointer; }
+.select-menu button + button { margin-top: 1px; }
+.select-menu button > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.select-menu button:hover, .select-menu button:focus-visible { background: var(--dropdown-row-hover); color: var(--dropdown-text); }
+.select-menu button[aria-checked=true] { background: var(--dropdown-row-active); color: var(--dropdown-text); }
+.select-menu button svg { width: 13px; height: 13px; flex-shrink: 0; color: #a3a3a3; }

@@ -1,0 +1,76 @@
+import assert from 'node:assert/strict';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { captureUI } from './captureUI.mjs';
+import { gitCommand } from '../../dist/backend/git/command.js';
+import { checkDiffScopeMenu } from './diffScopeMenu.mjs';
+export async function checkPanels(driver, project, measurements) {
+  const { evaluate, wait, click, set, settle } = driver;
+  const source='// <script>window.__unsafeSource = true</script>\n'+Array.from({length:12_000},(_,i)=>`export const value${i} = ${i};`).join('\n')+'\n';
+  const minified=`const minified = ${JSON.stringify('x'.repeat(25_000))};`;
+  await writeFile(join(project.path,'large.ts'),source);await writeFile(join(project.path,'minified.ts'),minified);await writeFile(join(project.path,'a.json'),'{"ok":true}');
+  await writeFile(join(project.path,'base.ts'),'const base = 2;\nconst staged = true;\n');
+  await gitCommand(project.path,['add','--','base.ts']);
+  await writeFile(join(project.path,'base.ts'),'const base = 2;\nconst staged = true;\nconst working = true;\n');
+  // Lifecycle capture stays in the test, not the application bundle.
+  await evaluate(`window.__workers = []; window.__workerTimings = []; window.__nativeWorker = Worker; window.Worker = class extends window.__nativeWorker { constructor(...args) { super(...args); this.source = String(args[0]); this.stopped = false; this.requests = new Map(); this.addEventListener('message', event => { const request=this.requests.get(event.data?.id); if(request) { window.__workerTimings.push({type:request.type,ms:performance.now()-request.start}); this.requests.delete(event.data.id); } }); window.__workers.push(this); } postMessage(message,...rest) { if(message?.id !== undefined) this.requests.set(message.id,{type:message.type ?? (message.language ? 'chat' : 'parse'),start:performance.now()}); super.postMessage(message,...rest); } terminate() { this.stopped = true; this.requests.clear(); super.terminate(); } }; true`);
+  const select=async path=>{await wait(`[...document.querySelectorAll('.diff-view__files button')].some(button=>button.title===${JSON.stringify(path)})`);await evaluate(`[...document.querySelectorAll('.diff-view__files button')].find(button=>button.title===${JSON.stringify(path)}).click()`);await wait("!document.querySelector('.diff-view__notice[role=status]')?.textContent.includes('Loading file') && !document.querySelector('[aria-label=\"Copy file\"]').disabled");};
+  const start=await evaluate('performance.now()');
+  await click('[aria-controls="workspace-diff"]'); await wait("!!document.querySelector('[aria-label=\"Show file tree\"]')");
+  assert.equal(await evaluate("document.querySelector('.diff-file-tree')"),null,'review initially shows file headers, not a permanent picker');
+  await wait("document.querySelector('[data-file-stats=\"base.ts\"]')?.getAttribute('aria-label')==='0 deletions, 1 additions'");
+  assert.equal(await evaluate("document.querySelector('[data-review-file=\"base.ts\"]').getAttribute('aria-expanded')"),'false','real counts appear without loading the file');
+  assert.equal(await evaluate("document.querySelector('[data-file-stats=\"a.json\"]').getAttribute('aria-label')"),'0 deletions, 1 additions','untracked headers report actual line counts');
+  const singleStats=async()=>{
+    assert.ok(await evaluate("[...document.querySelectorAll('diffs-container')].every(node=>[...node.shadowRoot.querySelectorAll('[data-additions-count],[data-deletions-count]')].every(count=>getComputedStyle(count).display==='none'))"),'native counts must not appear beside authoritative repository stats');
+    assert.ok(await evaluate("[...document.querySelectorAll('diffs-container')].every(node=>node.querySelectorAll('[data-file-stats]').length===1)"),'each rendered header has exactly one stats group');
+  };
+  await singleStats();await captureUI(driver,'diff-collapsed-stats');
+  await checkDiffScopeMenu(driver);
+  const scope=async value=>{await click('.diff-scope-trigger');await wait("document.querySelector('.diff-scope-menu').matches(':popover-open')");await evaluate(`[...document.querySelectorAll('.diff-scope-menu button')].find(button=>button.textContent===${JSON.stringify(value==='staged'?'Staged changes':'Working tree')}).click();true`);};
+  await scope('staged');await wait("document.querySelector('[data-file-stats=\"base.ts\"]')?.getAttribute('aria-label')==='1 deletions, 2 additions'");
+  await scope('working');await wait("document.querySelector('[data-file-stats=\"base.ts\"]')?.getAttribute('aria-label')==='0 deletions, 1 additions'");
+  await click('[aria-label="Show file tree"]'); await select('a.json');
+  await wait("window.__workerTimings.some(task=>task.type==='diff')");
+  const diffTypes="[...document.querySelectorAll('diffs-container')].flatMap(node=>[...node.shadowRoot.querySelectorAll('pre[data-diff-type]')].map(pre=>pre.getAttribute('data-diff-type')))";
+  await wait(`${diffTypes}.includes('single')`);await click('[aria-label="Split diff view"]');
+  await wait(`${diffTypes}.length>0 && ${diffTypes}.every(type=>type==='split')`);// a.json is a new file: split must still show two columns
+  await select('base.ts');await wait(`${diffTypes}.length>0 && ${diffTypes}.every(type=>type==='split')`);
+  await click('[aria-label="File view"]');assert.equal(await evaluate("document.querySelector('[aria-label=\"Split diff view\"]').disabled && document.querySelector('[aria-label=\"Unified diff view\"]').disabled"),true,'layout controls are disabled when no diff is shown');
+  await click('[aria-label="File view"]');await click('[aria-label="Unified diff view"]');await wait(`${diffTypes}.length>0 && ${diffTypes}.every(type=>type==='single')`);
+  await select('a.json');
+  await select('large.ts');
+  try { await wait("[...document.querySelectorAll('.diff-view__code diffs-container')].some(node=>node.shadowRoot?.textContent.includes('export const'))"); } catch(error) { await captureUI(driver,'diff-error'); console.log('DIFF_DIAGNOSTICS',await evaluate("JSON.stringify({timings:window.__workerTimings,boxes:['.diff-panel','.diff-view','.diff-view__body','.diff-review','.diff-view__code'].map(selector=>({selector,rect:document.querySelector(selector)?.getBoundingClientRect().toJSON(),style:document.querySelector(selector)?.getAttribute('style')})),shadows:[...document.querySelectorAll('diffs-container')].map(node=>({html:node.shadowRoot?.innerHTML.slice(-3500)}))})")); throw error; }
+  await singleStats();
+  measurements.firstPanelMs=await evaluate(`performance.now()-${start}`);
+  measurements.codeNodes=await evaluate("[...document.querySelectorAll('.diff-view__code diffs-container')].reduce((count,node)=>count+(node.shadowRoot?.querySelectorAll('*').length??0),0)");
+  assert.equal(await evaluate('window.__unsafeSource'),undefined);
+  assert.ok(await evaluate("[...document.querySelectorAll('diffs-container')].every(node=>!node.shadowRoot?.querySelector('script'))"));
+  assert.ok(measurements.codeNodes<15_000);
+  assert.ok(await evaluate("window.__workers.some(worker=>worker.source.includes('/worker-'))"));
+  assert.ok(await evaluate("(() => {const c=document.querySelector('.diff-view__code').getBoundingClientRect(),t=document.querySelector('.diff-file-tree').getBoundingClientRect();return t.left>=c.right-1 && t.height>200;})()"),'file navigation is a right-hand sidebar');
+  await click('[aria-label="Hide file tree"]'); await captureUI(driver,'diff-unified');
+  await click('[aria-label="Split diff view"]');assert.equal(await evaluate("document.querySelector('[aria-label=\"Split diff view\"]').getAttribute('aria-pressed')"),'true');await captureUI(driver,'diff-split');
+  await click('[aria-label="Unified diff view"]'); await click('[aria-label="Wrap lines"]');assert.equal(await evaluate("document.querySelector('[aria-label=\"Wrap lines\"]').getAttribute('aria-pressed')"),'true');await click('[aria-label="Wrap lines"]');
+  await click('[aria-label="Show file tree"]'); await captureUI(driver,'diff-file-tree');
+  await evaluate("window.__originalCopy=navigator.clipboard.writeText; navigator.clipboard.writeText=async source=>{window.__copied=source;}; true");
+  await click('[aria-label="Copy file"]');await wait("window.__copied?.includes('value11999')");assert.equal(await evaluate('window.__copied'),source);
+  const huge=Array.from({length:40_000},(_,i)=>`// line ${i}`).join('\n')+'\n';await writeFile(join(project.path,'huge.ts'),huge);await click('[aria-label="Refresh diff"]');await select('huge.ts');
+  await wait("[...document.querySelectorAll('.diff-view__notice')].some(node=>node.textContent.includes('Large source'))");await click('[aria-label="Copy file"]');await wait("window.__copied.includes('line 39999')");assert.equal(await evaluate('window.__copied'),huge);
+  await click('[aria-label="File view"]');await settle();await evaluate("document.querySelector('.diff-view__code').scrollTop=document.querySelector('.diff-view__code').scrollHeight;true");await wait("[...document.querySelectorAll('diffs-container')].some(node=>node.shadowRoot?.textContent.includes('line 39999'))");
+  assert.ok(await evaluate("[...document.querySelectorAll('diffs-container')].reduce((sum,node)=>sum+(node.shadowRoot?.querySelectorAll('*').length??0),0)<15_000"));
+  await evaluate("[...document.querySelectorAll('.diff-view__files button')].find(button=>button.title==='a.json').click(); [...document.querySelectorAll('.diff-view__files button')].find(button=>button.title==='minified.ts').click()");
+  await wait("!document.querySelector('[aria-label=\"Copy file\"]').disabled");await click('[aria-label="Copy file"]');await wait(`window.__copied===${JSON.stringify(minified)}`);
+  measurements.panelInputLatenciesMs=[await set('[aria-label="Filter changed files"]','zzz')];await wait("!document.querySelector('.diff-view__files button')");measurements.panelInputLatenciesMs.push(await set('[aria-label="Filter changed files"]',''));await wait("document.querySelectorAll('.diff-view__files button').length>=3");
+  await select('minified.ts');
+  await evaluate("window.__workers.filter(worker=>worker.source.includes('/worker-')&&!worker.stopped).forEach(worker=>worker.dispatchEvent(new ErrorEvent('error',{message:'Injected worker failure'})));true");
+  await wait("[...document.querySelectorAll('.diff-view__notice')].some(node=>node.textContent.includes('Syntax highlighting unavailable'))");await wait("!!document.querySelector('.diff-view__code')");await evaluate("[...document.querySelectorAll('.diff-view__notice button')].find(button=>button.textContent==='Retry highlighting').click()");await wait("!!document.querySelector('.diff-view__code')&&!document.querySelector('.diff-view__notice button')");
+  const workers=await evaluate('window.__workers.length');await click('[aria-label="Close diff panel"]');await click('[aria-controls="workspace-diff"]');
+  assert.ok(await evaluate("Number(document.querySelector('.diff-toolbar__count')?.textContent)>=3 && !document.querySelector('.diff-view__notice[role=status]')"),'reopening shows the cached status without refreshing');
+  await click('[aria-label="Show file tree"]');await select('minified.ts');await wait("!!document.querySelector('.diff-view__code')");assert.equal(await evaluate('window.__workers.length'),workers);
+  await select('a.json');await wait("[...document.querySelectorAll('.diff-view__code diffs-container')].some(node=>node.shadowRoot?.textContent.includes('\"ok\":true'))");
+  await writeFile(join(project.path,'a.json'),'{"ok":false}');await evaluate("window.dispatchEvent(new Event('focus'));true");
+  await wait("[...document.querySelectorAll('.diff-view__code diffs-container')].some(node=>node.shadowRoot?.textContent.includes('\"ok\":false'))");
+  await click('[aria-label="Collapse all files"]');assert.ok(await evaluate("[...document.querySelectorAll('[data-review-file]')].every(button=>button.getAttribute('aria-expanded')==='false')"));
+  await click('[aria-label="Close diff panel"]');await settle();await evaluate('navigator.clipboard.writeText=window.__originalCopy;true');
+}

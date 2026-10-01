@@ -27,7 +27,7 @@
 .image-viewer__state { min-width: min(320px, 80vw); min-height: 192px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; border: 1px solid #ffffff26; border-radius: 8px; background: #111; padding: 24px; font-size: 14px; }
 .image-viewer__state button { color: white; background: #292929; border: 1px solid #444; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
 .image-zoom { overflow: auto; overscroll-behavior: contain; border-radius: 8px; background: #111; box-shadow: 0 20px 60px #0008; outline: 1px solid #ffffff26; }
-.image-zoom:focus-visible { outline: 1px solid #ffffff26; }
+
 .image-viewer__nav:focus-visible, .image-viewer__state button:focus-visible { outline: none; filter: none; }
 .image-zoom img { display: block; max-width: none; user-select: none; }
 .image-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

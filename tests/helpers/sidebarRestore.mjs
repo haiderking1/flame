@@ -10,6 +10,7 @@ export async function checkSidebarRestore({ evaluate, send }) {
   await viewport(2000);
   await evaluate(`document.querySelector('.sidebar__resize').dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }))`);
   await settle();
+  await evaluate("document.querySelector('.sidebar__resize').focus(); document.querySelector('.sidebar__resize').blur()");
   const saved = await evaluate("Number(localStorage.getItem('flame.sidebar.width'))");
   assert.ok(saved > 208);
   await viewport(1400);

@@ -1,12 +1,12 @@
 # Flame
 
-An Electron coding workspace with project-owned SQLite sessions and direct Codex conversations. Tools and the agent loop are not connected yet.
+An Electron coding workspace with project-owned SQLite sessions, direct Codex conversations, file tools, managed Bash jobs, and background Git actions.
 
 ## Requirements
 
-- Bun 1.4.0
+- Bun 1.4.2
 - Node.js 22.12+ on a release supported by Vite (Node 24+ recommended)
-- A graphical desktop session to launch the app or run the window test
+- A graphical desktop session to launch the app; interaction tests and benchmarks use headless Electron
 
 ## Run
 
@@ -28,7 +28,7 @@ bun run typecheck
 bun run test
 ```
 
-The smoke tests use real Electron renderers (headless for interaction tests), check isolation, and exercise composer typing, resizing, keyboard behavior, and IME handling. Development tests verify CSS updates, React Fast Refresh with draft preservation, HTML reloads, and submission success/failure with a test-only callback. The debugging pipe is enabled only by the tests.
+The tests use real Electron renderers, check isolation, and exercise composer typing, resizing, keyboard behavior, IME handling, Git lifecycle, diff workers, virtual history and nested tool lists, search, and draft durability. Failure tests cover interrupted Git claims, storage failures, worker recovery, and actual failed WASM initialization. Development tests verify CSS updates, React Fast Refresh with draft preservation, HTML reloads, and submission success/failure with a test-only callback. The debugging pipe is enabled only by the tests.
 
 ## OpenAI sign-in
 
@@ -36,7 +36,7 @@ Open **Settings → Providers**, then use the Codex toggle to sign in through yo
 
 Credentials are stored in `~/.flame/agent/auth.json`. On Unix, Flame restricts the directories to `0700` and the file to `0600`, rejects symlinks and unexpected ownership, and replaces the file atomically. This is plaintext credential storage, protected by filesystem permissions, not encryption. Never share or commit this file. Sign-out removes Flame's saved credentials; it does not revoke sessions on OpenAI's website.
 
-The backend restores saved account state without a loading screen and refreshes expiring tokens in the background. It keeps credentials out of renderer RPC responses. Models and supported thinking levels/service tiers are discovered from OpenAI and cached locally. Codex inference runs directly in Flame's backend. Tools and the agent loop are not connected yet.
+The backend restores saved account state without a loading screen and refreshes expiring tokens in the background. It keeps credentials out of renderer RPC responses. Models and supported thinking levels/service tiers are discovered from OpenAI and cached locally. Codex inference and the tool loop run directly in Flame's backend.
 
 ## Codex usage
 
@@ -78,7 +78,7 @@ Completed assistant messages, provider reasoning context, and terminal state com
 
 Provider HTTP requests have a ten-minute deadline and a 90-second read-idle limit. These limits do not apply to Bash commands. Assistant text is limited to 1 MiB and ordinary provider response/text input to 8 MiB. Image input has a separate 64 MiB payload budget. Durable full-turn output has a 256 MiB bound. Conversation history can exceed one request; compaction reduces the active projection before submission. If the latest indivisible message or tool exchange cannot fit, Flame reports the failure and preserves history.
 
-Session drafts autosave after 400 ms and flush before switching sessions. Failed saves keep local text, display an error, and prevent navigation from silently losing it. Reloading saved state preserves unsaved text so conflicts can be resolved explicitly. Normal unload is blocked while a draft/write is pending; after saving, retry closing/reloading. Forced termination can still lose keystrokes that have not reached SQLite. Each draft/message is limited to 48 KiB after JSON encoding to fit the authenticated RPC transport.
+Session drafts autosave after 400 ms and flush before switching sessions. Pre-session project drafts also delay serialization and persistence by 400 ms, flushing on navigation, hidden visibility, and pagehide. Submission IDs and accepted-message markers remain immediately durable. Failed saves keep local text, display an error, and prevent navigation from silently losing it. Reloading saved state preserves unsaved text so conflicts can be resolved explicitly. Normal unload is blocked while a draft/write is pending; after saving, retry closing/reloading. Forced termination can still lose keystrokes that have not reached SQLite. Each draft/message is limited to 48 KiB after JSON encoding to fit the authenticated RPC transport.
 
 ### Conversation compaction
 
@@ -125,6 +125,34 @@ Shutdown interrupts jobs; crash recovery reports uncertain outcomes instead of r
 
 **YOLO mode is not a sandbox.** Commands have your user account's filesystem and network privileges, including access to sensitive files. Provider tokens are not injected into the shell environment. See [`src/backend/bash/README.md`](src/backend/bash/README.md) for lifecycle and recovery details.
 
+## Git and file review
+
+Select a project, then use the split Git control at the top right. The primary button opens confirmation for initialize, commit, or push based on repository state; the chevron opens all available actions and the latest operation receipt. Actions run in the background backend, not through chat or the model:
+
+- **Initialize repository** creates Git metadata with the confirmed initial branch. It does not stage or commit files.
+- **Commit** uses your message and defaults to already-staged changes. **All repository changes** is an explicit alternative that stages additions, edits, and deletions before committing.
+- **Commit and push** preserves the created commit if pushing fails. The result includes its commit ID.
+- **Push** sends only the checked-out branch to the same-name branch on the selected existing remote. Setting its upstream is explicit. Force, mirroring, pruning, automatic tag pushes, and recursive submodule pushes are disabled.
+
+Mutations require the selected project to be the repository root. Normal hooks and signing still apply. Terminal password prompts are disabled, so configure credentials or use an existing credential/signing agent. Errors include useful Git diagnostics without URL credentials. A failed or cancelled action is not a rollback: staging, commits, or a remote update may already have happened. Inspect status and the remote before retrying.
+
+Claims are stored before execution in private `git.sqlite` beside the project catalog. Stable request IDs prevent duplicate execution, including reconnects and restarts. In-flight claims become interrupted on restart and are never automatically replayed. Each operation stays tied to its original project, with a repository lock and at most four simultaneous mutations. Progress-write failure blocks further mutations, reports an uncertain result and any known commit, and leaves the original durable claim intact. Git storage failure does not prevent chat or session writes.
+
+The **Diff** panel reads real repository changes and distinguishes staged and working content. Its compact toolbar controls unified/split layout, full-file viewing, wrapping, complete-source copy, and an optional right-hand file tree with filtering. Collapsible file headers show staged/working line statistics before loading source on selection; both the review document and file navigation are windowed. Binary files and unavailable counts are labeled explicitly instead of showing fabricated zeros. Untracked counting is bounded to 128 files, 4 MiB per file, and a 16 MiB aggregate read budget per status request. Renamed paths retain their original language metadata. Binary/non-UTF-8 files have an explicit fallback; regular file previews are limited to 4 MiB per side instead of silently truncating source. Optional panels load separately, with their own loading/error boundaries.
+
+Large histories, activity/tool groups, file views, and selection lists use measured windowing. Focus and selection anchors remain mounted; tool disclosure state survives virtual unmounts. Prepending history preserves the visible message, including the switch from normal flow to windowing. Streamed output follows the bottom only while you are there. Paragraph/closed-fence delivery is unchanged.
+
+## Performance checks
+
+```sh
+bun run benchmark                      # writes /tmp/flame-performance.json
+bun run benchmark /tmp/my-results.json
+```
+
+This builds a production profiling bundle, measures three fresh-process startups separately from first panel open, exercises real Git/worker/history/search/persistence interactions, waits for idle worker release, and benchmarks representative and pathological highlighting. It restores the ordinary production renderer afterward. No provider account or network inference is used.
+
+See [`PERFORMANCE.md`](PERFORMANCE.md) for the hardware baseline, measurements, cache/worker budgets, regression thresholds, and tradeoffs. The normal build does not record profiling traces. Two small, lockfile-backed dependency patches release rejected shared-highlighter/WASM initialization promises so actual initialization failures can retry; the retry regression test uses the real engine.
+
 ## Layout
 
 - `src/main/main.ts`: app lifecycle and permission policy
@@ -136,4 +164,4 @@ Shutdown interrupts jobs; crash recovery reports uncertain outcomes instead of r
 - `scripts/dev.mjs`: development process lifecycle
 - `tests/window.test.mjs`: Electron and hot-reload smoke tests
 
-The renderer is sandboxed with context isolation, no Node integration, and a restrictive content security policy. A narrow preload exposes only the authenticated loopback RPC connection. Project and authentication operations run in a separate backend process.
+The renderer is sandboxed with context isolation, no Node integration, and a restrictive content security policy. Local generated code-view styles are allowed, including inline style elements/attributes; scripts still forbid inline execution and JavaScript eval, with only the required WASM evaluation permission. A narrow preload exposes only the authenticated loopback RPC connection. Project and authentication operations run in a separate backend process.

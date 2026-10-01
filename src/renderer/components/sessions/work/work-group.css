@@ -23,6 +23,6 @@
 .work-tool__detail pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: monospace; font-size: 11px; line-height: 1.6; }
 .work-tool__output { max-height: 180px; overflow: auto; color: #8a8a8a; }
 .work-tool__detail p, .work-tool__error { margin: 7px 0 0; color: #bc9e86; font-size: 11px; overflow-wrap: anywhere; }
-.work-group button:focus-visible { outline: 1px solid #666; outline-offset: 3px; border-radius: 3px; }
+
 @media (prefers-reduced-motion: reduce) { .work-chevron { transition: none; } }
 @media (max-width: 650px) { .work-tool__status { max-width: 95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }

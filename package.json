@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "main": "dist/main/main.js",
-  "packageManager": "bun@1.4.0",
+  "packageManager": "bun@1.4.2",
   "scripts": {
     "typecheck": "tsc --noEmit && tsc -p tsconfig.renderer.json",
+    "benchmark": "node scripts/benchmark.mjs",
     "test": "bun run build && node --test --test-concurrency=1 tests/*.test.mjs",
     "build:main": "tsc",
     "build:renderer": "tsc -p tsconfig.renderer.json && vite build",
@@ -19,7 +20,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
-    "electron": "44.4.5",
+    "electron": "44.5.0",
     "typescript": "7.0.2",
     "vite": "8.3.1"
   },
@@ -30,7 +31,9 @@
   "dependencies": {
     "@effect/atom-react": "4.0.0-rc.115",
     "@effect/platform-node": "4.0.0-rc.115",
+    "@pierre/diffs": "1.5.1",
     "@silvia-odwyer/photon-node": "^0.3.4",
+    "@tanstack/react-virtual": "3.14.13",
     "effect": "4.0.0-rc.115",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -38,5 +41,9 @@
     "remark-gfm": "^4.0.1",
     "scheduler": "0.27.0",
     "shiki": "^4.4.3"
+  },
+  "patchedDependencies": {
+    "@pierre/diffs@1.5.1": "patches/@pierre%2Fdiffs@1.5.1.patch",
+    "@shikijs/engine-oniguruma@4.4.3": "patches/@shikijs%2Fengine-oniguruma@4.4.3.patch"
   }
 }

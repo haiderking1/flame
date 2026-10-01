@@ -10,6 +10,7 @@ import { startTurn, stopTurn } from "../../backend/turns";
 import { useTurnState } from "./useTurnState";
 import { rememberActiveSession, restoreActiveSession } from "./activeSession";
 import { useManualCompaction } from "./useManualCompaction";
+import { mergeLatestPage, prependPage } from "./historyPages";
 
 type Change = { type: "draft"; draft: string } | { type: "rename"; title: string }
   | { type: "run"; requestId: string; text: string; accountKey: string; images?: readonly string[] }
@@ -138,7 +139,7 @@ export function useSessionWorkspace() {
     try {
       await enqueue(async () => {
         const messages = await history({ projectId: saved.projectId, sessionId: saved.sessionId, before: null });
-        if (current.current?.projectId === saved.projectId && current.current?.sessionId === saved.sessionId && current.current.leafId === saved.leafId) setPage(messages);
+        if (current.current?.projectId === saved.projectId && current.current?.sessionId === saved.sessionId && current.current.leafId === saved.leafId) setPage(page => mergeLatestPage(page, messages));
       });
     } catch { setError("Changes saved, but history could not be loaded. Reload saved state to retry."); }
   }
@@ -165,10 +166,10 @@ export function useSessionWorkspace() {
   async function loadOlder() {
     const target = current.current;
     if (!target || !page.nextBefore) return;
+    const cursor = page.nextBefore;
     await enqueue(async () => {
-      const older = await history({ projectId: target.projectId, sessionId: target.sessionId, before: page.nextBefore });
-      if (current.current?.sessionId === target.sessionId && current.current?.projectId === target.projectId) setPage((page) => ({ entries: [...older.entries, ...page.entries], nextBefore: older.nextBefore,
-        compactions: [...new Map([...(older.compactions ?? []), ...(page.compactions ?? [])].map(item => [item.id, item])).values()] }));
+      const older = await history({ projectId: target.projectId, sessionId: target.sessionId, before: cursor });
+      if (current.current?.sessionId === target.sessionId && current.current?.projectId === target.projectId) setPage(page => prependPage(page, older, cursor));
     });
   }
   async function reload() {
@@ -180,7 +181,7 @@ export function useSessionWorkspace() {
         const keepDraft = text.current !== target.draft;
         const loaded = await read(target);
         const messages = await history({ ...target, before: null });
-        adopt(loaded); setPage(messages);
+        adopt(loaded); setPage(page => mergeLatestPage(page, messages));
         if (!keepDraft) {
           text.current = loaded.draft; setDraft(loaded.draft);
           if (turnState.turn?.status !== "running" && pendingSend.current?.requestId === turnState.turn?.id) pendingSend.current = null;
@@ -200,8 +201,10 @@ export function useSessionWorkspace() {
       event.preventDefault(); event.returnValue = "";
       void flushDraft().catch(() => {});
     };
+    const visibility = () => { if (window.document.visibilityState === "hidden" && current.current && text.current !== current.current.draft) void flushDraft().catch(() => {}); };
     window.addEventListener("beforeunload", guard);
-    return () => window.removeEventListener("beforeunload", guard);
+    window.document.addEventListener("visibilitychange", visibility);
+    return () => { window.removeEventListener("beforeunload", guard); window.document.removeEventListener("visibilitychange", visibility); };
   }, [pending]);
   useEffect(() => {
     const turn = turnState.turn;

@@ -5,6 +5,6 @@
 .reset-confirmation__detail { color: #858585; }
 .reset-confirmation__actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
 .reset-confirmation button { padding: 6px 16px; border: 1px solid #ffffff14; border-radius: 7px; color: #ededed; background: #ffffff06; font: inherit; font-size: 13px; cursor: pointer; }
-.reset-confirmation button:focus-visible, .reset-confirmation button:hover { outline: none; background: #ffffff10; box-shadow: 0 0 0 2px #ffffff14; }
+.reset-confirmation button:hover { box-shadow: 0 0 0 2px #ffffff14; }.reset-confirmation button:focus-visible, .reset-confirmation button:hover { background: #ffffff10; }
 .reset-confirmation .reset-confirmation__yes { color: #f2aaaa; }
 .reset-confirmation button:disabled { opacity: .5; cursor: default; }

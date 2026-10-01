@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useDeferredValue, useId, useLayoutEffect, useRef, useState } from "react";
 import openaiLogo from "../../../assets/providers/openai.svg?no-inline";
 import { ComposerChevron } from "../ComposerChevron";
 import { filterModels, isLegacyModel, type ModelOption } from "./modelOptions";
@@ -18,7 +18,8 @@ export function ModelPicker({ models, selectedId, onSelect, emptyMessage = "No m
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [legacyOpen, setLegacyOpen] = useState(false);
-  const matches = filterModels(models, query);
+  const deferredQuery = useDeferredValue(query);
+  const matches = filterModels(models, deferredQuery);
   const current = matches.filter((model) => !isLegacyModel(model));
   const legacy = matches.filter(isLegacyModel);
   const searching = !!query.trim();
@@ -33,7 +34,7 @@ export function ModelPicker({ models, selectedId, onSelect, emptyMessage = "No m
   }, [open, index, query, id]);
   function close() { popup.current?.hidePopover(); trigger.current?.focus(); }
   async function select(model: ModelOption) {
-    if (busy) return;
+    if (busy || query !== deferredQuery) return;
     try { await onSelect(model.id); close(); } catch { /* Keep the picker open to show the save error. */ }
   }
   return <>
@@ -59,6 +60,7 @@ export function ModelPicker({ models, selectedId, onSelect, emptyMessage = "No m
             aria-activedescendant={index >= 0 ? `${id}-option-${index}` : undefined}
             onChange={(event) => { setQuery(event.target.value); setHighlighted(null); }}
             onKeyDown={(event) => {
+              if (query !== deferredQuery) return;
               if (event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
               if ((event.key === "ArrowDown" || event.key === "ArrowUp") && options.length) {
                 event.preventDefault();
@@ -73,6 +75,7 @@ export function ModelPicker({ models, selectedId, onSelect, emptyMessage = "No m
             }} />
         </div>
       </header>
+      {query !== deferredQuery && <p className="model-picker__empty" role="status">Updating results…</p>}
       <ModelPickerList id={id} current={current} legacy={legacy} expanded={expanded} searching={searching} selectedId={selectedId} highlightedIndex={index}
         onSelect={select} onToggle={() => {
           setLegacyOpen(!legacyOpen);

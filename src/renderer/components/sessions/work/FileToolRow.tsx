@@ -1,4 +1,5 @@
-import { useId, useState } from "react";
+import { useId } from "react";
+import { useToolDisclosure } from "./ToolDisclosure";
 import type { WorkStep, FileWorkDetail } from "@contracts/work";
 import type { SessionLocation } from "@contracts/sessions";
 import { ImageGallery } from "../../images/ImageGallery";
@@ -6,7 +7,7 @@ import { ThinkingLabel } from "./ThinkingLabel";
 
 const labels: Record<FileWorkDetail["status"], string> = { pending: "Pending", completed: "Done", failed: "Failed", uncertain: "Uncertain", deferred: "Not run" };
 export function FileToolRow({ step, detail, location }: { step: Extract<WorkStep, { kind: "tool" }>; detail: FileWorkDetail; location: SessionLocation }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useToolDisclosure(step.id);
   const detailId = useId();
   return <div className="work-tool" data-state={detail.status} data-failed={detail.status === "failed" || detail.status === "uncertain"}>
     <div className="work-tool__row">

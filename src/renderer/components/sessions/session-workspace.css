@@ -17,10 +17,11 @@
   padding-bottom: calc(var(--composer-overlay-height, 144px) + var(--chat-gutter) + 16px);
   overflow-y: auto;
   overflow-x: hidden;
+  overflow-anchor: none;
   overscroll-behavior: contain;
 }
 .session-history:focus { outline: none; }
-.session-history:focus-visible { outline: 1px solid #ffffff20; outline-offset: -1px; }
+
 .session-history__content { width: 100%; max-width: var(--chat-max-width); margin-inline: auto; }
 .session-message { min-width: 0; margin: 0 0 16px; }
 .session-message--user { width: fit-content; max-width: 80%; margin-left: auto; padding: 12px; border-radius: 16px; background: #1b1b1b; color: #e5e5e5; }

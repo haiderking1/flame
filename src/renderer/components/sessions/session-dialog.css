@@ -8,4 +8,4 @@
 .session-dialog button { padding: 7px 12px; border: 1px solid #ffffff15; border-radius: 6px; background: #ffffff06; color: #ccc; font: inherit; font-size: 12px; cursor: pointer; }
 .session-dialog button[data-destructive] { color: #e2aaa6; }
 .session-dialog button:disabled { opacity: .5; cursor: default; }
-.session-dialog :focus-visible { outline: 1px solid #ffffff40; outline-offset: 2px; }
+.session-dialog input:focus { border-color: #ffffff38; }

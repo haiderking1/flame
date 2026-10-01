@@ -28,7 +28,7 @@ export function useProjectWorkspace() {
   async function transition(work: () => Promise<void>) {
     if (guard.current) throw new Error("Workspace navigation is still busy");
     guard.current = true; setBusy(true); setError(null);
-    try { await work(); }
+    try { drafts.flushAll(); await work(); }
     catch (error) { setError(sessionErrorMessage(error)); throw error; }
     finally { guard.current = false; setBusy(false); }
   }
@@ -68,6 +68,7 @@ export function useProjectWorkspace() {
   }
   useEffect(() => {
     const guard = (event: BeforeUnloadEvent) => {
+      try { drafts.flushAll(); } catch { event.preventDefault(); event.returnValue = ""; }
       if (drafts.hasUnsaved()) { event.preventDefault(); event.returnValue = ""; }
     };
     window.addEventListener("beforeunload", guard);
@@ -89,12 +90,11 @@ export function useProjectWorkspace() {
     editDraft: (text: string) => {
       if (!projectId) return workspace.editDraft(text);
       const value = drafts.get(projectId).value;
-      if (value) { try { drafts.save(projectId, { ...value, text }); } catch { /* The draft error stays visible; text remains in memory. */ } }
+      if (value) drafts.update(projectId, { ...value, text });
     },
     flushDraft: async () => {
       if (!projectId) return workspace.flushDraft();
-      const value = drafts.get(projectId).value;
-      if (value) drafts.save(projectId, value);
+      drafts.flush(projectId);
     },
     open, send,
     newSession: async (projectId: string) => transition(async () => { await workspace.newSession(projectId); setDraftMode(false); }),

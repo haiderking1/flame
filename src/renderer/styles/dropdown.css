@@ -1,0 +1,14 @@
+/* Shared dropdown palette: a glass surface with clearly visible row states and a blue accent for the active control. */
+:root {
+  --accent: #3268ed;
+  --dropdown-surface: rgb(22 22 22 / 92%);
+  --dropdown-rail: rgb(0 0 0 / 14%);
+  --dropdown-border: #ffffff1a;
+  --dropdown-divider: #ffffff0d;
+  --dropdown-shadow: 0 18px 44px -18px #000c, inset 0 1px 0 #ffffff0d;
+  --dropdown-blur: blur(16px) saturate(1.08);
+  --dropdown-text: #f1f1f1;
+  --dropdown-muted: #8a8a8a;
+  --dropdown-row-hover: #ffffff0a;
+  --dropdown-row-active: #ffffff12;
+}

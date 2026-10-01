@@ -1,0 +1,25 @@
+diff --git a/dist/highlighter/shared_highlighter.js b/dist/highlighter/shared_highlighter.js
+index e231d3c2396b82a0aa7dee8d3c3352dbcae4adb6..a2f8a03ce87724284799f758c2739188787f0490 100644
+--- a/dist/highlighter/shared_highlighter.js
++++ b/dist/highlighter/shared_highlighter.js
+@@ -12,11 +12,15 @@ import { pierreThemes } from "@pierre/theming/themes";
+ //#region src/highlighter/shared_highlighter.ts
+ let highlighter;
+ async function getSharedHighlighter({ themes, langs, preferredHighlighter = "shiki-js" }) {
+-	highlighter ??= createHighlighter({
+-		themes: [],
+-		langs: ["text"],
+-		engine: preferredHighlighter === "shiki-wasm" ? createOnigurumaEngine(import("shiki/wasm")) : createJavaScriptRegexEngine()
+-	});
++	if (highlighter == null) {
++		const pending = createHighlighter({
++			themes: [],
++			langs: ["text"],
++			engine: preferredHighlighter === "shiki-wasm" ? createOnigurumaEngine(import("shiki/wasm")) : createJavaScriptRegexEngine()
++		});
++		highlighter = pending;
++		void pending.catch(() => { if (highlighter === pending) highlighter = undefined; });
++	}
+ 	const instance = isHighlighterLoading(highlighter) ? await highlighter : highlighter;
+ 	highlighter = instance;
+ 	const languageLoaders = [];

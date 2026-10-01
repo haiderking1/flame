@@ -8,6 +8,9 @@ export function useSidebarResize() {
   const [resizing, setResizing] = useState(false);
   const drag = useRef<{ pointerId: number; x: number; width: number } | null>(null);
   const frame = useRef<number | null>(null);
+  const pendingWidth = useRef<number | null>(null);
+  const persistence = useRef<{ width: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+  function flushWidth() { if (persistence.current) { clearTimeout(persistence.current.timer); saveSidebarWidth(persistence.current.width); persistence.current = null; } }
   const minimum = SIDEBAR_MIN_WIDTH;
   const maximum = sidebarMaximumWidth(viewportWidth);
   const clamp = (value: number) => Math.min(maximum, Math.max(minimum, value));
@@ -16,15 +19,18 @@ export function useSidebarResize() {
   const cancelFrame = () => {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = null;
+    pendingWidth.current = null;
   };
 
   useEffect(() => {
     const onResize = () => setViewportWidth(window.innerWidth);
     window.addEventListener("resize", onResize);
+    window.addEventListener("pagehide", flushWidth);
     onResize();
     return () => {
       window.removeEventListener("resize", onResize);
-      cancelFrame();
+      window.removeEventListener("pagehide", flushWidth);
+      flushWidth(); cancelFrame();
     };
   }, []);
 
@@ -40,11 +46,12 @@ export function useSidebarResize() {
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
     const start = drag.current;
     if (!start || start.pointerId !== event.pointerId) return;
-    const next = clamp(start.width + event.clientX - start.x);
-    cancelFrame();
+    pendingWidth.current = clamp(start.width + event.clientX - start.x);
+    if (frame.current !== null) return;
     frame.current = requestAnimationFrame(() => {
       frame.current = null;
-      setPreferredWidth(next);
+      if (pendingWidth.current !== null) setPreferredWidth(pendingWidth.current);
+      pendingWidth.current = null;
     });
   }
 
@@ -59,7 +66,8 @@ export function useSidebarResize() {
     if (!start || start.pointerId !== event.pointerId) return;
     const finalWidth = clamp(start.width + event.clientX - start.x);
     setPreferredWidth(finalWidth);
-    saveSidebarWidth(finalWidth);
+    if (persistence.current) clearTimeout(persistence.current.timer);
+    persistence.current = null; saveSidebarWidth(finalWidth);
     stop();
     event.currentTarget.releasePointerCapture(event.pointerId);
   }
@@ -72,11 +80,12 @@ export function useSidebarResize() {
     event.preventDefault();
     const finalWidth = clamp(next);
     setPreferredWidth(finalWidth);
-    saveSidebarWidth(finalWidth);
+    if (persistence.current) clearTimeout(persistence.current.timer);
+    persistence.current = { width: finalWidth, timer: setTimeout(flushWidth, 400) };
   }
 
   return { width, minimum, maximum, resizing, handleProps: {
     onPointerDown, onPointerMove, onPointerUp, onPointerCancel: stop,
-    onLostPointerCapture: stop, onKeyDown,
+    onLostPointerCapture: stop, onKeyDown, onBlur: flushWidth,
   } };
 }

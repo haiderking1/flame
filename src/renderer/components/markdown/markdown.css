@@ -20,7 +20,7 @@
 .markdown input[type="checkbox"] { margin: 0 7px 0 -21px; accent-color: #7895cf; vertical-align: middle; }
 .markdown a { color: #8aaff0; text-decoration: none; }
 .markdown a:hover { text-decoration: underline; text-underline-offset: 3px; }
-.markdown a:focus-visible, .markdown button:focus-visible { outline: 1px solid #7895cf; outline-offset: 3px; border-radius: 3px; }
+.markdown a:focus-visible { border-radius: 3px; background: #7895cf26; }
 .markdown blockquote { border-left: 2px solid #ffffff24; padding: 0 14px; color: #999; }
 .markdown hr { margin: 22px 0; height: 1px; border: 0; background: #ffffff15; }
 .markdown code, .markdown pre { font-family: "JetBrains Mono Nerd", monospace; font-size: 12px; }

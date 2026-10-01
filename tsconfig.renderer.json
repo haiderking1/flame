@@ -7,10 +7,11 @@
     "jsx": "react-jsx",
     "strict": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "verbatimModuleSyntax": true,
-    "types": ["vite/client"],
+    "types": ["vite/client", "node"],
     "paths": { "@contracts/*": ["./src/contracts/*"] }
   },
   "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx"]
