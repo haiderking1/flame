@@ -1,11 +1,12 @@
-import { useId, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useId, useRef, useState, type RefObject } from "react";
+import type { PromptEditorHandle } from "../editor/PromptEditor";
 import { sessionErrorMessage } from "../../../backend/sessions";
 import { useSessions } from "../../sessions/SessionContext";
 import { matchingCommands, slashQuery, type SlashCommand } from "./commands";
 
 export function useSlashCommands({ draft, setDraft, readOnly, input, onError }: {
   draft: string; setDraft(value: string): void; readOnly: boolean;
-  input: RefObject<HTMLTextAreaElement | null>; onError(message: string | null): void;
+  input: RefObject<PromptEditorHandle | null>; onError(message: string | null): void;
 }) {
   const sessions = useSessions();
   const listId = useId();
@@ -54,7 +55,7 @@ export function useSlashCommands({ draft, setDraft, readOnly, input, onError }: 
   function complete(command: SlashCommand) {
     setDraft(command.text); setDismissed(null); onError(null);
   }
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
+  function handleKeyDown(event: KeyboardEvent): boolean {
     if (event.key === "Escape" && open) {
       event.preventDefault(); setDismissed(draft); return true;
     }

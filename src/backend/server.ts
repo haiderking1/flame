@@ -35,6 +35,8 @@ import { bashHandlers } from "./bash/handlers.js";
 import { openGitRuntime } from "./git/runtime.js";
 import { gitHandlers } from "./git/handlers.js";
 import { WorkspaceChanges } from "./git/changes.js";
+import { WorkspaceSearch } from "./workspace-search/service.js";
+import { workspaceSearchHandlers } from "./workspace-search/handlers.js";
 import { CodexGitWriter } from "./git/writer/writer.js";
 import { CodexInferenceClient } from "./turns/client.js";
 import { authorizedRequest, authorizedImageRequest, imageCorsHeaders } from "./server-auth.js";
@@ -67,11 +69,14 @@ export const startServer = (options: { filename: string; token: string; origin: 
   const files = new FileTools(sessions, projectPath);
   const touched = (location: { projectId: string }) => changes.touch(location.projectId);
   bash.on("completed", touched); files.on("mutated", touched);
+  const workspaceSearch = yield* Effect.acquireRelease(Effect.sync(() => new WorkspaceSearch(projectPath)), search => Effect.sync(() => search.close()));
+  // Files the agent creates or deletes show up in @ mentions without waiting on the folder watcher.
+  changes.on("change", (projectId: string) => workspaceSearch.refresh(projectId));
   const images = yield* Effect.acquireRelease(Effect.sync(() => new Images(sessions,
     new ImageStaging(join(dirname(options.filename), "image-uploads"), location => repository.assertUploadTarget(location)))), images => Effect.promise(() => images.close()));
   const turns = yield* Effect.acquireRelease(Effect.sync(() => new Turns(sessions, auth, models, options.inferenceClient, bash, files)), (turns) => Effect.promise(() => turns.close()));
   const rpc = yield* RpcServer.toHttpEffectWebsocket(BackendRpc).pipe(
-    Effect.provide(gitHandlers(git, changes)), Effect.provide(imageHandlers(images)), Effect.provide(bashHandlers(bash)), Effect.provide(turnHandlers(turns)), Effect.provide(sessionHandlers(sessions)), Effect.provide(modelsHandlers(models)), Effect.provide(usageHandlers(usage)), Effect.provide(authHandlers(auth)), Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
+    Effect.provide(gitHandlers(git, changes)), Effect.provide(workspaceSearchHandlers(workspaceSearch)), Effect.provide(imageHandlers(images)), Effect.provide(bashHandlers(bash)), Effect.provide(turnHandlers(turns)), Effect.provide(sessionHandlers(sessions)), Effect.provide(modelsHandlers(models)), Effect.provide(usageHandlers(usage)), Effect.provide(authHandlers(auth)), Effect.provide(projectHandlers(store)), Effect.provide(RpcSerialization.layerJson),
   );
   const server = yield* NodeHttpServer.make(createServer, {
     host: "127.0.0.1", port: 0, gracefulShutdownTimeout: "2 seconds", websocket: { maxPayload: 64 * 1024 },

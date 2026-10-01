@@ -115,7 +115,7 @@ test(`${mode}: composer window${mode === "development" ? " with live updates" : 
     return response.result.value;
   };
   for (let attempt = 0; attempt < 100; attempt++) {
-    if (await evaluate("document.readyState === 'complete' && document.querySelector('textarea') !== null && document.title === 'Flame'")) break;
+    if (await evaluate("document.readyState === 'complete' && document.querySelector('.composer__input') !== null && document.title === 'Flame'")) break;
     await delay(50);
   }
   assert.deepEqual(await evaluate(`({
@@ -150,13 +150,13 @@ test(`${mode}: composer window${mode === "development" ? " with live updates" : 
   await evaluate("document.querySelector('[aria-label=\"New thread\"]').click()");
   for (let i = 0; i < 100 && !await evaluate("!!document.querySelector('.new-session-dialog [role=option]')"); i++) await delay(20);
   await evaluate("document.querySelector('.new-session-dialog [role=option]').click()");
-  for (let i = 0; i < 100 && !await evaluate("document.querySelector('textarea')?.readOnly === false && !document.querySelector('.new-session-dialog')"); i++) await delay(20);
-  assert.equal(await evaluate("document.querySelector('textarea').readOnly"), false);
+  for (let i = 0; i < 100 && !await evaluate("document.querySelector('.composer__input')?.readOnly === false && !document.querySelector('.new-session-dialog')"); i++) await delay(20);
+  assert.equal(await evaluate("document.querySelector('.composer__input').readOnly"), false);
   await checkSettings({ evaluate, send: (method, params) => send(method, params, sessionId), savedAuthPath: mode === 'development' ? authPath : undefined });
   if (mode === "production") {
     await checkComposer({ evaluate, send: (method, params) => send(method, params, sessionId) });
   } else {
-    await evaluate("document.querySelector('textarea').focus()");
+    await evaluate("document.querySelector('.composer__input').focus()");
     await send("Input.insertText", { text: "draft preserved" }, sessionId);
   }
 
@@ -187,7 +187,7 @@ test(`${mode}: composer window${mode === "development" ? " with live updates" : 
       await delay(50);
     }
     assert.equal(label, "Updated workspace", "React Fast Refresh did not update the component");
-    assert.equal(await evaluate("document.querySelector('textarea').value"), "draft preserved");
+    assert.equal(await evaluate("document.querySelector('.composer__input').value"), "draft preserved");
     assert.equal(await evaluate("window.__hmrMarker"), "preserved");
 
     await checkComposerSubmission(appPath, evaluate);

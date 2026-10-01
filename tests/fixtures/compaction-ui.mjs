@@ -72,7 +72,7 @@ void app.whenReady().then(async () => {
   };
   const wait = async code => {
     for (let i = 0; i < 250; i++) { if (await evaluate(code)) return; await delay(20); }
-    assert.fail(`Timed out: ${code}\n${await evaluate("JSON.stringify({draft:document.querySelector('textarea')?.value,focus:document.activeElement?.tagName,readonly:document.querySelector('textarea')?.readOnly,hint:document.querySelector('.composer__hint')?.textContent,status:document.querySelector('.turn-feedback')?.textContent})")}`);
+    assert.fail(`Timed out: ${code}\n${await evaluate("JSON.stringify({draft:document.querySelector('.composer__input')?.value,focus:document.activeElement?.tagName,readonly:document.querySelector('.composer__input')?.readOnly,hint:document.querySelector('.composer__hint')?.textContent,status:document.querySelector('.turn-feedback')?.textContent})")}`);
   };
   const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const reload = async () => {
@@ -87,11 +87,11 @@ void app.whenReady().then(async () => {
   };
   const type = async value => {
     window.focus(); window.webContents.focus();
-    await evaluate("document.querySelector('textarea').focus()");
+    await evaluate("document.querySelector('.composer__input').focus()");
     await press('A', ['control']); await press('Backspace');
-    await wait("document.querySelector('textarea').value === ''");
+    await wait("document.querySelector('.composer__input').value === ''");
     if (value) await window.webContents.insertText(value);
-    await wait(`document.querySelector('textarea').value === ${JSON.stringify(value)}`);
+    await wait(`document.querySelector('.composer__input').value === ${JSON.stringify(value)}`);
   };
   const entries = () => repository.use(location, db => db.history(null).entries);
   const noSlashEntries = () => assert.ok(entries().every(entry => !/^\/(?:compact|comp|wat)?$/i.test(entry.text ?? '')), 'slash commands never become user messages');
@@ -114,7 +114,7 @@ void app.whenReady().then(async () => {
   try {
     await wait("!![...document.querySelectorAll('.session-list__item')].find(node => node.textContent.includes('Compaction test'))");
     await evaluate("[...document.querySelectorAll('.session-list__item')].find(node => node.textContent.includes('Compaction test')).click()");
-    await wait("!!document.querySelector('[aria-label=\"Estimated context usage\"]') && document.querySelector('textarea')?.readOnly === false");
+    await wait("!!document.querySelector('[aria-label=\"Estimated context usage\"]') && document.querySelector('.composer__input')?.readOnly === false");
     assert.equal(await evaluate("!!document.querySelector('.context-status') || !!document.querySelector('[aria-label=\"Compact conversation\"]')"), false, 'bottom row and manual button removed');
     const geometry = await evaluate(`(() => {
       const actions=document.querySelector('.composer-actions');
@@ -153,21 +153,21 @@ void app.whenReady().then(async () => {
     }
     await press('Escape');
     await wait("!document.querySelector('[role=listbox][aria-label=\"Slash commands\"]')");
-    assert.equal(await evaluate("document.querySelector('textarea').value"), '/');
+    assert.equal(await evaluate("document.querySelector('.composer__input').value"), '/');
     await type('/comp');
     await wait("!!document.querySelector('[role=listbox][aria-label=\"Slash commands\"]')");
     await press('Tab');
-    await wait("document.querySelector('textarea').value === '/compact'");
-    assert.equal(await evaluate("document.activeElement === document.querySelector('textarea')"), true, 'Tab completes without leaving textarea');
-    await evaluate("document.querySelector('textarea').dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true})); document.querySelector('textarea').dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',bubbles:true,isComposing:true})); document.querySelector('textarea').dispatchEvent(new CompositionEvent('compositionend', {bubbles:true}));");
+    await wait("document.querySelector('.composer__input').value === '/compact'");
+    assert.equal(await evaluate("document.activeElement === document.querySelector('.composer__input')"), true, 'Tab completes without leaving textarea');
+    await evaluate("document.querySelector('.composer__input').dispatchEvent(new CompositionEvent('compositionstart', {bubbles:true})); document.querySelector('.composer__input').dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',bubbles:true,isComposing:true})); document.querySelector('.composer__input').dispatchEvent(new CompositionEvent('compositionend', {bubbles:true}));");
     assert.equal(summaryCalls, 0, 'IME Enter never invokes compaction');
     await press('Enter', ['shift']);
-    await wait("document.querySelector('textarea').value.includes('\\n')");
+    await wait("document.querySelector('.composer__input').value.includes('\\n')");
     assert.equal(summaryCalls, 0, 'Shift+Enter inserts a newline without invoking command');
     await type('/wat');
     await press('Enter');
     await wait("document.querySelector('.composer__hint')?.textContent.includes('No matching slash command.')");
-    assert.equal(await evaluate("document.querySelector('textarea').value"), '/wat', 'unknown slash command remains editable');
+    assert.equal(await evaluate("document.querySelector('.composer__input').value"), '/wat', 'unknown slash command remains editable');
     assert.equal(answerCalls, 0); assert.equal(summaryCalls, 0); noSlashEntries();
     await type('/com');
     await press('ArrowDown');
@@ -177,26 +177,26 @@ void app.whenReady().then(async () => {
     await press('Enter');
     await wait("!!document.querySelector('[aria-label=\"Stop compaction\"]') && document.querySelector('.session-history').textContent.includes('Compacting conversation')");
     assert.equal(summaryCalls, 1, 'one Enter executes partially typed command even with dismissed list');
-    await wait("document.querySelector('textarea').value === ''");
+    await wait("document.querySelector('.composer__input').value === ''");
     assert.equal(await evaluate("document.querySelector('.composer-settings__model').getAttribute('aria-busy')"), 'true');
     await click('.composer-settings__model');
     assert.equal(await evaluate("document.querySelector('.model-picker').matches(':popover-open')"), false);
     await type('Do not lose this draft');
     await window.webContents.insertText('; typed during compaction');
-    await wait(`document.querySelector('textarea').value === ${JSON.stringify(keptDraft)} && document.querySelector('.workspace__composer').dataset.saveState === 'saved'`);
+    await wait(`document.querySelector('.composer__input').value === ${JSON.stringify(keptDraft)} && document.querySelector('.workspace__composer').dataset.saveState === 'saved'`);
     await click('[aria-label="Stop compaction"]');
     await wait("!!document.querySelector('[aria-label=\"Send message\"]')");
     assert.equal(repository.use(location, db => db.compactions.list().length), 0, 'cancelled compaction saves no checkpoint');
     assert.deepEqual(entries().map(entry => entry.id), initialEntries, 'manual cancellation adds no messages');
-    assert.equal(await evaluate("document.querySelector('textarea').value"), keptDraft);
+    assert.equal(await evaluate("document.querySelector('.composer__input').value"), keptDraft);
     assert.deepEqual(await imageDraft(false), attachment, 'cancelled command preserves pending attachment');
     await type('/comp');
     await press('Tab');
-    await wait("document.querySelector('textarea').value === '/compact'");
+    await wait("document.querySelector('.composer__input').value === '/compact'");
     await press('Enter');
     await wait("document.querySelector('.turn-feedback')?.textContent.includes('Summary service unavailable')");
     assert.equal(repository.use(location, db => db.compactions.list().length), 0);
-    assert.equal(await evaluate("document.querySelector('textarea').value"), '', 'accepted failed summary consumes only command draft');
+    assert.equal(await evaluate("document.querySelector('.composer__input').value"), '', 'accepted failed summary consumes only command draft');
     assert.deepEqual(await imageDraft(false), attachment, 'failed summary preserves pending attachment');
     await type('/');
     await press('Enter');
@@ -213,7 +213,7 @@ void app.whenReady().then(async () => {
     assert.ok(await evaluate("document.querySelector('.compaction-marker .markdown').textContent.includes('Earlier project records were reviewed')"));
     assert.ok(await evaluate("document.querySelector('[aria-label=\"Estimated context usage\"]')?.getAttribute('aria-valuetext').includes('(90%)')"));
     await reload();
-    await wait(`document.querySelectorAll('.compaction-marker').length === 1 && document.querySelector('textarea')?.value === ${JSON.stringify(keptDraft)}`);
+    await wait(`document.querySelectorAll('.compaction-marker').length === 1 && document.querySelector('.composer__input')?.value === ${JSON.stringify(keptDraft)}`);
     await wait("document.querySelector('.image-gallery--draft .image-thumbnail img')?.naturalWidth > 0");
     await click('[aria-label="Send message"]');
     await wait("document.querySelector('.session-message--assistant')?.textContent.includes('Continuing from the summary') && !!document.querySelector('[aria-label=\"Send message\"]')");

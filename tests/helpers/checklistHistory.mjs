@@ -32,7 +32,7 @@ export async function checkHistory(driver, sessionId, measurements) {
   assert.ok(restored !== null && Math.abs(restored - anchor.offset) < 8, `prepend preserves anchor (${anchor.offset} -> ${restored})`);
   await evaluate("document.querySelector('.session-history').scrollTop = document.querySelector('.session-history').scrollHeight; true"); await settle();
   await evaluate("if (window.__flamePerformance) window.__flamePerformance = {rowRenders:{},commits:[],renders:[]}; true");
-  const start = await evaluate('performance.now()'); await set('textarea', 'Benchmark response'); await click('[aria-label="Send message"]');
+  const start = await evaluate('performance.now()'); await set('.composer__input', 'Benchmark response'); await click('[aria-label="Send message"]');
   await wait("document.querySelector('.session-history').textContent.includes('Paragraph 0')");
   measurements.sendToFirstOutputMs = await evaluate(`performance.now() - ${start}`);
   await evaluate(`(() => { window.__liveParagraph=[...document.querySelectorAll('.session-message p')].find(node=>node.textContent.startsWith('Paragraph 0')); const range=document.createRange(); range.selectNodeContents(window.__liveParagraph); getSelection().removeAllRanges(); getSelection().addRange(range); window.__liveSelectedText=getSelection().toString(); })()`);

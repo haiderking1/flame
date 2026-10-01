@@ -4,6 +4,7 @@ import { checkEmptyChat } from '../helpers/emptyChat.mjs';
 import { checkContextIndicator } from '../helpers/contextIndicator.mjs';
 import { checkSettlement } from '../helpers/settlement.mjs';
 import { checkSessionSidebar } from '../helpers/sessionSidebar.mjs';
+import { checkSentMentions } from '../helpers/sentMentions.mjs';
 import { markdownSample, checkMarkdown } from '../helpers/markdown.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { join } from 'node:path';
@@ -110,7 +111,7 @@ void app.whenReady().then(async () => {
     await click('[aria-label="New thread"]');
     await wait("!!document.querySelector('.new-session-dialog[open] [role=option]')");
     await click(`.new-session-dialog [role=option][id$="-${projectId}"]`);
-    await wait("!document.querySelector('.new-session-dialog') && document.querySelector('textarea')?.readOnly === false && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
+    await wait("!document.querySelector('.new-session-dialog') && document.querySelector('.composer__input')?.readOnly === false && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
     assert.equal(repository.list().sessions.length, count + 1);
     return repository.list().sessions.find((session) => session.title === 'New session' && session.projectId === projectId && session.sessionId !== sessionA?.sessionId);
   };
@@ -123,19 +124,19 @@ void app.whenReady().then(async () => {
   let sessionA;
   try {
     await wait("document.querySelectorAll('.model-picker__option').length === 2 && !!document.querySelector('[aria-label=\"New thread\"]')");
-    assert.equal(await evaluate("document.querySelector('textarea').readOnly"), true);
+    assert.equal(await evaluate("document.querySelector('.composer__input').readOnly"), true);
     await checkEmptyChat(evaluate);
     sessionA = await create(a.id);
     await checkEmptyChat(evaluate);
     await model('Alpha');
     await checkContextIndicator({ evaluate });
-    await type('textarea', '/com');
+    await type('.composer__input', '/com');
     await wait("!!document.querySelector('[role=listbox][aria-label=\"Slash commands\"]')");
     assert.ok(await evaluate("document.querySelector('.slash-commands [role=option][aria-disabled=true]').title.includes('Send a message before compacting')"));
-    await evaluate("document.querySelector('textarea').form.requestSubmit()");
+    await evaluate("document.querySelector('.composer__input').closest('form').requestSubmit()");
     await wait("document.querySelector('.composer__hint')?.textContent.includes('Send a message before compacting')");
-    assert.equal(await evaluate("document.querySelector('textarea').value"), '/com', 'unavailable command stays editable');
-    await type('textarea', '', true);
+    assert.equal(await evaluate("document.querySelector('.composer__input').value"), '/com', 'unavailable command stays editable');
+    await type('.composer__input', '', true);
     await evaluate("document.querySelector('.workspace__composer').style.width = '260px'");
     await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     await checkContextIndicator({ evaluate });
@@ -148,7 +149,7 @@ void app.whenReady().then(async () => {
     await wait("document.querySelector('.thinking-picker').matches(':popover-open')");
     await click('.thinking-picker__fast');
     await wait("!document.querySelector('.thinking-picker').matches(':popover-open') && document.querySelector('.composer-settings__thinking').textContent.includes('Fast')");
-    await type('textarea', 'First draft');
+    await type('.composer__input', 'First draft');
     await wait("document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
     assert.equal(repository.use(sessionA, (db) => db.read()).draft, 'First draft');
     await checkEmptyChat(evaluate);
@@ -157,12 +158,12 @@ void app.whenReady().then(async () => {
       writeFileSync(join(process.env.FLAME_UI_CAPTURE_DIR, 'empty-chat.png'), (await window.webContents.capturePage()).toPNG());
     }
     const sessionB = await create(a.id);
-    assert.equal(await evaluate("document.querySelector('textarea').value"), '');
+    assert.equal(await evaluate("document.querySelector('.composer__input').value"), '');
     assert.equal(repository.use(sessionB, (db) => db.read()).settings, null, 'session choices do not leak into new sessions');
     await model('Beta');
-    await type('textarea', 'Hello from B');
+    await type('.composer__input', 'Hello from B');
     await click('[aria-label="Send message"]');
-    await wait("document.querySelector('.session-message p')?.textContent === 'Hello from B' && document.querySelector('textarea').value === ''");
+    await wait("document.querySelector('.session-message p')?.textContent === 'Hello from B' && document.querySelector('.composer__input').value === ''");
     assert.equal(await evaluate("!!document.querySelector('.session-empty__heading')"), false, 'first message removes the empty heading');
     await wait("[...document.querySelectorAll('.work-group__commentary')].at(-1)?.textContent.trim() === 'First paragraph.'");
     assert.ok(!await evaluate("document.querySelector('.session-history').textContent.includes('Pending words')"));
@@ -175,7 +176,7 @@ void app.whenReady().then(async () => {
     assert.equal(readFileSync(join(a.path, 'flame-ui-marker'), 'utf8'), 'x');
     await wait("[...document.querySelectorAll('.work-group__commentary')].some(node => node.textContent.includes('Pending words continued.'))");
     assert.ok(!await evaluate("document.querySelector('.session-history').textContent.includes('const value')"), 'an open code fence remains buffered');
-    await wait("document.querySelector('.session-message--assistant .markdown-code pre')?.textContent.includes('const value') && !document.querySelector('textarea').readOnly && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
+    await wait("document.querySelector('.session-message--assistant .markdown-code pre')?.textContent.includes('const value') && !document.querySelector('.composer__input').readOnly && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
     await wait("document.querySelector('.work-tool__toggle')?.getAttribute('aria-expanded') === 'false'");
     await checkContextIndicator({ evaluate, known: true });
     assert.equal(await evaluate("document.querySelectorAll('.work-group').length"), 1, 'work stays in its response instead of a separate job list');
@@ -221,7 +222,7 @@ void app.whenReady().then(async () => {
     assert.ok(await evaluate("!document.querySelector('.session-history').textContent.includes('Model settings:')"), 'settings events never appear as messages');
     assert.ok(repository.use(sessionB, (db) => db.history(null)).entries.some((entry) => entry.kind === 'settings'), 'settings remain durable internally');
     await evaluate("[...document.querySelectorAll('.session-list__item')].find(button => button.querySelector('.session-list__title').textContent === 'New session').click()");
-    await wait("document.querySelector('textarea').value === 'First draft' && document.querySelector('.composer-settings__label').textContent === 'Alpha'");
+    await wait("document.querySelector('.composer__input').value === 'First draft' && document.querySelector('.composer-settings__label').textContent === 'Alpha'");
     assert.ok(await evaluate("document.querySelector('.composer-settings__thinking').textContent.includes('Low') && document.querySelector('.composer-settings__thinking').textContent.includes('Fast')"));
     await click('[aria-label="Send message"]');
     await wait("document.querySelector('.session-message p')?.textContent === 'First draft'");
@@ -230,29 +231,29 @@ void app.whenReady().then(async () => {
     await wait("document.querySelectorAll('.session-list__item').length === 1");
     await type('[aria-label="Search threads"]', '', true);
     await wait("document.querySelectorAll('.session-list__item').length === 2");
-    await type('textarea', 'A pending draft');
+    await type('.composer__input', 'A pending draft');
     await wait("document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
     const reloaded = new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
     window.webContents.reload(); await reloaded;
-    await wait("document.querySelector('textarea')?.value === 'A pending draft' && document.querySelector('.composer-settings__label')?.textContent === 'Alpha'");
+    await wait("document.querySelector('.composer__input')?.value === 'A pending draft' && document.querySelector('.composer-settings__label')?.textContent === 'Alpha'");
     assert.equal(await evaluate("document.querySelector('.session-message p').textContent"), 'First draft');
     assert.ok(await evaluate("document.querySelector('.markdown h2')?.textContent === 'Summary' && document.querySelector('.markdown-code pre')?.textContent.includes('const value')"), 'saved answers keep Markdown after reload');
     assert.equal(repository.use(sessionB, (db) => db.read()).settings.modelId, 'beta');
-    await type('textarea', 'Stop this', true);
+    await type('.composer__input', 'Stop this', true);
     await click('[aria-label="Send message"]');
     await wait("!!document.querySelector('.composer-actions__send[aria-label=\"Stop response\"]')");
     await wait("!!document.querySelector('.work-group[data-running=true] .work-tools')");
     await click('.composer-actions__send[aria-label="Stop response"]');
-    await wait("document.querySelector('.session-history').textContent.includes('Response stopped') && !document.querySelector('textarea').readOnly");
+    await wait("document.querySelector('.session-history').textContent.includes('Response stopped') && !document.querySelector('.composer__input').readOnly");
     assert.equal(repository.use(sessionA, (db) => db.turns.snapshot()).status, 'cancelled');
     repository.use(sessionA, (db) => db.draft(db.read().revision, 'Remote draft'));
-    await type('textarea', 'Local draft', true);
+    await type('.composer__input', 'Local draft', true);
     await wait("document.querySelector('.session-error')?.textContent.includes('changed elsewhere')");
-    assert.equal(await evaluate("document.querySelector('textarea').value"), 'Local draft');
+    assert.equal(await evaluate("document.querySelector('.composer__input').value"), 'Local draft');
     assert.equal(repository.use(sessionA, (db) => db.read()).draft, 'Remote draft');
     await evaluate("[...document.querySelectorAll('.session-error button')].find(button => button.textContent === 'Reload saved state').click()");
     await wait("document.querySelector('.session-error')?.textContent.includes('Saved state reloaded')");
-    assert.equal(await evaluate("document.querySelector('textarea').value"), 'Local draft');
+    assert.equal(await evaluate("document.querySelector('.composer__input').value"), 'Local draft');
     await evaluate("[...document.querySelectorAll('.session-error button')].find(button => button.textContent === 'Retry save').click()");
     await wait("!document.querySelector('.session-error') && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
     assert.equal(repository.use(sessionA, (db) => db.read()).draft, 'Local draft');
@@ -271,6 +272,8 @@ void app.whenReady().then(async () => {
     await checkSettlement({ evaluate, wait, click, type, repository, active: sessionC, inactive: sessionB,
       reload: async () => { const loaded = new Promise(resolve => window.webContents.once('did-finish-load', resolve)); window.webContents.reload(); await loaded; } });
     await checkSessionSidebar({ evaluate, wait, click, pointerClick, type, repository, active: sessionC, inactive: sessionB });
+    await checkSentMentions({ evaluate, wait, repository, location: await create(b.id),
+      reload: async () => { const loaded = new Promise(resolve => window.webContents.once('did-finish-load', resolve)); window.webContents.reload(); await loaded; } });
     assert.equal(repository.list().warnings.length, 0);
     assert.ok(await evaluate("!document.body.textContent.includes('Saved locally') && !document.body.textContent.includes('Tools are not connected')"));
   } finally { window.destroy(); abort.abort(); await running; projects.close(); }

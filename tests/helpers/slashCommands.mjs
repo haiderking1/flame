@@ -19,7 +19,7 @@ export async function checkSlashCommandStyle(evaluate) {
       horizontal: getComputedStyle(option).flexDirection,
       selected: option.getAttribute('aria-selected'),
       pointerReachable: option.contains(document.elementFromPoint(optionBox.left + optionBox.width / 2, optionBox.top + optionBox.height / 2)),
-      active: document.querySelector('textarea').getAttribute('aria-activedescendant') === option.id,
+      active: document.querySelector('.composer__input').getAttribute('aria-activedescendant') === option.id,
       background: getComputedStyle(option).backgroundColor,
       bottomRadius: getComputedStyle(panel, '::before').borderBottomLeftRadius,
       topRadius: getComputedStyle(panel, '::before').borderTopLeftRadius,

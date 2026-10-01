@@ -29,7 +29,7 @@ export function NewSessionDialog({ scope, onClose, onCreated, onNewProject }: {
     return () => {
       element.close();
       requestAnimationFrame(() => {
-        if (!document.querySelector('dialog[open], [popover]:popover-open')) document.querySelector<HTMLTextAreaElement>('.workspace textarea')?.focus({ preventScroll: true });
+        if (!document.querySelector('dialog[open], [popover]:popover-open')) document.querySelector<HTMLElement>('.workspace .composer__input')?.focus({ preventScroll: true });
       });
     };
   }, []);

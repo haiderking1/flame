@@ -15,6 +15,7 @@ import { CodexInferenceClient } from '../../dist/backend/turns/client.js';
 import { rendererDriver } from '../helpers/rendererDriver.mjs';
 import { checkGitUI } from '../helpers/checklistGit.mjs';
 import { checkPanels } from '../helpers/checklistPanels.mjs';
+import { checkMentions } from '../helpers/checklistMentions.mjs';
 import { checkPersistence } from '../helpers/checklistPersistence.mjs';
 import { checkHistory } from '../helpers/checklistHistory.mjs';
 import { checkActivity, seedActivity } from '../helpers/checklistActivity.mjs';
@@ -76,16 +77,17 @@ void app.whenReady().then(async () => {
     await evaluate("window.__longTasks = []; new PerformanceObserver(list => { window.__longTasks.push(...list.getEntries().map(entry => entry.duration)); }).observe({type:'longtask',buffered:true}); true");
     await click('[aria-label^="Filter threads by project"]'); await wait("document.querySelector('.project-filter').matches(':popover-open')");
     await evaluate(`[...document.querySelectorAll('.project-filter__option')].find(option => option.title === ${JSON.stringify(project.path)}).click()`);
-    await wait("document.querySelector('textarea').readOnly === false && document.querySelector('.workspace__composer').dataset.empty === 'true'");
+    await wait("document.querySelector('.composer__input').readOnly === false && document.querySelector('.workspace__composer').dataset.empty === 'true'");
     if (process.env.FLAME_TEST_GIT_UNAVAILABLE) { await checkUnavailableGit(driver, repository, location); }
     else {
     console.log('CHECKLIST_STAGE git'); await chooseGitTextModel(driver, 'Model 3');
-    await wait("document.querySelector('textarea').readOnly === false");
+    await wait("document.querySelector('.composer__input').readOnly === false");
     await checkGitUI(driver, project, other, opened);
     assert.ok(gitModels.length > 0 && gitModels.every(model => model === 'model-3'), `Git text uses the model chosen in Settings: ${gitModels.join(', ')}`);
     await resetGitTextModel(driver);
-    await wait("document.querySelector('textarea').readOnly === false && document.querySelector('.workspace__composer').dataset.empty === 'true'");
+    await wait("document.querySelector('.composer__input').readOnly === false && document.querySelector('.workspace__composer').dataset.empty === 'true'");
     console.log('CHECKLIST_STAGE panels'); await checkPanels(driver, project, measurements);
+    console.log('CHECKLIST_STAGE mentions'); await checkMentions(driver);
     console.log('CHECKLIST_STAGE persistence'); await checkPersistence(driver, project, location.sessionId, measurements);
     console.log('CHECKLIST_STAGE history'); await checkHistory(driver, location.sessionId, measurements);
     console.log('CHECKLIST_STAGE activity'); await checkActivity(driver, activityLocation);

@@ -5,7 +5,7 @@ import { useSlashMenuPosition } from "./useSlashMenuPosition";
 import "./slash-command-list.css";
 
 export function SlashCommandList({ id, input, commands, selectedIndex, unavailable, onExecute, onHighlight }: {
-  id: string; input: RefObject<HTMLTextAreaElement | null>; commands: readonly SlashCommand[]; selectedIndex: number;
+  id: string; input: RefObject<HTMLElement | null>; commands: readonly SlashCommand[]; selectedIndex: number;
   unavailable: string | null; onExecute(command: SlashCommand): void; onHighlight(index: number): void;
 }) {
   const position = useSlashMenuPosition(input);

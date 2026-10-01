@@ -18,15 +18,15 @@ export async function checkComposer({ evaluate, send }) {
     return { attachmentDisabled: attach.disabled, attachmentType: attach.type,
       round: style.borderRadius, square: style.width === style.height };
   })()`), { attachmentDisabled: false, attachmentType: "button", round: "50%", square: true });
-  const value = () => evaluate("document.querySelector('textarea').value");
-  const height = () => evaluate("document.querySelector('textarea').getBoundingClientRect().height");
+  const value = () => evaluate("document.querySelector('.composer__input').value");
+  const height = () => evaluate("document.querySelector('.composer__input').getBoundingClientRect().height");
   const replaceText = async (text) => {
-    await evaluate("document.querySelector('textarea').focus(); document.querySelector('textarea').select()");
+    await evaluate("document.querySelector('.composer__input').focus(); getSelection().selectAllChildren(document.querySelector('.composer__input'))");
     await send("Input.insertText", { text });
     await delay(30);
   };
   const enter = async (modifiers = 0) => {
-    await evaluate("document.querySelector('textarea').focus()");
+    await evaluate("document.querySelector('.composer__input').focus()");
     await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r", modifiers });
     await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, modifiers });
     await delay(30);
@@ -54,12 +54,12 @@ export async function checkComposer({ evaluate, send }) {
   await replaceText(Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n"));
   assert.ok(await height() > small, "Textarea did not grow");
   assert.ok(await height() <= 240, "Textarea exceeded its height limit");
-  assert.equal(await evaluate("document.querySelector('textarea').scrollHeight > document.querySelector('textarea').clientHeight"), true);
+  assert.equal(await evaluate("document.querySelector('.composer__input').scrollHeight > document.querySelector('.composer__input').clientHeight"), true);
   await replaceText("draft preserved");
   assert.ok(await height() <= small, "Textarea did not shrink");
 
   assert.equal(await evaluate(`(() => {
-    const input = document.querySelector('textarea');
+    const input = document.querySelector('.composer__input');
     input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
     const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, isComposing: true });
     input.dispatchEvent(event);

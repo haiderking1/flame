@@ -22,7 +22,7 @@ export async function checkFloatingComposer({ evaluate, type, wait, resize }) {
       composerTop: wrapper.getBoundingClientRect().top };
   })()`);
   assert.equal(await evaluate("getComputedStyle(document.querySelector('.session-history'), '::-webkit-scrollbar-thumb').backgroundColor"), 'rgba(255, 255, 255, 0.08)');
-  assert.equal(await evaluate("getComputedStyle(document.querySelector('textarea'), '::-webkit-scrollbar-thumb').backgroundColor"), 'rgb(80, 80, 80)', 'chat colors must not change the composer scrollbar');
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('.composer__input'), '::-webkit-scrollbar-thumb').backgroundColor"), 'rgb(80, 80, 80)', 'chat colors must not change the composer scrollbar');
   const initial = await dimensions();
   assert.equal(initial.maxWidth, '768px');
   assert.equal(Math.round(initial.width), Math.min(initial.available, 768));
@@ -43,18 +43,18 @@ export async function checkFloatingComposer({ evaluate, type, wait, resize }) {
   // Exercise a tall timeline without sending extra messages or modifying saved content.
   await evaluate(`(() => { const message = document.querySelector('.session-message--assistant p');
     message.style.minHeight = '1200px'; const pane = document.querySelector('.session-history'); pane.scrollTop = pane.scrollHeight; })()`);
-  await type('textarea', Array.from({ length: 20 }, (_, i) => 'draft line ' + i).join('\n'), true);
-  await wait(`document.querySelector('textarea').value.includes('draft line 19') && document.querySelector('.composer').getBoundingClientRect().height > ${initial.height + 20}`);
+  await type('.composer__input', Array.from({ length: 20 }, (_, i) => 'draft line ' + i).join('\n'), true);
+  await wait(`document.querySelector('.composer__input').value.includes('draft line 19') && document.querySelector('.composer').getBoundingClientRect().height > ${initial.height + 20}`);
   await wait("document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
   await wait("parseFloat(getComputedStyle(document.querySelector('.session-history')).paddingBottom) >= document.querySelector('.workspace__composer').getBoundingClientRect().height + 15");
   const expanded = await dimensions();
   assert.ok(expanded.height > initial.height + 20, `long drafts expand the floating card within the viewport cap: ${JSON.stringify({ initial, expanded })}`);
   assert.ok(expanded.lastBottom <= expanded.composerTop - 12, 'last message remains above the expanded composer when following');
   await evaluate("document.querySelector('.session-history').scrollTop = 0");
-  await type('textarea', 'Short draft', true);
+  await type('.composer__input', 'Short draft', true);
   await wait("document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
   assert.equal(await evaluate("document.querySelector('.session-history').scrollTop"), 0, 'resizing must not pull a reader away from older messages');
-  await type('textarea', '', true);
+  await type('.composer__input', '', true);
   await wait("document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
   await evaluate("document.querySelector('.session-message--assistant p').style.removeProperty('min-height')");
   for (const width of [900, 630, 2200]) {

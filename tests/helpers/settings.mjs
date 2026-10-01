@@ -9,11 +9,11 @@ export async function checkSettings({ evaluate, send, savedAuthPath }) {
   };
   const toggleSidebar = () => evaluate(`(() => { const toggle = document.querySelector('.app-shell > .sidebar-toggle'); if (toggle.getAttribute('aria-expanded') === 'false') toggle.click(); })()`);
   const setDraft = (text) => evaluate(`(() => {
-    const input = document.querySelector('.workspace textarea');
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${JSON.stringify(text)});
-    input.dispatchEvent(new Event('input', { bubbles: true }));
+    const input = document.querySelector('.workspace .composer__input');
+    input.focus(); getSelection().selectAllChildren(input);
+    if (${JSON.stringify(text)}) document.execCommand('insertText', false, ${JSON.stringify(text)}); else document.execCommand('delete');
   })()`);
-  const original = await evaluate("document.querySelector('.workspace textarea').value");
+  const original = await evaluate("document.querySelector('.workspace .composer__input').value");
   await setDraft('Keep this draft while visiting settings');
   await toggleSidebar();
   assert.ok(await evaluate(`(() => {
@@ -79,7 +79,7 @@ export async function checkSettings({ evaluate, send, savedAuthPath }) {
   })()`), 'Disconnected provider must show an accessible red dot on the logo’s top-right corner');
   await evaluate("document.querySelector('[aria-label=\"Close settings\"]').click()");
   await wait("!document.querySelector('.settings-page')");
-  assert.equal(await evaluate("document.querySelector('.workspace textarea').value"), 'Keep this draft while visiting settings');
+  assert.equal(await evaluate("document.querySelector('.workspace .composer__input').value"), 'Keep this draft while visiting settings');
   await evaluate("document.querySelector('[aria-label=\"Settings\"]').click()");
   await wait("document.querySelector('.settings-page') !== null");
   await evaluate("document.querySelector('[aria-label=\"Back to workspace\"]').click()");
@@ -98,7 +98,7 @@ export async function checkSettings({ evaluate, send, savedAuthPath }) {
   await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
   await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
   await wait("!document.querySelector('.settings-page')");
-  assert.equal(await evaluate("document.querySelector('.workspace textarea').value"), 'Keep this draft while visiting settings');
+  assert.equal(await evaluate("document.querySelector('.workspace .composer__input').value"), 'Keep this draft while visiting settings');
   await send('Emulation.setDeviceMetricsOverride', { width: 2200, height: 1400, deviceScaleFactor: 1, mobile: false });
   await wait("document.querySelector('.sidebar__resize') !== null");
   await toggleSidebar();

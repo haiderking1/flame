@@ -122,7 +122,7 @@ void app.whenReady().then(async () => {
       assert.ok(rects.left >= 0 && rects.top >= 0 && rects.right <= rects.width + 1 && rects.bottom <= rects.height + 1, JSON.stringify(rects));
       assert.ok(rects.logoRight <= rects.searchLeft + 1, 'Provider is left of search');
       // A genuine outside pointer press exercises native light dismissal.
-      const point = await evaluate("(() => { const r = document.querySelector('textarea').getBoundingClientRect(); return { x: r.right - 12, y: r.bottom - 8 }; })()");
+      const point = await evaluate("(() => { const r = document.querySelector('.composer__input').getBoundingClientRect(); return { x: r.right - 12, y: r.bottom - 8 }; })()");
       const factor = window.webContents.getZoomFactor();
       const position = { x: Math.round(point.x * factor), y: Math.round(point.y * factor), button: 'left', clickCount: 1 };
       window.webContents.sendInputEvent({ type: 'mouseDown', ...position });

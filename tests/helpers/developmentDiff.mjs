@@ -22,6 +22,6 @@ export async function checkDevelopmentDiff({ evaluate, folder }) {
   // New optimizer discoveries can schedule a reload after the file first renders.
   await delay(1000);
   assert.equal(await evaluate('window.__firstDiffMarker'),'same-renderer','first preview must not reload the renderer');
-  assert.equal(await evaluate("document.querySelector('textarea').value"),'draft preserved','first preview keeps the live composer draft');
+  assert.equal(await evaluate("document.querySelector('.composer__input').value"),'draft preserved','first preview keeps the live composer draft');
   await evaluate("document.querySelector('[aria-label=\"Close diff panel\"]').click(); true");
 }

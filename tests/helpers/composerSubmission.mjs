@@ -29,10 +29,10 @@ export async function checkComposerSubmission(appPath, evaluate) {
     document.querySelector('form').requestSubmit();`);
   await waitFor("document.querySelector('.composer [role=status]').textContent.includes('Could not send')");
   assert.equal(await evaluate("window.__sendCount"), 1, "Duplicate submit was not blocked");
-  assert.equal(await evaluate("document.querySelector('textarea').value"), "draft preserved");
+  assert.equal(await evaluate("document.querySelector('.composer__input').value"), "draft preserved");
 
   await evaluate("window.__rejectSend = false; document.querySelector('form').requestSubmit()");
-  await waitFor("document.querySelector('textarea').value === ''");
+  await waitFor("document.querySelector('.composer__input').value === ''");
   assert.equal(await evaluate("window.__sentMessage"), "draft preserved");
   assert.equal(await evaluate("window.__sendCount"), 2);
   assert.equal(await evaluate("document.querySelector('button[type=submit]').disabled"), true);

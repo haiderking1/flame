@@ -20,6 +20,7 @@ import { migrateLs } from "./ls-migration.js";
 import { migrateCompaction } from "./compaction-migration.js";
 import { migrateReadImages } from "./read-images-migration.js";
 import { CompactionStore } from "./compaction-store.js";
+import { mentionNames } from "../../contracts/file-mentions.js";
 
 const conflict = () => new SessionError({ code: "CONFLICT", message: "This session changed elsewhere. Reopen it before saving again. Your unsaved text has been kept." });
 const invalid = (message: string) => new SessionError({ code: "INVALID", message });
@@ -150,7 +151,7 @@ export class SessionDatabase {
       this.entry(current, "user", text, current.settings, requestId);
       this.images.bind(this.read().leafId!, images);
       this.db.prepare("UPDATE session SET settled_at=NULL, draft=CASE WHEN draft=? THEN '' ELSE draft END, title=CASE WHEN custom_title=0 THEN ? ELSE title END, custom_title=1 WHERE singleton=1")
-        .run(text, text.trim().split(/\r?\n/)[0]!.replace(/\s+/g, " ").slice(0, 120).replace(/[\uD800-\uDBFF]$/, "") || "Image attachment");
+        .run(text, mentionNames(text.trim().split(/\r?\n/)[0]!).replace(/\s+/g, " ").slice(0, 120).replace(/[\uD800-\uDBFF]$/, "") || "Image attachment");
       return this.read();
     });
   }

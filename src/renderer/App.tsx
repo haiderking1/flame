@@ -42,7 +42,7 @@ function Workspace() {
     setSettingsOpen(false);
     if (mobile) setSidebarOpen(false);
     requestAnimationFrame(() => {
-      const target = document.querySelector<HTMLElement>(mobile || !sidebarOpen ? '.workspace textarea' : '.sidebar-footer button');
+      const target = document.querySelector<HTMLElement>(mobile || !sidebarOpen ? '.workspace .composer__input' : '.sidebar-footer button');
       target?.focus();
     });
   }

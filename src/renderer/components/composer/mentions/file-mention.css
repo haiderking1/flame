@@ -1,0 +1,11 @@
+/* Sized in em from the surrounding text, as T3 Code's context chips are, so a chip sits within the line. */
+.file-mention {
+  --file-mention-accent: oklch(0.62 0.11 215);
+  display: inline-flex; align-items: center; gap: .33em; box-sizing: border-box; height: 1.41em; max-width: 100%; padding: 0 .5em;
+  border: 1px solid color-mix(in oklab, var(--file-mention-accent) 34%, rgb(255 255 255 / 12%)); border-radius: .5em;
+  background: color-mix(in oklab, var(--file-mention-accent) 11%, transparent); color: color-mix(in oklab, var(--file-mention-accent) 22%, #ededed);
+  font-size: .86em; font-weight: 500; line-height: 1; vertical-align: middle; white-space: nowrap; user-select: none;
+}
+.file-mention .file-icon { display: block; flex-shrink: 0; width: 1.17em; height: 1.17em; }
+.file-mention__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.file-mention-node.ProseMirror-selectednode .file-mention { border-color: var(--accent); }

@@ -6,17 +6,17 @@ export async function checkSettlement({ evaluate, wait, click, type, reload, rep
   assert.ok(await evaluate(`(() => { const h = document.querySelector('.settled-section__toggle');
     const label = h.querySelector('span').getBoundingClientRect(); const line = h.querySelector('.settled-section__divider').getBoundingClientRect(); const arrow = h.querySelector('svg').getBoundingClientRect();
     return label.right < line.left && line.right < arrow.left && line.width > 8 && h.getAttribute('aria-expanded') === 'false'; })()`), 'empty shelf retains label, divider and right chevron');
-  await type('textarea', 'Draft to keep', true);
+  await type('.composer__input', 'Draft to keep', true);
   await wait("document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
   await click('[aria-label="Settle New session"]');
   await wait(isSettled('New session'));
   assert.equal(repository.use(active, db => db.read()).draft, 'Draft to keep');
-  assert.equal(await evaluate("document.querySelector('textarea').value"), 'Draft to keep');
+  assert.equal(await evaluate("document.querySelector('.composer__input').value"), 'Draft to keep');
   await wait("document.querySelector('.settled-section__toggle').textContent === 'Settled (1)'");
   await click('.settled-section__toggle');
   assert.ok(await evaluate("Math.abs(document.querySelector('.session-list__row[data-settled] .session-list__item').getBoundingClientRect().height - 36) < 1"), 'settled threads use compact rows');
   await reload();
-  await wait("document.querySelector('textarea')?.value === 'Draft to keep' && document.querySelector('.settled-section__toggle')?.textContent === 'Settled (1)'");
+  await wait("document.querySelector('.composer__input')?.value === 'Draft to keep' && document.querySelector('.settled-section__toggle')?.textContent === 'Settled (1)'");
   assert.ok(repository.use(active, db => db.read()).settledAt > 0);
   await type('[aria-label="Search threads"]', 'New session', true);
   await wait("document.querySelector('.settled-section__toggle').getAttribute('aria-expanded') === 'true'");
@@ -28,12 +28,12 @@ export async function checkSettlement({ evaluate, wait, click, type, reload, rep
   await click('[aria-label="Options for Hello from B"]');
   await evaluate("[...document.querySelectorAll('.session-menu [role=menuitem]')].find(item => item.textContent === 'Settle').click()");
   await wait(isSettled('Hello from B'));
-  assert.equal(await evaluate("document.querySelector('textarea').value"), 'Draft to keep', 'settling another thread does not navigate');
+  assert.equal(await evaluate("document.querySelector('.composer__input').value"), 'Draft to keep', 'settling another thread does not navigate');
   await click('.settled-section__toggle');
   await click('.session-list__item[aria-label="Hello from B"]');
   await wait("document.querySelector('.session-message p')?.textContent === 'Hello from B' && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
   assert.ok(repository.use(inactive, db => db.read()).settledAt > 0, 'opening a settled thread does not reactivate it');
-  await type('textarea', 'Continue settled thread', true);
+  await type('.composer__input', 'Continue settled thread', true);
   await click('[aria-label="Send message"]');
   await wait("!!document.querySelector('.composer-actions__send[aria-label=\"Stop response\"]') && !!document.querySelector('[aria-label=\"Settle Hello from B\"]:not(:disabled)')");
   assert.equal(repository.use(inactive, db => db.read()).settledAt, null, 'sending reactivates in the same transaction');
@@ -44,5 +44,5 @@ export async function checkSettlement({ evaluate, wait, click, type, reload, rep
   await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
   await wait("!!document.querySelector('.session-list__item[aria-label=\"New session\"]:not(:disabled)')");
   await click('.session-list__item[aria-label="New session"]');
-  await wait("document.querySelector('textarea').value === 'Draft to keep' && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
+  await wait("document.querySelector('.composer__input').value === 'Draft to keep' && document.querySelector('.workspace__composer').dataset.saveState === 'saved'");
 }

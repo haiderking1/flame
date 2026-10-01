@@ -4,7 +4,7 @@ Flame includes work adapted from the projects below. Thank you to their authors.
 
 ## T3 Code
 
-Flame's Git workflow and file icons are adapted from [T3 Code](https://github.com/pingdotgg/t3code) (commit `6b286ae`). The adapted parts are:
+Flame's Git workflow, file icons and `@` file mentions are adapted from [T3 Code](https://github.com/pingdotgg/t3code) (commit `6b286ae`). The adapted parts are:
 
 - the context-aware Git action button, its options menu and their disabled-reason rules
   (`src/renderer/components/workspace/git/gitActionLogic.ts`)
@@ -15,6 +15,9 @@ Flame's Git workflow and file icons are adapted from [T3 Code](https://github.co
   (`src/backend/git/actions/`, `src/backend/git/branch-names.ts`, `src/contracts/source-control.ts`)
 - the file icon rules, colors, extra icons and language mapping, and the language-icon code block titles
   (`src/renderer/components/files/fileIcons.ts`, `src/renderer/components/markdown/CodeBlock.tsx`)
+- the `@` mention trigger, the Markdown file-link format for mentions and its parsing, the mention menu's behavior,
+  and the fff-based project file search with its limits and refresh rules
+  (`src/contracts/file-mentions.ts`, `src/renderer/components/composer/mentions/`, `src/backend/workspace-search/`)
 
 ```
 MIT License

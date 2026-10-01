@@ -29,7 +29,7 @@ export async function checkActivity(driver, location) {
   await evaluate("[...document.querySelectorAll('.work-tool__toggle')].find(node => node.textContent.includes('Read tool-179.txt')).click()");
   await wait("[...document.querySelectorAll('.work-tool__output')].some(node => node.textContent.includes('Complete source for file 179'))");
   assert.ok(await evaluate("document.querySelector('.session-history').querySelectorAll('*').length < 3000"), 'nested activity and tool lists are independently bounded');
-  await evaluate("document.querySelector('textarea').focus(); document.querySelector('.session-history').scrollTop = 0; true"); await delay(100); await settle();
+  await evaluate("document.querySelector('.composer__input').focus(); document.querySelector('.session-history').scrollTop = 0; true"); await delay(100); await settle();
   await wait("![...document.querySelectorAll('.work-tool__command')].some(node => node.textContent === 'Read tool-179.txt')");
   await evaluate("document.querySelector('.session-history').scrollTop = document.querySelector('.session-history').scrollHeight; true"); await delay(150); await settle();
   await wait("[...document.querySelectorAll('.work-tool__toggle')].some(node => node.textContent.includes('Read tool-179.txt') && node.getAttribute('aria-expanded') === 'true')");

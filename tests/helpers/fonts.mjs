@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 export async function checkFonts(evaluate) {
   assert.match(await evaluate("getComputedStyle(document.body).fontFamily"), /^Inter(?:,|$)/);
-  assert.match(await evaluate("getComputedStyle(document.querySelector('textarea')).fontFamily"), /^Inter(?:,|$)/);
+  assert.match(await evaluate("getComputedStyle(document.querySelector('.composer__input')).fontFamily"), /^Inter(?:,|$)/);
 
   const faces = [
     '400 16px "Inter"',

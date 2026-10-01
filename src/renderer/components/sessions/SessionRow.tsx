@@ -81,7 +81,7 @@ export function SessionRow({ session, project, now, onOpened, onDelete }: {
       value={editing} maxLength={160} readOnly={saving} onFocus={event => event.currentTarget.select()}
       onChange={event => { editValue.current = event.target.value; setEditing(event.target.value); setError(null); }}
       onBlur={() => { void commit(); }} onKeyDown={event => {
-        if (event.key === "Escape" && !pending.current) { event.preventDefault(); finishRename(); requestAnimationFrame(() => row.current?.focus()); }
+        if (event.key === "Escape" && !pending.current) { event.preventDefault(); finishRename(); requestAnimationFrame(() => { if (document.activeElement === document.body) row.current?.focus(); }); }
         if (event.key === "Enter") { event.preventDefault(); void commit().then(() => { if (editValue.current === null) row.current?.focus(); }); }
       }} /> : <div className="session-list__actions"><button type="button" className="session-list__settle" aria-label={`${session.settledAt === null ? "Settle" : "Unsettle"} ${session.title}`}
       title={session.settledAt === null ? "Settle thread" : "Unsettle thread"} disabled={workspace.busy || saving}

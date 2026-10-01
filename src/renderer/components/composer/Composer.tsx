@@ -2,11 +2,15 @@ import { SessionError, type SessionLocation } from "@contracts/sessions";
 import { useImageDraft } from "../images/useImageDraft";
 import { ImageGallery } from "../images/ImageGallery";
 import type { DraftImage } from "../images/draft-storage";
-import { useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import { ComposerSettings } from "./ComposerSettings";
 import { ComposerActions } from "./ComposerActions";
 import { useSlashCommands } from "./slash/useSlashCommands";
 import { SlashCommandList } from "./slash/SlashCommandList";
+import { PromptEditor, type PromptEditorHandle } from "./editor/PromptEditor";
+import { useFileMentions } from "./mentions/useFileMentions";
+import { MentionMenu } from "./mentions/MentionMenu";
+import { useSessions } from "../sessions/SessionContext";
 import "./composer.css";
 
 type ComposerProps = {
@@ -27,10 +31,13 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
   const sendController = useRef<AbortController | null>(null);
-  const composing = useRef(false);
-  const textarea = useRef<HTMLTextAreaElement>(null);
+  const editor = useRef<PromptEditorHandle>(null), form = useRef<HTMLFormElement>(null);
+  const [focused, setFocused] = useState(false), [cursor, setCursor] = useState<number | null>(null);
   const hintId = useId();
-  const commands = useSlashCommands({ draft, setDraft, readOnly: sending || readOnly, input: textarea, onError: setError });
+  const commands = useSlashCommands({ draft, setDraft, readOnly: sending || readOnly, input: editor, onError: setError });
+  const sessions = useSessions();
+  const projectId = sessions?.document?.projectId ?? sessions?.projectDraftId ?? sessions?.projectScope ?? null;
+  const mentions = useFileMentions({ projectId, text: pendingSend ? "" : draft, cursor, focused, blocked: sending || pendingSend || readOnly || commands.isCommand, editor });
   const attachments = useImageDraft(imageLocation);
   const picker = useRef<HTMLInputElement>(null), dragDepth = useRef(0);
   const [dragging, setDragging] = useState(false);
@@ -38,7 +45,7 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
   const canSend = Boolean(onSend && (draft.trim() || attachments.images.length) && attachments.ready && !attachments.saving && !sending && !pendingSend && !readOnly && !onStop);
   async function attach(files: File[]) {
     if (!canAttach || !files.length) return;
-    try { await prepareAttachments?.(); await attachments.add(files); textarea.current?.focus(); }
+    try { await prepareAttachments?.(); await attachments.add(files); editor.current?.focus(); }
     catch { setError("Could not save attachment draft. Your message has not been sent."); }
   }
 
@@ -66,53 +73,49 @@ export function Composer({ onSend, onStop, stopLabel, draft: controlledDraft, on
       finishPreview?.(acceptedSend);
       inFlight.current = false; sendController.current = null;
       setSending(false);
-      textarea.current?.focus();
+      editor.current?.focus();
     }
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.nativeEvent.isComposing || composing.current || event.nativeEvent.keyCode === 229) return;
-    if (commands.handleKeyDown(event)) return;
-    if (event.key !== "Enter" || event.shiftKey) return;
+  // The editor skips this while an IME is composing; menus take their keys first.
+  function handleKeyDown(event: KeyboardEvent): boolean {
+    if (mentions.handleKeyDown(event) || commands.handleKeyDown(event)) return true;
+    if (event.key !== "Enter" || event.shiftKey) return false;
     event.preventDefault();
-    if ((canSend || commands.isCommand) && !event.repeat) event.currentTarget.form?.requestSubmit();
+    if ((canSend || commands.isCommand) && !event.repeat) form.current?.requestSubmit();
+    return true;
   }
+  const menu = commands.open ? { id: commands.listId, active: commands.activeId } : mentions.open ? { id: mentions.listId, active: mentions.activeId } : null;
 
   return (
-    <form className="composer" data-image-drag={dragging || undefined} aria-label="Message composer" aria-busy={sending || commands.launching || Boolean(onStop)} onSubmit={submit}
+    <form ref={form} className="composer" data-image-drag={dragging || undefined} aria-label="Message composer" aria-busy={sending || commands.launching || Boolean(onStop)} onSubmit={submit}
       onDragEnter={event => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); dragDepth.current++; if (canAttach) setDragging(true); } }}
       onDragOver={event => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); event.dataTransfer.dropEffect = canAttach ? "copy" : "none"; } }}
       onDragLeave={event => { if (event.dataTransfer.types.includes("Files")) { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragging(false); } }}
       onDrop={event => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); dragDepth.current = 0; setDragging(false); void attach(Array.from(event.dataTransfer.files)); } }}>
-      {commands.open && <SlashCommandList id={commands.listId} input={textarea} commands={commands.matches} selectedIndex={commands.index}
+      {commands.open && <SlashCommandList id={commands.listId} input={form} commands={commands.matches} selectedIndex={commands.index}
         unavailable={commands.unavailable} onHighlight={commands.highlight} onExecute={command => { void commands.execute(command); }} />}
+      {!commands.open && mentions.open && <MentionMenu id={mentions.listId} anchor={form} items={mentions.items} selectedIndex={mentions.index} status={mentions.status}
+        pending={mentions.pending} onHighlight={mentions.highlight} onSelect={entry => { mentions.select(entry); }} />}
       <input ref={picker} className="image-sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple tabIndex={-1} aria-label="Choose images" disabled={!canAttach}
         onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ""; void attach(files); }} />
       <ImageGallery images={pendingSend ? [] : attachments.images} draft disabled={!canAttach} onRemove={id => { void attachments.remove(id); }} />
       {attachments.error && <p className="composer__images-error" role="alert">{attachments.error}<button type="button" onClick={attachments.retry} disabled={attachments.saving}>Retry</button></p>}
-      <textarea
-        ref={textarea}
-        className="composer__input flame-scrollbar"
-        aria-label="Message"
-        aria-describedby={commands.open ? `${hintId} ${commands.listId}-hint` : hintId}
-        role={commands.isCommand ? "combobox" : undefined}
-        aria-autocomplete={commands.isCommand ? "list" : undefined}
-        aria-expanded={commands.isCommand ? commands.open : undefined}
-        aria-controls={commands.open ? commands.listId : undefined}
-        aria-activedescendant={commands.activeId}
-        onFocus={commands.onFocus}
-        onBlur={commands.onBlur}
-        placeholder="Ask for changes, send follow-ups, or attach images"
-        value={pendingSend ? "" : draft}
-        onChange={(event) => commands.onChange(event.target.value)}
-        onPaste={event => { const files = Array.from(event.clipboardData.items).filter(item => item.kind === "file").map(item => item.getAsFile()).filter((file): file is File => file !== null); if (files.length) { event.preventDefault(); void attach(files); } }}
-        onKeyDown={handleKeyDown}
-        onCompositionStart={() => { composing.current = true; }}
-        onCompositionEnd={() => { composing.current = false; }}
+      <PromptEditor ref={editor} value={pendingSend ? "" : draft} ariaLabel="Message"
+        placeholder="Ask for changes, @ to mention files, or attach images"
         readOnly={sending || pendingSend || readOnly || commands.launching}
-        rows={1}
-        spellCheck={false}
-      />
+        aria={{
+          "aria-describedby": menu ? `${hintId} ${menu.id}-hint` : hintId,
+          role: menu || commands.isCommand ? "combobox" : "textbox",
+          "aria-autocomplete": menu || commands.isCommand ? "list" : undefined,
+          "aria-expanded": menu || commands.isCommand ? String(!!menu) : undefined,
+          "aria-controls": menu?.id, "aria-activedescendant": menu?.active,
+        }}
+        onChange={commands.onChange}
+        onCursor={setCursor}
+        onFocusChange={value => { setFocused(value); if (value) commands.onFocus(); else commands.onBlur(); }}
+        onKeyDown={handleKeyDown}
+        onFiles={files => { void attach(files); }} />
       <span id={hintId} className={error ? "composer__hint" : "composer__status-hidden"} role="status">
         {error ?? (sending ? attachments.images.length ? "Preparing and sending images…" : "Sending…" : onSend ? "Shift + Enter for a new line" : "Agent not connected. Shift + Enter for a new line.")}
       </span>

@@ -48,7 +48,7 @@ void app.whenReady().then(async () => {
   const capture = captureImageUploads(window.webContents.session, port);
   const evaluate = code => window.webContents.executeJavaScript(code, true).catch(error => { throw new Error(`Renderer script failed: ${code}`, { cause: error }); });
   const wait = async code => { for (let i = 0; i < 300; i++) { if (typeof code === 'function' ? await code() : await evaluate(code)) return; await delay(20); }
-    const composer = await evaluate("({send:document.querySelector('.composer-actions__send')?.outerHTML,textarea:document.querySelector('textarea')?.outerHTML,text:document.querySelector('main')?.textContent ?? document.body.textContent})");
+    const composer = await evaluate("({send:document.querySelector('.composer-actions__send')?.outerHTML,textarea:document.querySelector('.composer__input')?.outerHTML,text:document.querySelector('main')?.textContent ?? document.body.textContent})");
     assert.fail(`Timed out: ${code}\nComposer: ${JSON.stringify(composer)}\nPOSTs: ${JSON.stringify(capture.requests.map(({name,id,status,error})=>({name,id,status,error})))}`);
   };
   const uploaded = names => wait(() => names.every(name => capture.requests.some(request => request.name === name && request.status === 200)));
@@ -82,7 +82,7 @@ void app.whenReady().then(async () => {
     await evaluate(`(() => { const transfer = new DataTransfer(); transfer.items.add(${file('dropped.png')}); document.querySelector('form.composer').dispatchEvent(new DragEvent('drop', {bubbles:true,cancelable:true,dataTransfer:transfer})); })()`);
     await wait("document.querySelectorAll('.image-gallery--draft .image-thumbnail').length === 1");
     await wait("document.querySelector('[aria-label=\"Attach media\"]')?.disabled === false");
-    await evaluate(`(() => { const transfer = new DataTransfer(); transfer.items.add(${file('pasted.png')}); document.querySelector('textarea').dispatchEvent(new ClipboardEvent('paste', {bubbles:true,cancelable:true,clipboardData:transfer})); })()`);
+    await evaluate(`(() => { const transfer = new DataTransfer(); transfer.items.add(${file('pasted.png')}); document.querySelector('.composer__input').dispatchEvent(new ClipboardEvent('paste', {bubbles:true,cancelable:true,clipboardData:transfer})); })()`);
     await wait("document.querySelectorAll('.image-gallery--draft .image-thumbnail').length === 2");
     await wait("document.querySelector('[aria-label=\"Attach media\"]')?.disabled === false");
     await evaluate(`(() => { const transfer = new DataTransfer(); transfer.items.add(${file('picked.png')}); const input=document.querySelector('input[type=file]'); input.files=transfer.files; input.dispatchEvent(new Event('change', {bubbles:true})); })()`);
@@ -169,16 +169,16 @@ void app.whenReady().then(async () => {
     await wait("document.querySelectorAll('.image-gallery--draft .image-thumbnail').length === 1 && document.querySelector('.composer-actions__send')?.disabled === false");
     await wait(() => capture.held('draft.png'));
     assert.equal(repository.list().sessions.length, 1, 'attaching an image does not prematurely create a session');
-    await evaluate("document.querySelector('textarea').focus()");
+    await evaluate("document.querySelector('.composer__input').focus()");
     await window.webContents.insertText('A large image');
     await click('.composer-actions__send');
     await wait("!!document.querySelector('.session-message--user[aria-busy=true] [aria-label=\"Preview draft.png\"]')");
     assert.equal(await evaluate("document.querySelector('.session-history').hidden"), false, 'a project draft appears in chat before a backend turn exists');
-    assert.equal(await evaluate("document.querySelector('textarea').value"), '', 'text moves with the image');
+    assert.equal(await evaluate("document.querySelector('.composer__input').value"), '', 'text moves with the image');
     assert.equal(requests, 1, 'the provider has not received the held project send');
     await click('[aria-label="Stop sending"]');
     await wait("document.querySelector('[aria-label=\"Remove draft.png\"]')?.disabled === false");
-    assert.equal(await evaluate("document.querySelector('textarea').value"), 'A large image', 'Stop restores the original text');
+    assert.equal(await evaluate("document.querySelector('.composer__input').value"), 'A large image', 'Stop restores the original text');
     assert.equal(await evaluate("document.querySelectorAll('.session-message--user[aria-busy=true]').length"), 0);
     capture.release('draft.png');
     await uploaded(['draft.png']);
@@ -199,9 +199,9 @@ void app.whenReady().then(async () => {
     await checkProjectPreview();
     // Real Read tool -> private saved image -> model output -> disclosure/viewer/reload.
     window.focus(); window.webContents.focus();
-    await evaluate("document.querySelector('textarea').focus()");
+    await evaluate("document.querySelector('.composer__input').focus()");
     await window.webContents.insertText('Read read-source.png');
-    await wait("document.querySelector('textarea')?.value === 'Read read-source.png'");
+    await wait("document.querySelector('.composer__input')?.value === 'Read read-source.png'");
     await wait("document.querySelector('.composer-actions__send')?.disabled === false"); await click('.composer-actions__send');
     await wait("document.querySelector('.session-history')?.textContent.includes('I read the image from disk.') && !![...document.querySelectorAll('.work-tool__command')].find(node => node.textContent === 'Read read-source.png')");
     assert.equal(requests, 4);

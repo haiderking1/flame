@@ -72,7 +72,7 @@ export async function checkUploadConcurrency({ evaluate, wait, click, add, captu
     assert.equal(await evaluate("document.querySelectorAll('.image-gallery--draft .image-thumbnail').length"), 0);
     assert.equal(capture.requests.filter(request => names.includes(request.name)).length, 3, 'Send waits for existing uploads');
     await click('[aria-label="Stop sending"]');
-    await wait("document.querySelector('.composer-actions__send')?.disabled === false && !document.querySelector('textarea').readOnly");
+    await wait("document.querySelector('.composer-actions__send')?.disabled === false && !document.querySelector('.composer__input').readOnly");
     await click('[aria-label="Remove queue4.png"]');
     await wait("document.querySelectorAll('.image-gallery--draft .image-thumbnail').length === 3");
     await wait("document.querySelector('[aria-label=\"Remove queue1.png\"]')?.disabled === false");

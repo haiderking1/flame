@@ -2,7 +2,7 @@ import { useLayoutEffect, useState, type RefObject } from "react";
 
 export type SlashMenuPosition = { left: number; bottom: number; width: number; maxHeight: number };
 
-export function useSlashMenuPosition(input: RefObject<HTMLTextAreaElement | null>) {
+export function useSlashMenuPosition(input: RefObject<HTMLElement | null>) {
   const [position, setPosition] = useState<SlashMenuPosition | null>(null);
   useLayoutEffect(() => {
     const composer = input.current?.closest<HTMLElement>(".composer");
