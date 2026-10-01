@@ -21,7 +21,9 @@ export function responsesRoute(credentials: ApiCredentials, sessionId: string) {
   return usesPublicApi(credentials) ? { url: `${PUBLIC_API}/responses`, headers: headers(credentials) }
     : { url: CODEX_RESPONSES_URL, headers: { ...headers(credentials), "OpenAI-Beta": "responses=experimental", "session-id": sessionId } };
 }
+// Both catalogs leave out models newer than the client version a request names, so both name the same one.
+const PUBLIC_CATALOG_URL = `${PUBLIC_API}/models?client_version=${CATALOG_VERSION}`;
 /** Where to read the model catalog, and its authorization headers. */
 export function modelsRoute(credentials: ApiCredentials) {
-  return { url: usesPublicApi(credentials) ? `${PUBLIC_API}/models` : CODEX_CATALOG_URL, headers: headers(credentials) };
+  return { url: usesPublicApi(credentials) ? PUBLIC_CATALOG_URL : CODEX_CATALOG_URL, headers: headers(credentials) };
 }

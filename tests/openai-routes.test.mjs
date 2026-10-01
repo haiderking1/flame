@@ -61,7 +61,7 @@ test('the model catalog comes from the public API for ChatGPT sign-ins, and may 
   const client = new CodexModelsClient(async (url, init) => { urls.push({ url, headers: init.headers });
     return Response.json({ models: [{ slug: 'second', display_name: 'Second', visibility: 'list' }, { slug: 'hidden', display_name: 'Hidden', visibility: 'hide' }, { slug: 'third', display_name: 'Third', visibility: 'list' }] }); });
   const catalog = await client.read({ key: 'k', epoch: 1, ...chatgpt }, null, new AbortController().signal);
-  assert.equal(urls[0].url, 'https://api.openai.com/v1/models');
+  assert.equal(urls[0].url, 'https://api.openai.com/v1/models?client_version=0.159.0', 'newer models are only listed for a client version that knows them');
   assert.equal(urls[0].headers['ChatGPT-Account-Id'], undefined);
   assert.deepEqual(catalog.models.map(model => [model.id, model.reasoningLevels.length, model.defaultReasoning]), [['second', 0, null], ['third', 0, null]]);
   await client.read({ key: 'k', epoch: 1, ...codex }, null, new AbortController().signal);
